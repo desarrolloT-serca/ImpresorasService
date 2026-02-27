@@ -1,0 +1,13 @@
+@* Diálogo de confirmación reutilizable (se implementará en tarea 5.3.x) *@
+<p>ConfirmDialog placeholder</p>
+
+@code {
+    [Parameter]
+    public string Title { get; set; } = "Confirmar";
+
+    [Parameter]
+    public string Message { get; set; } = "";
+
+    [Parameter]
+    public EventCallback OnConfirm { get; set; }
+}

@@ -1,0 +1,13 @@
+@page "/cola/{JobId:int}"
+@attribute [Authorize]
+
+<PageTitle>Detalle Job</PageTitle>
+
+<h1>Detalle Job @JobId</h1>
+
+<p>Historial de eventos y acciones (se implementará en tarea 5.3.2).</p>
+
+@code {
+    [Parameter]
+    public int JobId { get; set; }
+}

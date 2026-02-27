@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>dotnet-ImpresorasService.Worker-918816bd-a7d7-4d82-9254-a8ae1da0a79f</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ImpresorasService.Application\ImpresorasService.Application.csproj" />
+    <ProjectReference Include="..\ImpresorasService.Infrastructure\ImpresorasService.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

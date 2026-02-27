@@ -1,0 +1,67 @@
+{
+  "format": 1,
+  "restore": {
+    "C:\\Users\\SERGIO GOMARIZ.IT\\Documents\\Dev\\ImpresorasService\\ImpresorasServiceV1\\src\\ImpresorasService.Domain\\ImpresorasService.Domain.csproj": {}
+  },
+  "projects": {
+    "C:\\Users\\SERGIO GOMARIZ.IT\\Documents\\Dev\\ImpresorasService\\ImpresorasServiceV1\\src\\ImpresorasService.Domain\\ImpresorasService.Domain.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "C:\\Users\\SERGIO GOMARIZ.IT\\Documents\\Dev\\ImpresorasService\\ImpresorasServiceV1\\src\\ImpresorasService.Domain\\ImpresorasService.Domain.csproj",
+        "projectName": "ImpresorasService.Domain",
+        "projectPath": "C:\\Users\\SERGIO GOMARIZ.IT\\Documents\\Dev\\ImpresorasService\\ImpresorasServiceV1\\src\\ImpresorasService.Domain\\ImpresorasService.Domain.csproj",
+        "packagesPath": "C:\\Users\\SERGIO GOMARIZ.IT\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\SERGIO GOMARIZ.IT\\Documents\\Dev\\ImpresorasService\\ImpresorasServiceV1\\src\\ImpresorasService.Domain\\obj\\",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "C:\\Users\\SERGIO GOMARIZ.IT\\Documents\\Dev\\ImpresorasService\\ImpresorasServiceV1\\NuGet.Config",
+          "C:\\Users\\SERGIO GOMARIZ.IT\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0": {
+            "targetAlias": "net8.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.418/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}

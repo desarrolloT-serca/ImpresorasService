@@ -1,0 +1,66 @@
+@page "/login"
+@layout ImpresorasService.Web.Components.Layout.LoginLayout
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@attribute [AllowAnonymous]
+@inject NavigationManager Navigation
+
+<PageTitle>Login - Impresoras Service</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small">
+    <MudPaper Class="pa-8" Elevation="8">
+        <div class="text-center mb-6">
+            <MudText Typo="Typo.h4" Class="mb-1">Impresoras Service</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Panel de operación</MudText>
+        </div>
+
+        <MudText Typo="Typo.h6" Class="mb-4">Iniciar sesión</MudText>
+
+        <form action="/login/submit" method="post" class="login-form">
+            <MudTextField T="string" Label="Usuario"
+                          Variant="Variant.Outlined"
+                          Class="mb-4"
+                          InputAttributes="@(new Dictionary<string, object> { ["name"] = "Login", ["required"] = "required" })" />
+
+            <MudTextField T="string" Label="Contraseña"
+                          InputType="InputType.Password"
+                          Variant="Variant.Outlined"
+                          Class="mb-4"
+                          InputAttributes="@(new Dictionary<string, object> { ["name"] = "Password", ["required"] = "required" })" />
+
+            @if (!string.IsNullOrEmpty(_error))
+            {
+                <MudAlert Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+            }
+
+            <MudButton ButtonType="ButtonType.Submit"
+                       Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       FullWidth="true">
+                Entrar
+            </MudButton>
+        </form>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private string? _error;
+
+    protected override void OnInitialized()
+    {
+        var uri = new Uri(Navigation.Uri);
+        if (!string.IsNullOrEmpty(uri.Query))
+        {
+            var q = uri.Query.TrimStart('?').Split('&');
+            foreach (var p in q)
+            {
+                var kv = p.Split('=', 2, StringSplitOptions.None);
+                if (kv.Length == 2 && kv[0] == "error")
+                {
+                    _error = Uri.UnescapeDataString(kv[1]);
+                    break;
+                }
+            }
+        }
+    }
+}

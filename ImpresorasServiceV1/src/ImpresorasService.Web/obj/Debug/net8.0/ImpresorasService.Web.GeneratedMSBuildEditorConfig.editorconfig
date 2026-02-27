@@ -1,0 +1,114 @@
+is_global = true
+build_property.MudDebugAnalyzer = 
+build_property.MudAllowedAttributePattern = 
+build_property.MudAllowedAttributeList = 
+build_property.TargetFramework = net8.0
+build_property.TargetPlatformMinVersion = 
+build_property.UsingMicrosoftNETSdkWeb = true
+build_property.ProjectTypeGuids = 
+build_property.InvariantGlobalization = 
+build_property.PlatformNeutralAssembly = 
+build_property.EnforceExtendedAnalyzerRules = 
+build_property._SupportedPlatformList = Linux,macOS,Windows
+build_property.RootNamespace = ImpresorasService.Web
+build_property.RootNamespace = ImpresorasService.Web
+build_property.ProjectDir = C:\Users\SERGIO GOMARIZ.IT\Documents\Dev\ImpresorasService\ImpresorasServiceV1\src\ImpresorasService.Web\
+build_property.EnableComHosting = 
+build_property.EnableGeneratedComInterfaceComImportInterop = 
+build_property.RazorLangVersion = 8.0
+build_property.SupportLocalizedComponentNames = 
+build_property.GenerateRazorMetadataSourceChecksumAttributes = 
+build_property.MSBuildProjectDirectory = C:\Users\SERGIO GOMARIZ.IT\Documents\Dev\ImpresorasService\ImpresorasServiceV1\src\ImpresorasService.Web
+build_property._RazorSourceGeneratorDebug = 
+
+[C:/Users/SERGIO GOMARIZ.IT/Documents/Dev/ImpresorasService/ImpresorasServiceV1/src/ImpresorasService.Web/Components/App.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xBcHAucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/SERGIO GOMARIZ.IT/Documents/Dev/ImpresorasService/ImpresorasServiceV1/src/ImpresorasService.Web/Components/Layout/AppBar.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xMYXlvdXRcQXBwQmFyLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/SERGIO GOMARIZ.IT/Documents/Dev/ImpresorasService/ImpresorasServiceV1/src/ImpresorasService.Web/Components/Layout/LoginLayout.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xMYXlvdXRcTG9naW5MYXlvdXQucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/SERGIO GOMARIZ.IT/Documents/Dev/ImpresorasService/ImpresorasServiceV1/src/ImpresorasService.Web/Components/Pages/Alertas/Alertas.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xBbGVydGFzXEFsZXJ0YXMucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/SERGIO GOMARIZ.IT/Documents/Dev/ImpresorasService/ImpresorasServiceV1/src/ImpresorasService.Web/Components/Pages/Cola/Cola.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xDb2xhXENvbGEucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/SERGIO GOMARIZ.IT/Documents/Dev/ImpresorasService/ImpresorasServiceV1/src/ImpresorasService.Web/Components/Pages/Cola/JobDetail.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xDb2xhXEpvYkRldGFpbC5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/SERGIO GOMARIZ.IT/Documents/Dev/ImpresorasService/ImpresorasServiceV1/src/ImpresorasService.Web/Components/Pages/Counter.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xDb3VudGVyLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/SERGIO GOMARIZ.IT/Documents/Dev/ImpresorasService/ImpresorasServiceV1/src/ImpresorasService.Web/Components/Pages/Dashboard.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xEYXNoYm9hcmQucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/SERGIO GOMARIZ.IT/Documents/Dev/ImpresorasService/ImpresorasServiceV1/src/ImpresorasService.Web/Components/Pages/Error.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xFcnJvci5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/SERGIO GOMARIZ.IT/Documents/Dev/ImpresorasService/ImpresorasServiceV1/src/ImpresorasService.Web/Components/Pages/Home.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xIb21lLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/SERGIO GOMARIZ.IT/Documents/Dev/ImpresorasService/ImpresorasServiceV1/src/ImpresorasService.Web/Components/Pages/Impresoras/Impresoras.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xJbXByZXNvcmFzXEltcHJlc29yYXMucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/SERGIO GOMARIZ.IT/Documents/Dev/ImpresorasService/ImpresorasServiceV1/src/ImpresorasService.Web/Components/Pages/Login.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xMb2dpbi5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/SERGIO GOMARIZ.IT/Documents/Dev/ImpresorasService/ImpresorasServiceV1/src/ImpresorasService.Web/Components/Pages/NotFound.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xOb3RGb3VuZC5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/SERGIO GOMARIZ.IT/Documents/Dev/ImpresorasService/ImpresorasServiceV1/src/ImpresorasService.Web/Components/Pages/Prueba/CrearPrueba.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xQcnVlYmFcQ3JlYXJQcnVlYmEucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/SERGIO GOMARIZ.IT/Documents/Dev/ImpresorasService/ImpresorasServiceV1/src/ImpresorasService.Web/Components/Pages/Reglas/Reglas.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xSZWdsYXNcUmVnbGFzLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/SERGIO GOMARIZ.IT/Documents/Dev/ImpresorasService/ImpresorasServiceV1/src/ImpresorasService.Web/Components/Pages/Weather.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xXZWF0aGVyLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/SERGIO GOMARIZ.IT/Documents/Dev/ImpresorasService/ImpresorasServiceV1/src/ImpresorasService.Web/Components/RedirectToLogin.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xSZWRpcmVjdFRvTG9naW4ucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/SERGIO GOMARIZ.IT/Documents/Dev/ImpresorasService/ImpresorasServiceV1/src/ImpresorasService.Web/Components/Routes.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xSb3V0ZXMucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/SERGIO GOMARIZ.IT/Documents/Dev/ImpresorasService/ImpresorasServiceV1/src/ImpresorasService.Web/Components/Shared/ConfirmDialog.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xTaGFyZWRcQ29uZmlybURpYWxvZy5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/SERGIO GOMARIZ.IT/Documents/Dev/ImpresorasService/ImpresorasServiceV1/src/ImpresorasService.Web/Components/Shared/JobStatusBadge.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xTaGFyZWRcSm9iU3RhdHVzQmFkZ2UucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/SERGIO GOMARIZ.IT/Documents/Dev/ImpresorasService/ImpresorasServiceV1/src/ImpresorasService.Web/Components/_Imports.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xfSW1wb3J0cy5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/SERGIO GOMARIZ.IT/Documents/Dev/ImpresorasService/ImpresorasServiceV1/src/ImpresorasService.Web/Components/Layout/MainLayout.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xMYXlvdXRcTWFpbkxheW91dC5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = b-4i6kismqhy
+
+[C:/Users/SERGIO GOMARIZ.IT/Documents/Dev/ImpresorasService/ImpresorasServiceV1/src/ImpresorasService.Web/Components/Layout/NavMenu.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xMYXlvdXRcTmF2TWVudS5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = b-2unzrs34hd
