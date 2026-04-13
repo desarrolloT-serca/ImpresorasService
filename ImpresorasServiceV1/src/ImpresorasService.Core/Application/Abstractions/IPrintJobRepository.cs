@@ -1,0 +1,21 @@
+using ImpresorasService.Domain.Entities;
+
+namespace ImpresorasService.Application.Abstractions;
+
+public interface IPrintJobRepository
+{
+    Task<bool> ExistsBySourceExternalIdAsync(
+        string sourceSystem,
+        string externalJobId,
+        CancellationToken cancellationToken);
+
+    Task AddAsync(PrintJob printJob, CancellationToken cancellationToken);
+    Task AddEventAsync(PrintJobEvent printJobEvent, CancellationToken cancellationToken);
+    /// <summary>
+    /// Marca los SourcePrintJobs como procesados. El guardado final debe hacerse con SaveChangesAsync.
+    /// </summary>
+    Task MarkSourcePrintJobsProcessedAsync(
+        IReadOnlyList<long> sourceJobIds,
+        CancellationToken cancellationToken);
+    Task<int> SaveChangesAsync(CancellationToken cancellationToken);
+}

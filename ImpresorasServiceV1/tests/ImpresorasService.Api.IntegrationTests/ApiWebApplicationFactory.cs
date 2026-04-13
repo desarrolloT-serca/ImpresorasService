@@ -3,6 +3,7 @@ using ImpresorasService.Domain;
 using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.Sqlite;
@@ -29,6 +30,13 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
 
         builder.ConfigureTestServices(services =>
         {
+            services.AddAuthentication(options =>
+            {
+                options.DefaultAuthenticateScheme = TestAuthHandler.SchemeName;
+                options.DefaultChallengeScheme = TestAuthHandler.SchemeName;
+            }).AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(
+                TestAuthHandler.SchemeName, _ => { });
+
             var descriptor = services.SingleOrDefault(
                 d => d.ServiceType == typeof(DbContextOptions<ImpresorasDbContext>));
             if (descriptor != null) services.Remove(descriptor);
@@ -51,7 +59,43 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
         var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
         db.Database.EnsureCreated();
 
+        // Decisión técnica: en los tests se asume que existe una tienda activa (storeId=1 o storeId=2).
+        // Como los controladores validan la existencia/actividad de la tienda al crear Printers/Reglas,
+        // sembramos Stores mínimos al arrancar el host de tests.
+        SeedStoresAsync(db).GetAwaiter().GetResult();
+
         return host;
+    }
+
+    private static async Task SeedStoresAsync(ImpresorasDbContext db)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        if (!await db.Stores.AnyAsync(s => s.StoreId == 1))
+        {
+            db.Stores.Add(new Store
+            {
+                StoreId = 1,
+                Name = "Store 1",
+                IsActive = true,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            });
+        }
+
+        if (!await db.Stores.AnyAsync(s => s.StoreId == 2))
+        {
+            db.Stores.Add(new Store
+            {
+                StoreId = 2,
+                Name = "Store 2",
+                IsActive = true,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            });
+        }
+
+        await db.SaveChangesAsync();
     }
 
     /// <summary>

@@ -16,11 +16,11 @@
     </PackageReference>
     <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.11" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\ImpresorasService.Application\ImpresorasService.Application.csproj" />
-    <ProjectReference Include="..\ImpresorasService.Infrastructure\ImpresorasService.Infrastructure.csproj" />
+    <ProjectReference Include="..\ImpresorasService.Core\ImpresorasService.Core.csproj" />
   </ItemGroup>
 
 </Project>

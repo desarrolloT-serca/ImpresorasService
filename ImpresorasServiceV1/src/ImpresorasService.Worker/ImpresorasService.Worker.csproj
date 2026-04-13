@@ -12,7 +12,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\ImpresorasService.Application\ImpresorasService.Application.csproj" />
-    <ProjectReference Include="..\ImpresorasService.Infrastructure\ImpresorasService.Infrastructure.csproj" />
+    <ProjectReference Include="..\ImpresorasService.Core\ImpresorasService.Core.csproj" />
   </ItemGroup>
 </Project>

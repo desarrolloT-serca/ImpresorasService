@@ -1,0 +1,369 @@
+using ImpresorasService.Application.Abstractions;
+using ImpresorasService.Domain;
+using ImpresorasService.Domain.Entities;
+using ImpresorasService.Infrastructure.Options;
+using ImpresorasService.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+
+namespace ImpresorasService.Infrastructure.Services;
+
+public sealed class PrintExecutionService : IPrintExecutionService
+{
+    private readonly ImpresorasDbContext _db;
+    private readonly IPrinterSpooler _spooler;
+    private readonly ILogger<PrintExecutionService> _logger;
+    private readonly PrintExecutionOptions _options;
+    private readonly IRoutingResolver _routingResolver;
+
+    public PrintExecutionService(
+        ImpresorasDbContext db,
+        IPrinterSpooler spooler,
+        ILogger<PrintExecutionService> logger,
+        IOptions<PrintExecutionOptions> options,
+        IRoutingResolver routingResolver)
+    {
+        _db = db;
+        _spooler = spooler;
+        _logger = logger;
+        _options = options.Value;
+        _routingResolver = routingResolver;
+    }
+
+    public async Task<int> ExecuteBatchAsync(int batchSize, CancellationToken cancellationToken = default)
+    {
+        var now = DateTimeOffset.UtcNow;
+        // Nota de decisión: tratamos "Printing" como recuperable si lleva más que el timeout configurado + buffer.
+        // Buffer evita que jobs válidos se reintenten mientras el spooler todavía está procesando.
+        var stalePrintingAfter = TimeSpan.FromSeconds(_options.TimeoutSeconds + 10);
+        // Solo estados que la impresión puede avanzar. Un Where amplio (p.ej. AttemptCount < max) + Take sin orden
+        // en SQLite devuelve filas arbitrarias: con muchos Pending antiguos, ningún Routed entra en el lote y la cola se congela.
+        var takeWindow = Math.Max(batchSize * 4, 64);
+        var candidates = await _db.PrintJobs
+            .AsNoTracking()
+            .Where(j =>
+                j.Status == PrintJobStatus.Routed
+                || j.Status == PrintJobStatus.RetryScheduled
+                || j.Status == PrintJobStatus.Printing)
+            .OrderBy(j => j.JobId)
+            .Take(takeWindow)
+            .Select(j => new
+            {
+                j.JobId,
+                j.PrinterId,
+                j.RowVersion,
+                j.Status,
+                j.NextRetryAtUtc,
+                j.StoreId,
+                j.DocumentType,
+                j.Channel,
+                j.CreatedAtUtc,
+                j.UpdatedAtUtc
+            })
+            .ToListAsync(cancellationToken);
+
+        var eligible = candidates
+            .Where(j =>
+                j.Status == PrintJobStatus.Routed
+                || (j.Status == PrintJobStatus.RetryScheduled && j.NextRetryAtUtc != null && j.NextRetryAtUtc <= now)
+                || (j.Status == PrintJobStatus.Printing && j.UpdatedAtUtc <= now - stalePrintingAfter))
+            .OrderBy(j => j.CreatedAtUtc)
+            .Take(batchSize)
+            .Select(j => new { j.JobId, j.PrinterId, j.RowVersion, j.StoreId, j.DocumentType, j.Channel, j.Status })
+            .ToList();
+
+        var processed = 0;
+        foreach (var item in eligible)
+        {
+            if (cancellationToken.IsCancellationRequested) break;
+
+            int printerIdToUse;
+            if (item.PrinterId != null)
+            {
+                printerIdToUse = item.PrinterId.Value;
+            }
+            else
+            {
+                // Auto-curación: si el job está en Routed pero sin PrinterId, intentamos resolverlo.
+                var resolved = await _routingResolver.ResolvePrinterAsync(
+                    item.StoreId,
+                    item.DocumentType,
+                    item.Channel,
+                    cancellationToken);
+
+                if (resolved is null)
+                {
+                    await using var tx = await _db.Database.BeginTransactionAsync(cancellationToken);
+                    var job = await _db.PrintJobs.FirstOrDefaultAsync(j => j.JobId == item.JobId, cancellationToken);
+                    if (job is not null)
+                    {
+                        if (!RowVersionSnapshotStillMatches(job.RowVersion, item.RowVersion))
+                        {
+                            // Otro worker modificó el job tras el barrido del lote; no pisar estado.
+                            continue;
+                        }
+
+                        await TransitionToErrorFinalAsync(
+                            job,
+                            item.Status,
+                            "ROUTE_NOT_FOUND",
+                            "No existe regla activa aplicable para este trabajo (PrinterId nulo).",
+                            cancellationToken);
+                        await _db.SaveChangesAsync(cancellationToken);
+                    }
+
+                    await tx.CommitAsync(cancellationToken);
+                    processed++;
+                    continue;
+                }
+
+                printerIdToUse = resolved.Value;
+            }
+
+            var ok = await TryProcessOneAsync(item.JobId, printerIdToUse, item.RowVersion, cancellationToken);
+            if (ok) processed++;
+        }
+
+        return processed;
+    }
+
+    private async Task<bool> TryProcessOneAsync(Guid jobId, int printerId, byte[] rowVersion, CancellationToken ct)
+    {
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+
+        var job = await _db.PrintJobs.FirstOrDefaultAsync(j => j.JobId == jobId, ct);
+        if (job == null) return false;
+
+        if (!RowVersionSnapshotStillMatches(job.RowVersion, rowVersion))
+        {
+            _logger.LogDebug(
+                "JobId={JobId}: RowVersion del lote no coincide con BD; probable contienda entre workers.",
+                jobId);
+            return false;
+        }
+
+        // Auto-curación: si el job llegó con PrinterId null, lo fijamos para que el resto del flujo
+        // (selección de candidatos por PrinterId) no se bloquee.
+        if (job.PrinterId == null)
+            job.PrinterId = printerId;
+
+        var printer = await _db.Printers.FindAsync([printerId], ct);
+        if (printer == null || !printer.IsActive)
+        {
+            await TransitionToErrorFinalAsync(job, job.Status, "PRINTER_INVALID", "Impresora inactiva o inexistente", ct);
+            await _db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+            return true;
+        }
+
+        // Guard-rail: si el monitor de conectividad marca KO reciente, evitamos
+        // enviar al spooler porque puede devolver "aceptado" aunque el dispositivo
+        // fisico esté apagado/no alcanzable.
+        if (printer.LastConnectionOk == false && printer.LastConnectionCheckAtUtc.HasValue)
+        {
+            var lastCheckAge = DateTimeOffset.UtcNow - printer.LastConnectionCheckAtUtc.Value;
+            if (lastCheckAge <= TimeSpan.FromSeconds(90))
+            {
+                var nextAttempt = job.AttemptCount + 1;
+                if (nextAttempt < _options.MaxAttempts)
+                {
+                    var delaySec = _options.BackoffSeconds[Math.Min(nextAttempt - 1, _options.BackoffSeconds.Length - 1)];
+                    var old = job.Status;
+                    job.Status = PrintJobStatus.RetryScheduled;
+                    job.AttemptCount = nextAttempt;
+                    job.NextRetryAtUtc = DateTimeOffset.UtcNow.AddSeconds(delaySec);
+                    job.LastErrorCode = "PRINTER_UNREACHABLE";
+                    job.LastErrorMessage = printer.LastConnectionError ?? "Impresora no alcanzable (monitor de conectividad).";
+                    job.UpdatedAtUtc = DateTimeOffset.UtcNow;
+                    _db.PrintJobs.Update(job);
+                    await _db.PrintJobEvents.AddAsync(new PrintJobEvent
+                    {
+                        JobId = job.JobId,
+                        EventType = "StatusChanged",
+                        OldStatus = old,
+                        NewStatus = PrintJobStatus.RetryScheduled,
+                        ErrorCode = "PRINTER_UNREACHABLE",
+                        Message = job.LastErrorMessage,
+                        ActorType = "system",
+                        OccurredAtUtc = DateTimeOffset.UtcNow
+                    }, ct);
+                    await _db.SaveChangesAsync(ct);
+                    await tx.CommitAsync(ct);
+                    return true;
+                }
+
+                job.AttemptCount = nextAttempt;
+                await TransitionToErrorFinalAsync(
+                    job,
+                    job.Status,
+                    "PRINTER_UNREACHABLE",
+                    printer.LastConnectionError ?? "Impresora no alcanzable (monitor de conectividad).",
+                    ct);
+                await _db.SaveChangesAsync(ct);
+                await tx.CommitAsync(ct);
+                return true;
+            }
+        }
+
+        var stalePrintingAfter = TimeSpan.FromSeconds(_options.TimeoutSeconds + 10);
+        if (job.Status == PrintJobStatus.Printing)
+        {
+            // Solo reintenta si el job está "stale". Si está fresco, no hacemos override.
+            if (job.UpdatedAtUtc > DateTimeOffset.UtcNow - stalePrintingAfter)
+                return false;
+        }
+        else if (job.Status != PrintJobStatus.Routed && job.Status != PrintJobStatus.RetryScheduled)
+        {
+            return false;
+        }
+
+        if (job.Status == PrintJobStatus.RetryScheduled && job.NextRetryAtUtc > DateTimeOffset.UtcNow)
+            return false;
+
+        if (job.AttemptCount >= _options.MaxAttempts)
+        {
+            await TransitionToErrorFinalAsync(job, job.Status, "RETRIES_EXHAUSTED", "Intentos agotados", ct);
+            await _db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+            return true;
+        }
+
+        var oldStatus = job.Status;
+        job.Status = PrintJobStatus.Printing;
+        job.AttemptCount++;
+        job.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        _db.PrintJobs.Update(job);
+
+        await _db.PrintJobEvents.AddAsync(new PrintJobEvent
+        {
+            JobId = jobId,
+            EventType = "StatusChanged",
+            OldStatus = oldStatus,
+            NewStatus = PrintJobStatus.Printing,
+            ActorType = "system",
+            OccurredAtUtc = DateTimeOffset.UtcNow
+        }, ct);
+
+        try
+        {
+            var rows = await _db.SaveChangesAsync(ct);
+            if (rows == 0) return false;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return false;
+        }
+
+        await tx.CommitAsync(ct);
+
+        PrintSpoolResult result;
+        try
+        {
+            result = await _spooler.SendToPrinterAsync(job.PdfBlob, printer.SpoolQueue, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            result = new PrintSpoolResult(false, "NET_TIMEOUT", "Timeout de impresión", true);
+        }
+        catch (Exception ex)
+        {
+            // Nota de decisión: no volcamos ex.Message completo al estado final para evitar
+            // que información interna se propague a UI/logs. Guardamos un mensaje genérico.
+            _logger.LogError(ex, "Excepcion enviando a spooler. JobId={JobId} Printer={PrinterId}", jobId, printerId);
+            result = new PrintSpoolResult(false, "SPOOLER_EXCEPTION", "Error en spooler", true);
+        }
+
+        await using var tx2 = await _db.Database.BeginTransactionAsync(ct);
+        var job2 = await _db.PrintJobs.FirstOrDefaultAsync(j => j.JobId == jobId, ct);
+        if (job2 == null || job2.Status != PrintJobStatus.Printing) return true;
+
+        if (result.Success)
+        {
+            job2.Status = PrintJobStatus.SpoolAccepted;
+            job2.LastErrorCode = null;
+            job2.LastErrorMessage = null;
+            job2.NextRetryAtUtc = null;
+            job2.UpdatedAtUtc = DateTimeOffset.UtcNow;
+            _db.PrintJobs.Update(job2);
+            await _db.PrintJobEvents.AddAsync(new PrintJobEvent
+            {
+                JobId = jobId,
+                EventType = "StatusChanged",
+                OldStatus = PrintJobStatus.Printing,
+                NewStatus = PrintJobStatus.SpoolAccepted,
+                ActorType = "system",
+                Message = "Spooler aceptó el trabajo",
+                OccurredAtUtc = DateTimeOffset.UtcNow
+            }, ct);
+        }
+        else if (result.IsTransient && job2.AttemptCount < _options.MaxAttempts)
+        {
+            var delaySec = _options.BackoffSeconds[Math.Min(job2.AttemptCount - 1, _options.BackoffSeconds.Length - 1)];
+            job2.Status = PrintJobStatus.RetryScheduled;
+            job2.NextRetryAtUtc = DateTimeOffset.UtcNow.AddSeconds(delaySec);
+            job2.LastErrorCode = result.ErrorCode;
+            job2.LastErrorMessage = result.ErrorMessage;
+            job2.UpdatedAtUtc = DateTimeOffset.UtcNow;
+            _db.PrintJobs.Update(job2);
+            await _db.PrintJobEvents.AddAsync(new PrintJobEvent
+            {
+                JobId = jobId,
+                EventType = "StatusChanged",
+                OldStatus = PrintJobStatus.Printing,
+                NewStatus = PrintJobStatus.RetryScheduled,
+                ErrorCode = result.ErrorCode,
+                Message = result.ErrorMessage,
+                ActorType = "system",
+                OccurredAtUtc = DateTimeOffset.UtcNow
+            }, ct);
+        }
+        else
+        {
+            var errCode = result.ErrorCode ?? "UNKNOWN";
+            var errMsg = result.ErrorMessage ?? "Error desconocido";
+            _logger.LogWarning("Impresion fallida JobId={JobId} Printer={Printer} Code={Code} Msg={Msg}",
+                jobId, printer.SpoolQueue, errCode, errMsg);
+            await TransitionToErrorFinalAsync(job2, PrintJobStatus.Printing, errCode, errMsg, ct);
+        }
+
+        await _db.SaveChangesAsync(ct);
+        await tx2.CommitAsync(ct);
+        return true;
+    }
+
+    private async Task TransitionToErrorFinalAsync(PrintJob job, PrintJobStatus oldStatus, string errorCode, string message, CancellationToken ct)
+    {
+        job.Status = PrintJobStatus.ErrorFinal;
+        job.LastErrorCode = errorCode;
+        job.LastErrorMessage = message;
+        job.NextRetryAtUtc = null;
+        job.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        _db.PrintJobs.Update(job);
+        await _db.PrintJobEvents.AddAsync(new PrintJobEvent
+        {
+            JobId = job.JobId,
+            EventType = "StatusChanged",
+            OldStatus = oldStatus,
+            NewStatus = PrintJobStatus.ErrorFinal,
+            ErrorCode = errorCode,
+            Message = message,
+            ActorType = "system",
+            OccurredAtUtc = DateTimeOffset.UtcNow
+        }, ct);
+    }
+
+    /// <summary>
+    /// El barrido del lote guardó un RowVersion; si la fila cambió desde entonces, no debemos avanzar.
+    /// Con token vacío en ambos lados se acepta (filas legadas antes del primer guardado con versión).
+    /// </summary>
+    private static bool RowVersionSnapshotStillMatches(byte[] currentInDb, byte[] snapshotFromBatch)
+    {
+        var snap = snapshotFromBatch ?? Array.Empty<byte>();
+        var cur = currentInDb ?? Array.Empty<byte>();
+        if (snap.Length == 0)
+            return cur.Length == 0;
+
+        return cur.AsSpan().SequenceEqual(snap);
+    }
+}

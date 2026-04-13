@@ -1,11 +1,13 @@
 using ImpresorasService.Application.Abstractions;
 using ImpresorasService.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace ImpresorasService.Api.Controllers;
 
 [ApiController]
+[Authorize(Policy = "AdminOnly")]
 [Route("api/[controller]")]
 public class RoutingController : ControllerBase
 {

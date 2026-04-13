@@ -1,0 +1,17 @@
+# Build outputs
+**/bin/
+**/obj/
+**/_build_out/
+**/.tmp-build/
+
+# Local database and sqlite sidecars
+**/impresoras-local.db-shm
+**/impresoras-local.db-wal
+src/ImpresorasService.Api/impresoras-local.db
+
+# Logs and temp files
+*.log
+*.tmp
+
+# Local IDE settings
+.cursor/

@@ -1,32 +1,40 @@
 # ImpresorasServiceV1
 
-Base de implementacion para la Fase 1 de V1:
-- ingesta por polling
-- idempotencia por `SourceSystem + ExternalJobId`
-- cola interna en SQLite local (sin servidor externo)
+Backend de gestion de trabajos de impresion con:
+- ingesta por polling,
+- idempotencia por `SourceSystem + ExternalJobId`,
+- cola interna en BD local/remota,
+- enrutado por reglas y ejecucion con reintentos.
 
-## Estructura
+## Decision de arquitectura (cohesion)
 
-- `src/ImpresorasService.Domain`: entidades y estados del dominio.
-- `src/ImpresorasService.Application`: contratos y servicio de ingesta.
-- `src/ImpresorasService.Infrastructure`: EF Core, repositorios y adaptadores de origen (`SqlTest`/`SapHana`).
-- `src/ImpresorasService.Worker`: worker de polling para ingestar lotes.
-- `src/ImpresorasService.Api`: API de monitorizacion basica (`/health`, `/api/printjobs`).
-- `src/ImpresorasService.Web`: panel Blazor base (preparado para iterar).
+- **UI oficial de esta fase:** `src/ImpresorasService.Web.PHP` (Laravel).
+- **Punto de entrada funcional principal:** API + Worker + UI PHP.
+
+## Estructura oficial (4 bloques)
+
+- `src/ImpresorasService.Web.PHP`: frontend oficial (Laravel) que consume la API.
+- `src/ImpresorasService.Api`: backend HTTP (API REST y autenticacion JWT).
+- `src/ImpresorasService.Worker`: backend de procesos (ingesta y ejecucion de impresion).
+- `src/ImpresorasService.Core`: nucleo unico con dominio + casos de uso + infraestructura tecnica.
+- `tests/ImpresorasService.Api.IntegrationTests`: pruebas de integracion.
 
 ## Configuracion minima
 
-En `appsettings.json` de Worker/API:
+En `appsettings.json` de API/Worker:
 - `Database:Provider` (`Sqlite` por defecto)
 - `ConnectionStrings:PrintQueue`
 - `Ingestion:PollIntervalSeconds`, `Ingestion:BatchSize`
 - `Source:Mode` (`SqlTest` o `SapHana`)
+- `PrintExecution:*` (spooler real/simulado, reintentos)
 
 Con `Sqlite`, la BD se crea automaticamente al iniciar API/Worker (`EnsureCreated`).
 
-## Comandos
+## Arranque recomendado (flujo oficial)
 
-Ejecutar desde el directorio `ImpresorasServiceV1`:
+**Importante:** API y Worker deben ejecutarse desde `ImpresorasServiceV1` para compartir `impresoras-local.db`.
+
+1) Arrancar backend:
 
 ```powershell
 cd ImpresorasServiceV1
@@ -36,42 +44,35 @@ dotnet run --project "src/ImpresorasService.Api"
 dotnet run --project "src/ImpresorasService.Worker"
 ```
 
-O con rutas absolutas desde la raíz del repo:
+2) Arrancar UI oficial (PHP), en otra terminal:
 
 ```powershell
-dotnet run --project "ImpresorasServiceV1/src/ImpresorasService.Api"
-dotnet run --project "ImpresorasServiceV1/src/ImpresorasService.Worker"
+cd ImpresorasServiceV1/src/ImpresorasService.Web.PHP
+composer install
+npm install
+php artisan serve
 ```
 
-## Prueba local rapida (sin SSMS)
+Para comprobar que API y Worker comparten BD: `.\scripts\verificar-bd.ps1`
 
-1. Arranca API y Worker.
-2. Abre Swagger de la API y usa `POST /api/sourceprintjobs/test` para crear un trabajo de origen.
-3. Espera un ciclo de polling (5s) y consulta `GET /api/printjobs`.
+## Pruebas rapidas
 
-## Prueba de impresion real
+- Crear trabajo de origen en Swagger: `POST /api/sourceprintjobs/test`
+- Consultar cola: `GET /api/printjobs`
+- Probar impresion:
+  - `.\scripts\probar-impresion.ps1`
+  - `.\scripts\verificar-estado.ps1`
 
-1. Arranca **API** y **Worker** (en dos terminales).
-2. En una tercera terminal, desde la carpeta `ImpresorasServiceV1`:
-   ```powershell
-   .\scripts\probar-impresion.ps1
-   ```
-3. El script crea un trabajo, lo enruta y el Worker lo envia a la impresora.
+Estados habituales:
+- `SpoolAccepted`: exito
+- `RetryScheduled`: reintento pendiente
+- `ErrorFinal`: fallo definitivo
 
-**Requisitos previos:** Impresora creada; regla de enrutado; `UseRealSpooler: true` en Worker; SumatraPDF instalado.
+## Documentacion relacionada
 
-Para verificar si funciono:
-```powershell
-.\scripts\verificar-estado.ps1   # Muestra estado de todos los trabajos
-```
-Estados: `SpoolAccepted` = exito (PDF enviado al spooler); `ErrorFinal` = fallo; `Routed` = aun esperando que el Worker lo procese.
-
-Para crear la regla de enrutado (si falta):
-```powershell
-.\scripts\crear-regla-enrutado.ps1        # Lista impresoras
-.\scripts\crear-regla-enrutado.ps1 1      # Crea regla para printerId=1
-```
-
-## Siguiente paso recomendado
-
-Implementar EF Migrations para controlar versionado de esquema entre entornos.
+- Resumen rapido del proyecto: `docs/RESUMEN-PROYECTO.md`
+- Checklist de cohesion y limpieza: `docs/CHECKLIST-COHESION.md`
+- Despliegue frontend PHP: `docs/DESPLIEGUE-PHP.md`
+- Smoke tests de regresion: `docs/SMOKE-TESTS-PHP.md`
+- Checklist accesibilidad dark mode: `docs/CHECKLIST-ACCESIBILIDAD-DARKMODE.md`
+- Convenciones UI frontend PHP: `docs/UI-CONVENCIONES-FRONTEND-PHP.md`

@@ -8,8 +8,7 @@
     ".NETCoreApp,Version=v8.0": {
       "ImpresorasService.Worker/1.0.0": {
         "dependencies": {
-          "ImpresorasService.Application": "1.0.0",
-          "ImpresorasService.Infrastructure": "1.0.0",
+          "ImpresorasService.Core": "1.0.0",
           "Microsoft.Extensions.Hosting": "8.0.1"
         },
         "runtime": {
@@ -20,7 +19,7 @@
         "dependencies": {
           "Microsoft.Bcl.AsyncInterfaces": "1.1.1",
           "System.ClientModel": "1.0.0",
-          "System.Diagnostics.DiagnosticSource": "6.0.1",
+          "System.Diagnostics.DiagnosticSource": "9.0.11",
           "System.Memory.Data": "1.0.2",
           "System.Numerics.Vectors": "4.5.0",
           "System.Text.Encodings.Web": "6.0.0",
@@ -69,7 +68,7 @@
           "Microsoft.IdentityModel.Protocols.OpenIdConnect": "6.35.0",
           "Microsoft.SqlServer.Server": "1.0.0",
           "System.Configuration.ConfigurationManager": "6.0.1",
-          "System.Diagnostics.DiagnosticSource": "6.0.1",
+          "System.Diagnostics.DiagnosticSource": "9.0.11",
           "System.Runtime.Caching": "6.0.0",
           "System.Security.Cryptography.Cng": "5.0.0",
           "System.Security.Principal.Windows": "5.0.0",
@@ -595,7 +594,7 @@
       "Microsoft.Identity.Client/4.61.3": {
         "dependencies": {
           "Microsoft.IdentityModel.Abstractions": "6.35.0",
-          "System.Diagnostics.DiagnosticSource": "6.0.1"
+          "System.Diagnostics.DiagnosticSource": "9.0.11"
         },
         "runtime": {
           "lib/net6.0/Microsoft.Identity.Client.dll": {
@@ -709,6 +708,71 @@
             "assetType": "runtime",
             "assemblyVersion": "6.0.0.0",
             "fileVersion": "6.0.21.52210"
+          }
+        }
+      },
+      "Npgsql/10.0.2": {
+        "dependencies": {
+          "Microsoft.Extensions.Logging.Abstractions": "8.0.2",
+          "System.Diagnostics.DiagnosticSource": "9.0.11"
+        },
+        "runtime": {
+          "lib/net8.0/Npgsql.dll": {
+            "assemblyVersion": "10.0.2.0",
+            "fileVersion": "10.0.2.0"
+          }
+        }
+      },
+      "Sap.EntityFrameworkCore.Hana.v8.0/2.28.19": {
+        "runtime": {
+          "lib/net8.0/Sap.Data.Hana.Net.v8.0.dll": {
+            "assemblyVersion": "2.28.19.0",
+            "fileVersion": "2.28.19.0"
+          },
+          "lib/net8.0/Sap.EntityFrameworkCore.Hana.NetTopologySuite.v8.0.dll": {
+            "assemblyVersion": "2.28.19.0",
+            "fileVersion": "2.28.19.0"
+          },
+          "lib/net8.0/Sap.EntityFrameworkCore.Hana.v8.0.dll": {
+            "assemblyVersion": "2.28.19.0",
+            "fileVersion": "2.28.19.0"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/linux-arm64/native/libadonetHDB.so": {
+            "rid": "linux-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-musl-x64/native/libadonetHDB.so": {
+            "rid": "linux-musl-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libadonetHDB.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libadonetHDB.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-x64/native/libadonetHDB.dylib": {
+            "rid": "osx-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/libadonetHDB.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "2.28.19.61835"
+          },
+          "runtimes/win-x86/native/libadonetHDB32.dll": {
+            "rid": "win-x86",
+            "assetType": "native",
+            "fileVersion": "2.28.19.61835"
           }
         }
       },
@@ -874,9 +938,12 @@
           }
         }
       },
-      "System.Diagnostics.DiagnosticSource/6.0.1": {
-        "dependencies": {
-          "System.Runtime.CompilerServices.Unsafe": "6.0.0"
+      "System.Diagnostics.DiagnosticSource/9.0.11": {
+        "runtime": {
+          "lib/net8.0/System.Diagnostics.DiagnosticSource.dll": {
+            "assemblyVersion": "9.0.0.0",
+            "fileVersion": "9.0.1125.51716"
+          }
         }
       },
       "System.Diagnostics.EventLog/8.0.1": {
@@ -1052,40 +1119,20 @@
           }
         }
       },
-      "ImpresorasService.Application/1.0.0": {
+      "ImpresorasService.Core/1.0.0": {
         "dependencies": {
-          "ImpresorasService.Domain": "1.0.0",
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "8.0.2",
-          "Microsoft.Extensions.Logging.Abstractions": "8.0.2"
-        },
-        "runtime": {
-          "ImpresorasService.Application.dll": {
-            "assemblyVersion": "1.0.0",
-            "fileVersion": "1.0.0.0"
-          }
-        }
-      },
-      "ImpresorasService.Domain/1.0.0": {
-        "runtime": {
-          "ImpresorasService.Domain.dll": {
-            "assemblyVersion": "1.0.0",
-            "fileVersion": "1.0.0.0"
-          }
-        }
-      },
-      "ImpresorasService.Infrastructure/1.0.0": {
-        "dependencies": {
-          "ImpresorasService.Application": "1.0.0",
-          "ImpresorasService.Domain": "1.0.0",
           "Microsoft.EntityFrameworkCore": "8.0.11",
           "Microsoft.EntityFrameworkCore.SqlServer": "8.0.11",
           "Microsoft.EntityFrameworkCore.Sqlite": "8.0.11",
           "Microsoft.Extensions.Configuration.Abstractions": "8.0.0",
           "Microsoft.Extensions.DependencyInjection.Abstractions": "8.0.2",
-          "Microsoft.Extensions.Options.ConfigurationExtensions": "8.0.0"
+          "Microsoft.Extensions.Logging.Abstractions": "8.0.2",
+          "Microsoft.Extensions.Options.ConfigurationExtensions": "8.0.0",
+          "Npgsql": "10.0.2",
+          "Sap.EntityFrameworkCore.Hana.v8.0": "2.28.19"
         },
         "runtime": {
-          "ImpresorasService.Infrastructure.dll": {
+          "ImpresorasService.Core.dll": {
             "assemblyVersion": "1.0.0",
             "fileVersion": "1.0.0.0"
           }
@@ -1491,6 +1538,20 @@
       "path": "microsoft.win32.systemevents/6.0.0",
       "hashPath": "microsoft.win32.systemevents.6.0.0.nupkg.sha512"
     },
+    "Npgsql/10.0.2": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-q5RfBI+wywJSFUNDE1L4ZbHEHCFTblo8Uf6A6oe4feOUFYiUQXyAf9GBh5qEZpvJaHiEbpBPkQumjEhXCJxdrg==",
+      "path": "npgsql/10.0.2",
+      "hashPath": "npgsql.10.0.2.nupkg.sha512"
+    },
+    "Sap.EntityFrameworkCore.Hana.v8.0/2.28.19": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-icGqBz4rXiJzUMmihy82W67ocJRLUbVaPNCLjr/sMSeu9FXIBfeLTCdbnWqJd4+16ZI8/MGNhkYlpoBZK3qS9Q==",
+      "path": "sap.entityframeworkcore.hana.v8.0/2.28.19",
+      "hashPath": "sap.entityframeworkcore.hana.v8.0.2.28.19.nupkg.sha512"
+    },
     "SQLitePCLRaw.bundle_e_sqlite3/2.1.6": {
       "type": "package",
       "serviceable": true,
@@ -1533,12 +1594,12 @@
       "path": "system.configuration.configurationmanager/6.0.1",
       "hashPath": "system.configuration.configurationmanager.6.0.1.nupkg.sha512"
     },
-    "System.Diagnostics.DiagnosticSource/6.0.1": {
+    "System.Diagnostics.DiagnosticSource/9.0.11": {
       "type": "package",
       "serviceable": true,
-      "sha512": "sha512-KiLYDu2k2J82Q9BJpWiuQqCkFjRBWVq4jDzKKWawVi9KWzyD0XG3cmfX0vqTQlL14Wi9EufJrbL0+KCLTbqWiQ==",
-      "path": "system.diagnostics.diagnosticsource/6.0.1",
-      "hashPath": "system.diagnostics.diagnosticsource.6.0.1.nupkg.sha512"
+      "sha512": "sha512-/QzMFklOm8Ak//YB0I2kR+ByxUndT63ucrRWQm0xZsuLExJWrVDeGKtYZDuBackd9dThbwMdOotIEc4c4KwJiw==",
+      "path": "system.diagnostics.diagnosticsource/9.0.11",
+      "hashPath": "system.diagnostics.diagnosticsource.9.0.11.nupkg.sha512"
     },
     "System.Diagnostics.EventLog/8.0.1": {
       "type": "package",
@@ -1687,17 +1748,7 @@
       "path": "system.windows.extensions/6.0.0",
       "hashPath": "system.windows.extensions.6.0.0.nupkg.sha512"
     },
-    "ImpresorasService.Application/1.0.0": {
-      "type": "project",
-      "serviceable": false,
-      "sha512": ""
-    },
-    "ImpresorasService.Domain/1.0.0": {
-      "type": "project",
-      "serviceable": false,
-      "sha512": ""
-    },
-    "ImpresorasService.Infrastructure/1.0.0": {
+    "ImpresorasService.Core/1.0.0": {
       "type": "project",
       "serviceable": false,
       "sha512": ""

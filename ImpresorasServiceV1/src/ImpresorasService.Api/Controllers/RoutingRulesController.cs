@@ -1,11 +1,13 @@
 using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace ImpresorasService.Api.Controllers;
 
 [ApiController]
+[Authorize(Policy = "AdminOnly")]
 [Route("api/[controller]")]
 public class RoutingRulesController : ControllerBase
 {
@@ -69,6 +71,14 @@ public class RoutingRulesController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateRoutingRuleRequest request, CancellationToken cancellationToken)
     {
+        if (request.StoreId.HasValue)
+        {
+            var storeExists = await _dbContext.Stores
+                .AnyAsync(x => x.StoreId == request.StoreId.Value && x.IsActive, cancellationToken);
+            if (!storeExists)
+                return BadRequest(new { error = "La tienda especificada no existe o esta inactiva." });
+        }
+
         var printerExists = await _dbContext.Printers
             .AnyAsync(x => x.PrinterId == request.PrinterId, cancellationToken);
 
@@ -106,6 +116,14 @@ public class RoutingRulesController : ControllerBase
 
         if (rule is null)
             return NotFound();
+
+        if (request.StoreId.HasValue)
+        {
+            var storeExists = await _dbContext.Stores
+                .AnyAsync(x => x.StoreId == request.StoreId.Value && x.IsActive, cancellationToken);
+            if (!storeExists)
+                return BadRequest(new { error = "La tienda especificada no existe o esta inactiva." });
+        }
 
         var printerExists = await _dbContext.Printers
             .AnyAsync(x => x.PrinterId == request.PrinterId, cancellationToken);

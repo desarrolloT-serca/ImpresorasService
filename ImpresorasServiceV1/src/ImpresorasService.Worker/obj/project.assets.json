@@ -1073,6 +1073,66 @@
           }
         }
       },
+      "Npgsql/10.0.2": {
+        "type": "package",
+        "dependencies": {
+          "Microsoft.Extensions.Logging.Abstractions": "8.0.0",
+          "System.Diagnostics.DiagnosticSource": "9.0.11"
+        },
+        "compile": {
+          "lib/net8.0/Npgsql.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net8.0/Npgsql.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "Sap.EntityFrameworkCore.Hana.v8.0/2.28.19": {
+        "type": "package",
+        "compile": {
+          "lib/net8.0/Sap.Data.Hana.Net.v8.0.dll": {},
+          "lib/net8.0/Sap.EntityFrameworkCore.Hana.NetTopologySuite.v8.0.dll": {},
+          "lib/net8.0/Sap.EntityFrameworkCore.Hana.v8.0.dll": {}
+        },
+        "runtime": {
+          "lib/net8.0/Sap.Data.Hana.Net.v8.0.dll": {},
+          "lib/net8.0/Sap.EntityFrameworkCore.Hana.NetTopologySuite.v8.0.dll": {},
+          "lib/net8.0/Sap.EntityFrameworkCore.Hana.v8.0.dll": {}
+        },
+        "runtimeTargets": {
+          "runtimes/linux-arm64/native/libadonetHDB.so": {
+            "assetType": "native",
+            "rid": "linux-arm64"
+          },
+          "runtimes/linux-musl-x64/native/libadonetHDB.so": {
+            "assetType": "native",
+            "rid": "linux-musl-x64"
+          },
+          "runtimes/linux-x64/native/libadonetHDB.so": {
+            "assetType": "native",
+            "rid": "linux-x64"
+          },
+          "runtimes/osx-arm64/native/libadonetHDB.dylib": {
+            "assetType": "native",
+            "rid": "osx-arm64"
+          },
+          "runtimes/osx-x64/native/libadonetHDB.dylib": {
+            "assetType": "native",
+            "rid": "osx-x64"
+          },
+          "runtimes/win-x64/native/libadonetHDB.dll": {
+            "assetType": "native",
+            "rid": "win-x64"
+          },
+          "runtimes/win-x86/native/libadonetHDB32.dll": {
+            "assetType": "native",
+            "rid": "win-x86"
+          }
+        }
+      },
       "SQLitePCLRaw.bundle_e_sqlite3/2.1.6": {
         "type": "package",
         "dependencies": {
@@ -1241,23 +1301,20 @@
           "buildTransitive/netcoreapp3.1/_._": {}
         }
       },
-      "System.Diagnostics.DiagnosticSource/6.0.1": {
+      "System.Diagnostics.DiagnosticSource/9.0.11": {
         "type": "package",
-        "dependencies": {
-          "System.Runtime.CompilerServices.Unsafe": "6.0.0"
-        },
         "compile": {
-          "lib/net6.0/System.Diagnostics.DiagnosticSource.dll": {
+          "lib/net8.0/System.Diagnostics.DiagnosticSource.dll": {
             "related": ".xml"
           }
         },
         "runtime": {
-          "lib/net6.0/System.Diagnostics.DiagnosticSource.dll": {
+          "lib/net8.0/System.Diagnostics.DiagnosticSource.dll": {
             "related": ".xml"
           }
         },
         "build": {
-          "buildTransitive/netcoreapp3.1/_._": {}
+          "buildTransitive/net8.0/_._": {}
         }
       },
       "System.Diagnostics.EventLog/8.0.1": {
@@ -1652,49 +1709,25 @@
           }
         }
       },
-      "ImpresorasService.Application/1.0.0": {
+      "ImpresorasService.Core/1.0.0": {
         "type": "project",
         "framework": ".NETCoreApp,Version=v8.0",
         "dependencies": {
-          "ImpresorasService.Domain": "1.0.0",
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "8.0.2",
-          "Microsoft.Extensions.Logging.Abstractions": "8.0.2"
-        },
-        "compile": {
-          "bin/placeholder/ImpresorasService.Application.dll": {}
-        },
-        "runtime": {
-          "bin/placeholder/ImpresorasService.Application.dll": {}
-        }
-      },
-      "ImpresorasService.Domain/1.0.0": {
-        "type": "project",
-        "framework": ".NETCoreApp,Version=v8.0",
-        "compile": {
-          "bin/placeholder/ImpresorasService.Domain.dll": {}
-        },
-        "runtime": {
-          "bin/placeholder/ImpresorasService.Domain.dll": {}
-        }
-      },
-      "ImpresorasService.Infrastructure/1.0.0": {
-        "type": "project",
-        "framework": ".NETCoreApp,Version=v8.0",
-        "dependencies": {
-          "ImpresorasService.Application": "1.0.0",
-          "ImpresorasService.Domain": "1.0.0",
           "Microsoft.EntityFrameworkCore": "8.0.11",
           "Microsoft.EntityFrameworkCore.SqlServer": "8.0.11",
           "Microsoft.EntityFrameworkCore.Sqlite": "8.0.11",
           "Microsoft.Extensions.Configuration.Abstractions": "8.0.0",
           "Microsoft.Extensions.DependencyInjection.Abstractions": "8.0.2",
-          "Microsoft.Extensions.Options.ConfigurationExtensions": "8.0.0"
+          "Microsoft.Extensions.Logging.Abstractions": "8.0.2",
+          "Microsoft.Extensions.Options.ConfigurationExtensions": "8.0.0",
+          "Npgsql": "10.0.2",
+          "Sap.EntityFrameworkCore.Hana.v8.0": "2.28.19"
         },
         "compile": {
-          "bin/placeholder/ImpresorasService.Infrastructure.dll": {}
+          "bin/placeholder/ImpresorasService.Core.dll": {}
         },
         "runtime": {
-          "bin/placeholder/ImpresorasService.Infrastructure.dll": {}
+          "bin/placeholder/ImpresorasService.Core.dll": {}
         }
       }
     }
@@ -3264,6 +3297,49 @@
         "useSharedDesignerContext.txt"
       ]
     },
+    "Npgsql/10.0.2": {
+      "sha512": "q5RfBI+wywJSFUNDE1L4ZbHEHCFTblo8Uf6A6oe4feOUFYiUQXyAf9GBh5qEZpvJaHiEbpBPkQumjEhXCJxdrg==",
+      "type": "package",
+      "path": "npgsql/10.0.2",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "README.md",
+        "lib/net10.0/Npgsql.dll",
+        "lib/net10.0/Npgsql.xml",
+        "lib/net8.0/Npgsql.dll",
+        "lib/net8.0/Npgsql.xml",
+        "lib/net9.0/Npgsql.dll",
+        "lib/net9.0/Npgsql.xml",
+        "npgsql.10.0.2.nupkg.sha512",
+        "npgsql.nuspec",
+        "postgresql.png"
+      ]
+    },
+    "Sap.EntityFrameworkCore.Hana.v8.0/2.28.19": {
+      "sha512": "icGqBz4rXiJzUMmihy82W67ocJRLUbVaPNCLjr/sMSeu9FXIBfeLTCdbnWqJd4+16ZI8/MGNhkYlpoBZK3qS9Q==",
+      "type": "package",
+      "path": "sap.entityframeworkcore.hana.v8.0/2.28.19",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "docs/README.md",
+        "images/icon.png",
+        "lib/net8.0/Sap.Data.Hana.Net.v8.0.dll",
+        "lib/net8.0/Sap.EntityFrameworkCore.Hana.NetTopologySuite.v8.0.dll",
+        "lib/net8.0/Sap.EntityFrameworkCore.Hana.v8.0.dll",
+        "licenses/developer-license-3_2.txt",
+        "runtimes/linux-arm64/native/libadonetHDB.so",
+        "runtimes/linux-musl-x64/native/libadonetHDB.so",
+        "runtimes/linux-x64/native/libadonetHDB.so",
+        "runtimes/osx-arm64/native/libadonetHDB.dylib",
+        "runtimes/osx-x64/native/libadonetHDB.dylib",
+        "runtimes/win-x64/native/libadonetHDB.dll",
+        "runtimes/win-x86/native/libadonetHDB32.dll",
+        "sap.entityframeworkcore.hana.v8.0.2.28.19.nupkg.sha512",
+        "sap.entityframeworkcore.hana.v8.0.nuspec"
+      ]
+    },
     "SQLitePCLRaw.bundle_e_sqlite3/2.1.6": {
       "sha512": "BmAf6XWt4TqtowmiWe4/5rRot6GerAeklmOPfviOvwLoF5WwgxcJHAxZtySuyW9r9w+HLILnm8VfJFLCUJYW8A==",
       "type": "package",
@@ -3396,27 +3472,29 @@
         "useSharedDesignerContext.txt"
       ]
     },
-    "System.Diagnostics.DiagnosticSource/6.0.1": {
-      "sha512": "KiLYDu2k2J82Q9BJpWiuQqCkFjRBWVq4jDzKKWawVi9KWzyD0XG3cmfX0vqTQlL14Wi9EufJrbL0+KCLTbqWiQ==",
+    "System.Diagnostics.DiagnosticSource/9.0.11": {
+      "sha512": "/QzMFklOm8Ak//YB0I2kR+ByxUndT63ucrRWQm0xZsuLExJWrVDeGKtYZDuBackd9dThbwMdOotIEc4c4KwJiw==",
       "type": "package",
-      "path": "system.diagnostics.diagnosticsource/6.0.1",
+      "path": "system.diagnostics.diagnosticsource/9.0.11",
       "files": [
         ".nupkg.metadata",
         ".signature.p7s",
         "Icon.png",
         "LICENSE.TXT",
         "THIRD-PARTY-NOTICES.TXT",
+        "buildTransitive/net461/System.Diagnostics.DiagnosticSource.targets",
+        "buildTransitive/net462/_._",
+        "buildTransitive/net8.0/_._",
         "buildTransitive/netcoreapp2.0/System.Diagnostics.DiagnosticSource.targets",
-        "buildTransitive/netcoreapp3.1/_._",
-        "lib/net461/System.Diagnostics.DiagnosticSource.dll",
-        "lib/net461/System.Diagnostics.DiagnosticSource.xml",
-        "lib/net5.0/System.Diagnostics.DiagnosticSource.dll",
-        "lib/net5.0/System.Diagnostics.DiagnosticSource.xml",
-        "lib/net6.0/System.Diagnostics.DiagnosticSource.dll",
-        "lib/net6.0/System.Diagnostics.DiagnosticSource.xml",
+        "lib/net462/System.Diagnostics.DiagnosticSource.dll",
+        "lib/net462/System.Diagnostics.DiagnosticSource.xml",
+        "lib/net8.0/System.Diagnostics.DiagnosticSource.dll",
+        "lib/net8.0/System.Diagnostics.DiagnosticSource.xml",
+        "lib/net9.0/System.Diagnostics.DiagnosticSource.dll",
+        "lib/net9.0/System.Diagnostics.DiagnosticSource.xml",
         "lib/netstandard2.0/System.Diagnostics.DiagnosticSource.dll",
         "lib/netstandard2.0/System.Diagnostics.DiagnosticSource.xml",
-        "system.diagnostics.diagnosticsource.6.0.1.nupkg.sha512",
+        "system.diagnostics.diagnosticsource.9.0.11.nupkg.sha512",
         "system.diagnostics.diagnosticsource.nuspec",
         "useSharedDesignerContext.txt"
       ]
@@ -4238,26 +4316,15 @@
         "useSharedDesignerContext.txt"
       ]
     },
-    "ImpresorasService.Application/1.0.0": {
+    "ImpresorasService.Core/1.0.0": {
       "type": "project",
-      "path": "../ImpresorasService.Application/ImpresorasService.Application.csproj",
-      "msbuildProject": "../ImpresorasService.Application/ImpresorasService.Application.csproj"
-    },
-    "ImpresorasService.Domain/1.0.0": {
-      "type": "project",
-      "path": "../ImpresorasService.Domain/ImpresorasService.Domain.csproj",
-      "msbuildProject": "../ImpresorasService.Domain/ImpresorasService.Domain.csproj"
-    },
-    "ImpresorasService.Infrastructure/1.0.0": {
-      "type": "project",
-      "path": "../ImpresorasService.Infrastructure/ImpresorasService.Infrastructure.csproj",
-      "msbuildProject": "../ImpresorasService.Infrastructure/ImpresorasService.Infrastructure.csproj"
+      "path": "../ImpresorasService.Core/ImpresorasService.Core.csproj",
+      "msbuildProject": "../ImpresorasService.Core/ImpresorasService.Core.csproj"
     }
   },
   "projectFileDependencyGroups": {
     "net8.0": [
-      "ImpresorasService.Application >= 1.0.0",
-      "ImpresorasService.Infrastructure >= 1.0.0",
+      "ImpresorasService.Core >= 1.0.0",
       "Microsoft.Extensions.Hosting >= 8.0.1"
     ]
   },
@@ -4287,11 +4354,8 @@
         "net8.0": {
           "targetAlias": "net8.0",
           "projectReferences": {
-            "C:\\Users\\SERGIO GOMARIZ.IT\\Documents\\Dev\\ImpresorasService\\ImpresorasServiceV1\\src\\ImpresorasService.Application\\ImpresorasService.Application.csproj": {
-              "projectPath": "C:\\Users\\SERGIO GOMARIZ.IT\\Documents\\Dev\\ImpresorasService\\ImpresorasServiceV1\\src\\ImpresorasService.Application\\ImpresorasService.Application.csproj"
-            },
-            "C:\\Users\\SERGIO GOMARIZ.IT\\Documents\\Dev\\ImpresorasService\\ImpresorasServiceV1\\src\\ImpresorasService.Infrastructure\\ImpresorasService.Infrastructure.csproj": {
-              "projectPath": "C:\\Users\\SERGIO GOMARIZ.IT\\Documents\\Dev\\ImpresorasService\\ImpresorasServiceV1\\src\\ImpresorasService.Infrastructure\\ImpresorasService.Infrastructure.csproj"
+            "C:\\Users\\SERGIO GOMARIZ.IT\\Documents\\Dev\\ImpresorasService\\ImpresorasServiceV1\\src\\ImpresorasService.Core\\ImpresorasService.Core.csproj": {
+              "projectPath": "C:\\Users\\SERGIO GOMARIZ.IT\\Documents\\Dev\\ImpresorasService\\ImpresorasServiceV1\\src\\ImpresorasService.Core\\ImpresorasService.Core.csproj"
             }
           }
         }
