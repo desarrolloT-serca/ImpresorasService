@@ -8,6 +8,6 @@ build_property.PlatformNeutralAssembly =
 build_property.EnforceExtendedAnalyzerRules = 
 build_property._SupportedPlatformList = Linux,macOS,Windows
 build_property.RootNamespace = ImpresorasService.Api.IntegrationTests
-build_property.ProjectDir = C:\Users\SERGIO GOMARIZ.IT\Documents\Dev\ImpresorasService\ImpresorasServiceV1\tests\ImpresorasService.Api.IntegrationTests\
+build_property.ProjectDir = c:\Users\SERGIO GOMARIZ.IT\Documents\Dev\ImpresorasService\ImpresorasServiceV1\tests\ImpresorasService.Api.IntegrationTests\
 build_property.EnableComHosting = 
 build_property.EnableGeneratedComInterfaceComImportInterop = 

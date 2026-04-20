@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using ImpresorasService.Domain;
+using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -153,58 +154,32 @@ public class DashboardController : ControllerBase
             return BadRequest(new { error = "Warning de conectividad debe ser menor que Critical de conectividad." });
         }
 
-        var conn = _dbContext.Database.GetDbConnection();
-        if (conn.State != System.Data.ConnectionState.Open)
-            await conn.OpenAsync(cancellationToken);
+        var thresholdsRow = await _dbContext.DashboardThresholds
+            .SingleOrDefaultAsync(x => x.Id == 1, cancellationToken);
 
-        await using var upsert = conn.CreateCommand();
-        upsert.CommandText = @"
-            INSERT INTO DashboardThresholds
-                (Id,
-                 WarningQueueMin, CriticalQueueMin, QueueWarningSeverity, QueueCriticalSeverity,
-                 WarningFailedWithoutRetryMin, CriticalFailedWithoutRetryMin, FailedWarningSeverity, FailedCriticalSeverity,
-                 MissingHostMin, MissingHostSeverity,
-                 ConnWarningFailuresMin, ConnCriticalFailuresMin, ConnWarningSeverity, ConnCriticalSeverity,
-                 UpdatedAtUtc)
-            VALUES
-                (1,
-                 @warningQueueMin, @criticalQueueMin, @queueWarnSev, @queueCritSev,
-                 @warningFailedMin, @criticalFailedMin, @failedWarnSev, @failedCritSev,
-                 @missingHostMin, @missingHostSev,
-                 @connWarnMin, @connCritMin, @connWarnSev, @connCritSev,
-                 @updatedAtUtc)
-            ON CONFLICT(Id) DO UPDATE SET
-                WarningQueueMin = excluded.WarningQueueMin,
-                CriticalQueueMin = excluded.CriticalQueueMin,
-                QueueWarningSeverity = excluded.QueueWarningSeverity,
-                QueueCriticalSeverity = excluded.QueueCriticalSeverity,
-                WarningFailedWithoutRetryMin = excluded.WarningFailedWithoutRetryMin,
-                CriticalFailedWithoutRetryMin = excluded.CriticalFailedWithoutRetryMin,
-                FailedWarningSeverity = excluded.FailedWarningSeverity,
-                FailedCriticalSeverity = excluded.FailedCriticalSeverity,
-                MissingHostMin = excluded.MissingHostMin,
-                MissingHostSeverity = excluded.MissingHostSeverity,
-                ConnWarningFailuresMin = excluded.ConnWarningFailuresMin,
-                ConnCriticalFailuresMin = excluded.ConnCriticalFailuresMin,
-                ConnWarningSeverity = excluded.ConnWarningSeverity,
-                ConnCriticalSeverity = excluded.ConnCriticalSeverity,
-                UpdatedAtUtc = excluded.UpdatedAtUtc;";
-        AddParameter(upsert, "@warningQueueMin", request.WarningQueueMin);
-        AddParameter(upsert, "@criticalQueueMin", request.CriticalQueueMin);
-        AddParameter(upsert, "@queueWarnSev", NormalizeSeverity(request.QueueWarningSeverity));
-        AddParameter(upsert, "@queueCritSev", NormalizeSeverity(request.QueueCriticalSeverity));
-        AddParameter(upsert, "@warningFailedMin", request.WarningFailedWithoutRetryMin);
-        AddParameter(upsert, "@criticalFailedMin", request.CriticalFailedWithoutRetryMin);
-        AddParameter(upsert, "@failedWarnSev", NormalizeSeverity(request.FailedWarningSeverity));
-        AddParameter(upsert, "@failedCritSev", NormalizeSeverity(request.FailedCriticalSeverity));
-        AddParameter(upsert, "@missingHostMin", request.MissingHostMin);
-        AddParameter(upsert, "@missingHostSev", NormalizeSeverity(request.MissingHostSeverity));
-        AddParameter(upsert, "@connWarnMin", request.ConnWarningFailuresMin);
-        AddParameter(upsert, "@connCritMin", request.ConnCriticalFailuresMin);
-        AddParameter(upsert, "@connWarnSev", NormalizeSeverity(request.ConnWarningSeverity));
-        AddParameter(upsert, "@connCritSev", NormalizeSeverity(request.ConnCriticalSeverity));
-        AddParameter(upsert, "@updatedAtUtc", DateTimeOffset.UtcNow.ToString("o"));
-        await upsert.ExecuteNonQueryAsync(cancellationToken);
+        if (thresholdsRow is null)
+        {
+            thresholdsRow = new DashboardThreshold { Id = 1 };
+            await _dbContext.DashboardThresholds.AddAsync(thresholdsRow, cancellationToken);
+        }
+
+        thresholdsRow.WarningQueueMin = request.WarningQueueMin;
+        thresholdsRow.CriticalQueueMin = request.CriticalQueueMin;
+        thresholdsRow.QueueWarningSeverity = NormalizeSeverity(request.QueueWarningSeverity);
+        thresholdsRow.QueueCriticalSeverity = NormalizeSeverity(request.QueueCriticalSeverity);
+        thresholdsRow.WarningFailedWithoutRetryMin = request.WarningFailedWithoutRetryMin;
+        thresholdsRow.CriticalFailedWithoutRetryMin = request.CriticalFailedWithoutRetryMin;
+        thresholdsRow.FailedWarningSeverity = NormalizeSeverity(request.FailedWarningSeverity);
+        thresholdsRow.FailedCriticalSeverity = NormalizeSeverity(request.FailedCriticalSeverity);
+        thresholdsRow.MissingHostMin = request.MissingHostMin;
+        thresholdsRow.MissingHostSeverity = NormalizeSeverity(request.MissingHostSeverity);
+        thresholdsRow.ConnWarningFailuresMin = request.ConnWarningFailuresMin;
+        thresholdsRow.ConnCriticalFailuresMin = request.ConnCriticalFailuresMin;
+        thresholdsRow.ConnWarningSeverity = NormalizeSeverity(request.ConnWarningSeverity);
+        thresholdsRow.ConnCriticalSeverity = NormalizeSeverity(request.ConnCriticalSeverity);
+        thresholdsRow.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
 
         var updated = await GetThresholdsAsync(cancellationToken);
         return Ok(updated);
@@ -350,41 +325,30 @@ public class DashboardController : ControllerBase
 
     private async Task<DashboardThresholds> GetThresholdsAsync(CancellationToken cancellationToken)
     {
-        var conn = _dbContext.Database.GetDbConnection();
-        if (conn.State != System.Data.ConnectionState.Open)
-            await conn.OpenAsync(cancellationToken);
+        var row = await _dbContext.DashboardThresholds
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == 1, cancellationToken);
 
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = @"
-            SELECT
-                WarningQueueMin, CriticalQueueMin, QueueWarningSeverity, QueueCriticalSeverity,
-                WarningFailedWithoutRetryMin, CriticalFailedWithoutRetryMin, FailedWarningSeverity, FailedCriticalSeverity,
-                MissingHostMin, MissingHostSeverity,
-                ConnWarningFailuresMin, ConnCriticalFailuresMin, ConnWarningSeverity, ConnCriticalSeverity
-            FROM DashboardThresholds
-            WHERE Id = 1
-            LIMIT 1;";
-        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
-        if (await reader.ReadAsync(cancellationToken))
+        if (row is not null)
         {
             return new DashboardThresholds(
-                reader.GetInt32(0),
-                reader.GetInt32(1),
-                reader.GetString(2),
-                reader.GetString(3),
-                reader.GetInt32(4),
-                reader.GetInt32(5),
-                reader.GetString(6),
-                reader.GetString(7),
-                reader.GetInt32(8),
-                reader.GetString(9),
-                reader.GetInt32(10),
-                reader.GetInt32(11),
-                reader.GetString(12),
-                reader.GetString(13));
+                row.WarningQueueMin,
+                row.CriticalQueueMin,
+                row.QueueWarningSeverity,
+                row.QueueCriticalSeverity,
+                row.WarningFailedWithoutRetryMin,
+                row.CriticalFailedWithoutRetryMin,
+                row.FailedWarningSeverity,
+                row.FailedCriticalSeverity,
+                row.MissingHostMin,
+                row.MissingHostSeverity,
+                row.ConnWarningFailuresMin,
+                row.ConnCriticalFailuresMin,
+                row.ConnWarningSeverity,
+                row.ConnCriticalSeverity);
         }
 
-        return new DashboardThresholds(
+        var defaults = new DashboardThresholds(
             DefaultWarningQueueMin,
             DefaultCriticalQueueMin,
             "warning",
@@ -399,6 +363,30 @@ public class DashboardController : ControllerBase
             DefaultConnCriticalFailuresMin,
             "warning",
             "critical");
+
+        var defaultRow = new DashboardThreshold
+        {
+            Id = 1,
+            WarningQueueMin = defaults.WarningQueueMin,
+            CriticalQueueMin = defaults.CriticalQueueMin,
+            QueueWarningSeverity = defaults.QueueWarningSeverity,
+            QueueCriticalSeverity = defaults.QueueCriticalSeverity,
+            WarningFailedWithoutRetryMin = defaults.WarningFailedWithoutRetryMin,
+            CriticalFailedWithoutRetryMin = defaults.CriticalFailedWithoutRetryMin,
+            FailedWarningSeverity = defaults.FailedWarningSeverity,
+            FailedCriticalSeverity = defaults.FailedCriticalSeverity,
+            MissingHostMin = defaults.MissingHostMin,
+            MissingHostSeverity = defaults.MissingHostSeverity,
+            ConnWarningFailuresMin = defaults.ConnWarningFailuresMin,
+            ConnCriticalFailuresMin = defaults.ConnCriticalFailuresMin,
+            ConnWarningSeverity = defaults.ConnWarningSeverity,
+            ConnCriticalSeverity = defaults.ConnCriticalSeverity,
+            UpdatedAtUtc = DateTimeOffset.UtcNow
+        };
+
+        await _dbContext.DashboardThresholds.AddAsync(defaultRow, cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return defaults;
     }
 
     private static string NormalizeSeverity(string? value)
@@ -413,14 +401,6 @@ public class DashboardController : ControllerBase
         // "info" no debe elevar el estado, pero sí puede mostrarse en reason.
         var s = NormalizeSeverity(severity);
         return s == "critical" ? "critical" : (s == "warning" ? "warning" : "healthy");
-    }
-
-    private static void AddParameter(System.Data.Common.DbCommand command, string name, object? value)
-    {
-        var parameter = command.CreateParameter();
-        parameter.ParameterName = name;
-        parameter.Value = value ?? DBNull.Value;
-        command.Parameters.Add(parameter);
     }
 
     private static DateTimeOffset ResolveWindowStartUtc(string? window)

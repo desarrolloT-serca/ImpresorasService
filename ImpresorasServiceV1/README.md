@@ -22,13 +22,13 @@ Backend de gestion de trabajos de impresion con:
 ## Configuracion minima
 
 En `appsettings.json` de API/Worker:
-- `Database:Provider` (`Sqlite` por defecto)
+- `Database:Provider` (`Hana` objetivo productivo)
 - `ConnectionStrings:PrintQueue`
 - `Ingestion:PollIntervalSeconds`, `Ingestion:BatchSize`
-- `Source:Mode` (`SqlTest` o `SapHana`)
+- `Source:Mode` (`SapHana` objetivo productivo)
 - `PrintExecution:*` (spooler real/simulado, reintentos)
 
-Con `Sqlite`, la BD se crea automaticamente al iniciar API/Worker (`EnsureCreated`).
+El esquema se aplica al iniciar API/Worker mediante migraciones EF Core (`Database.Migrate`).
 
 ## Arranque recomendado (flujo oficial)
 

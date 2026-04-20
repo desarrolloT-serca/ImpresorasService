@@ -33,6 +33,7 @@ public class IngestionService
             cancellationToken);
 
         var insertedCount = 0;
+        var duplicatesCount = 0;
         var insertedJobIds = new List<Guid>();
         var sourceJobIdsToMarkProcessed = new List<long>(sourceJobs.Count);
 
@@ -46,6 +47,7 @@ public class IngestionService
 
             if (alreadyExists)
             {
+                duplicatesCount++;
                 _logger.LogInformation(
                     "Duplicado descartado SourceSystem={SourceSystem} ExternalJobId={ExternalJobId}",
                     sourceJob.SourceSystem,
@@ -98,6 +100,13 @@ public class IngestionService
         // Nota de decisión: el "ack" en el origen (remoto o local) se delega al adapter y
         // se ejecuta solo cuando el caller ha persistido la cola local con éxito.
         await _jobSourceAdapter.MarkJobsProcessedAsync(sourceJobIdsToMarkProcessed, cancellationToken);
+
+        _logger.LogInformation(
+            "Ingestión lote completada. fetched={Fetched} inserted={Inserted} duplicates={Duplicates} ackCandidates={AckCandidates}",
+            sourceJobs.Count,
+            insertedCount,
+            duplicatesCount,
+            sourceJobIdsToMarkProcessed.Count);
 
         // Enrutado automático: intentar enrutar cada trabajo recién insertado
         foreach (var jobId in insertedJobIds)

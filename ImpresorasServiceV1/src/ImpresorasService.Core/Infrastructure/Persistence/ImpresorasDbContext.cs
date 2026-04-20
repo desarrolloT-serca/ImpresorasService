@@ -57,6 +57,7 @@ public class ImpresorasDbContext : DbContext
     public DbSet<RoutingRule> RoutingRules => Set<RoutingRule>();
     public DbSet<User> Users => Set<User>();
     public DbSet<Store> Stores => Set<Store>();
+    public DbSet<DashboardThreshold> DashboardThresholds => Set<DashboardThreshold>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -171,6 +172,28 @@ public class ImpresorasDbContext : DbContext
             entity.Property(x => x.Name).HasMaxLength(120).IsRequired();
             entity.Property(x => x.IsActive).HasDefaultValue(true);
             entity.HasIndex(x => x.Name);
+        });
+
+        modelBuilder.Entity<DashboardThreshold>(entity =>
+        {
+            entity.ToTable("DashboardThresholds");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Id).ValueGeneratedNever();
+            entity.Property(x => x.WarningQueueMin).HasDefaultValue(10);
+            entity.Property(x => x.CriticalQueueMin).HasDefaultValue(30);
+            entity.Property(x => x.QueueWarningSeverity).HasMaxLength(20).HasDefaultValue("warning").IsRequired();
+            entity.Property(x => x.QueueCriticalSeverity).HasMaxLength(20).HasDefaultValue("critical").IsRequired();
+            entity.Property(x => x.WarningFailedWithoutRetryMin).HasDefaultValue(1);
+            entity.Property(x => x.CriticalFailedWithoutRetryMin).HasDefaultValue(5);
+            entity.Property(x => x.FailedWarningSeverity).HasMaxLength(20).HasDefaultValue("warning").IsRequired();
+            entity.Property(x => x.FailedCriticalSeverity).HasMaxLength(20).HasDefaultValue("critical").IsRequired();
+            entity.Property(x => x.MissingHostMin).HasDefaultValue(1);
+            entity.Property(x => x.MissingHostSeverity).HasMaxLength(20).HasDefaultValue("warning").IsRequired();
+            entity.Property(x => x.ConnWarningFailuresMin).HasDefaultValue(2);
+            entity.Property(x => x.ConnCriticalFailuresMin).HasDefaultValue(3);
+            entity.Property(x => x.ConnWarningSeverity).HasMaxLength(20).HasDefaultValue("warning").IsRequired();
+            entity.Property(x => x.ConnCriticalSeverity).HasMaxLength(20).HasDefaultValue("critical").IsRequired();
+            entity.Property(x => x.UpdatedAtUtc).IsRequired();
         });
     }
 }
