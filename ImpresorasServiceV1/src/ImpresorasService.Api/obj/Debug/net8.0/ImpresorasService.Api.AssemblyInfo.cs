@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("ImpresorasService.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+1d72974dfc7d8660931c9e4452fc7f0529d573bc")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+be303a567cb425ad6c78cb90a998b7934ad671c9")]
 [assembly: System.Reflection.AssemblyProductAttribute("ImpresorasService.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ImpresorasService.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

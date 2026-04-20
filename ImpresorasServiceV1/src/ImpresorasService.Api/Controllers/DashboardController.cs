@@ -30,8 +30,7 @@ public class DashboardController : ControllerBase
 
     private static readonly PrintJobStatus[] FailedWithoutRetryStatuses =
     [
-        PrintJobStatus.ErrorFinal,
-        PrintJobStatus.RetryScheduled
+        PrintJobStatus.ErrorFinal
     ];
 
     private readonly ImpresorasDbContext _dbContext;
@@ -69,6 +68,64 @@ public class DashboardController : ControllerBase
             printers = printers.Where(x => x.StoreId == effectiveStoreId.Value);
         }
 
+        if (_dbContext.Database.IsSqlite())
+        {
+            var storesList = await stores.ToListAsync(cancellationToken);
+            var printersList = await printers.ToListAsync(cancellationToken);
+            var allJobsList = await jobs.ToListAsync(cancellationToken);
+            var jobsInWindowList = allJobsList
+                .Where(x => x.CreatedAtUtc >= fromUtc)
+                .ToList();
+
+            var kpisSqlite = new
+            {
+                received = jobsInWindowList.Count,
+                printed = jobsInWindowList.Count(x => PrintedStatuses.Contains(x.Status)),
+                failed = jobsInWindowList.Count(
+                    x => x.Status == PrintJobStatus.ErrorFinal
+                         || x.Status == PrintJobStatus.RetryScheduled
+                         || (PrintedStatuses.Contains(x.Status) && x.AttemptCount > 1)),
+                queueCurrent = allJobsList.Count(x => QueueStatuses.Contains(x.Status)),
+                failedWithoutRetryCurrent = jobsInWindowList.Count(
+                    x => FailedWithoutRetryStatuses.Contains(x.Status)
+                         || (x.Status != PrintJobStatus.RetryScheduled
+                             && !PrintedStatuses.Contains(x.Status)
+                             && x.AttemptCount > 1)),
+                activePrinters = printersList.Count,
+                activeStores = storesList.Count
+            };
+
+            var storeRowsSqlite = BuildStoreRowsInMemory(storesList, printersList, jobsInWindowList, allJobsList, thresholds);
+            var alertsSqlite = storeRowsSqlite
+                .Where(x => x.Health != "healthy")
+                .OrderByDescending(x => x.FailedWithoutRetryCurrent)
+                .ThenByDescending(x => x.QueuedCurrent)
+                .Select(x => new
+                {
+                    x.StoreId,
+                    x.StoreName,
+                    x.Health,
+                    x.HealthReason,
+                    x.QueuedCurrent,
+                    x.FailedWithoutRetryCurrent
+                })
+                .ToList();
+
+            return Ok(new
+            {
+                generatedAtUtc = DateTimeOffset.UtcNow,
+                appliedFilters = new
+                {
+                    window = NormalizeWindow(window),
+                    storeId = effectiveStoreId
+                },
+                kpis = kpisSqlite,
+                thresholds,
+                alerts = alertsSqlite,
+                stores = storeRowsSqlite
+            });
+        }
+
         var jobsInWindow = jobs.Where(x => x.CreatedAtUtc >= fromUtc);
 
         var kpis = new
@@ -83,7 +140,9 @@ public class DashboardController : ControllerBase
             queueCurrent = await jobs.CountAsync(x => QueueStatuses.Contains(x.Status), cancellationToken),
             failedWithoutRetryCurrent = await jobsInWindow.CountAsync(
                 x => FailedWithoutRetryStatuses.Contains(x.Status)
-                     || (!PrintedStatuses.Contains(x.Status) && x.AttemptCount > 1),
+                     || (x.Status != PrintJobStatus.RetryScheduled
+                         && !PrintedStatuses.Contains(x.Status)
+                         && x.AttemptCount > 1),
                 cancellationToken),
             activePrinters = await printers.CountAsync(cancellationToken),
             activeStores = await stores.CountAsync(cancellationToken)
@@ -244,7 +303,9 @@ public class DashboardController : ControllerBase
                 StoreId = x.Key,
                 FailedWithoutRetryCurrent = x.Count(j =>
                     FailedWithoutRetryStatuses.Contains(j.Status)
-                    || (!PrintedStatuses.Contains(j.Status) && j.AttemptCount > 1))
+                    || (j.Status != PrintJobStatus.RetryScheduled
+                        && !PrintedStatuses.Contains(j.Status)
+                        && j.AttemptCount > 1))
             })
             .ToDictionaryAsync(x => x.StoreId, x => x.FailedWithoutRetryCurrent, cancellationToken);
 
@@ -271,6 +332,98 @@ public class DashboardController : ControllerBase
             rows.Add(new StoreDashboardRow(
                 StoreId: store.StoreId,
                 StoreName: store.Name,
+                ConnectedPrinters: connected,
+                Received: received,
+                Printed: printed,
+                Failed: failed,
+                QueuedCurrent: queuedCurrent,
+                FailedWithoutRetryCurrent: failedWithoutRetryCurrent,
+                Health: health,
+                HealthReason: healthReason));
+        }
+
+        return rows;
+    }
+
+    private static List<StoreDashboardRow> BuildStoreRowsInMemory(
+        IReadOnlyCollection<Domain.Entities.Store> stores,
+        IReadOnlyCollection<Domain.Entities.Printer> printers,
+        IReadOnlyCollection<Domain.Entities.PrintJob> jobsInWindow,
+        IReadOnlyCollection<Domain.Entities.PrintJob> allJobs,
+        DashboardThresholds thresholds)
+    {
+        var storesById = stores
+            .OrderBy(x => x.StoreId)
+            .ToDictionary(x => x.StoreId, x => x.Name);
+
+        var connectedPrinters = printers
+            .GroupBy(x => x.StoreId)
+            .ToDictionary(x => x.Key, x => x.Count());
+
+        var printersConnStats = printers
+            .GroupBy(x => x.StoreId)
+            .ToDictionary(
+                x => x.Key,
+                x => new
+                {
+                    MissingHost = x.Count(p => string.IsNullOrEmpty(p.Host) && !p.SpoolQueue.StartsWith("\\\\", StringComparison.Ordinal)),
+                    ConnWarn = x.Count(p => p.ConnectionFailuresStreak >= thresholds.ConnWarningFailuresMin),
+                    ConnCrit = x.Count(p => p.ConnectionFailuresStreak >= thresholds.ConnCriticalFailuresMin),
+                });
+
+        var jobsWindowStats = jobsInWindow
+            .GroupBy(x => x.StoreId)
+            .ToDictionary(
+                x => x.Key,
+                x => new
+                {
+                    Received = x.Count(),
+                    Printed = x.Count(j => PrintedStatuses.Contains(j.Status)),
+                    Failed = x.Count(j =>
+                        j.Status == PrintJobStatus.ErrorFinal
+                        || j.Status == PrintJobStatus.RetryScheduled
+                        || (PrintedStatuses.Contains(j.Status) && j.AttemptCount > 1))
+                });
+
+        var queueCurrentStats = allJobs
+            .GroupBy(x => x.StoreId)
+            .ToDictionary(
+                x => x.Key,
+                x => x.Count(j => QueueStatuses.Contains(j.Status)));
+
+        var failedWindowStats = jobsInWindow
+            .GroupBy(x => x.StoreId)
+            .ToDictionary(
+                x => x.Key,
+                x => x.Count(j =>
+                    FailedWithoutRetryStatuses.Contains(j.Status)
+                    || (j.Status != PrintJobStatus.RetryScheduled
+                        && !PrintedStatuses.Contains(j.Status)
+                        && j.AttemptCount > 1)));
+
+        var rows = new List<StoreDashboardRow>(stores.Count);
+        foreach (var store in storesById)
+        {
+            connectedPrinters.TryGetValue(store.Key, out var connected);
+            printersConnStats.TryGetValue(store.Key, out var connStats);
+            jobsWindowStats.TryGetValue(store.Key, out var windowStats);
+            queueCurrentStats.TryGetValue(store.Key, out var queuedCurrentValue);
+            failedWindowStats.TryGetValue(store.Key, out var failedWithoutRetryCurrentValue);
+
+            var received = windowStats?.Received ?? 0;
+            var printed = windowStats?.Printed ?? 0;
+            var failed = windowStats?.Failed ?? 0;
+            var queuedCurrent = queuedCurrentValue;
+            var failedWithoutRetryCurrent = failedWithoutRetryCurrentValue;
+
+            var missingHost = connStats?.MissingHost ?? 0;
+            var connWarn = connStats?.ConnWarn ?? 0;
+            var connCrit = connStats?.ConnCrit ?? 0;
+            var (health, healthReason) = ComputeHealth(connected, queuedCurrent, failedWithoutRetryCurrent, missingHost, connWarn, connCrit, thresholds);
+
+            rows.Add(new StoreDashboardRow(
+                StoreId: store.Key,
+                StoreName: store.Value,
                 ConnectedPrinters: connected,
                 Received: received,
                 Printed: printed,

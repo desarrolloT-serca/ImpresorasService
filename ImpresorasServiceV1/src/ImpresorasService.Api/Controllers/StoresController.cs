@@ -124,6 +124,8 @@ public class StoresController : ControllerBase
                 });
             }
 
+            await using var tx = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+
             var printerIds = await _dbContext.Printers
                 .Where(x => x.StoreId == storeId)
                 .Select(x => x.PrinterId)
@@ -162,6 +164,7 @@ public class StoresController : ControllerBase
 
             _dbContext.Stores.Remove(store);
             await _dbContext.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
 
             return Ok(new
             {

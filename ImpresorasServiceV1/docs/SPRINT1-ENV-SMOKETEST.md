@@ -16,7 +16,7 @@ $env:Database__Provider = "Sqlite"
 $env:ConnectionStrings__PrintQueue = "Data Source=impresoras-smoke-s1.db"
 $env:Source__Mode = "SqlTest"
 $env:Jwt__Secret = "Impresoras_2026_S3guro_MuyLargo_123456"
-$env:Bootstrap__SeedDefaultUsers = "false"
+$env:Bootstrap__SeedDefaultUsers = "true"
 ```
 
 Notas:
