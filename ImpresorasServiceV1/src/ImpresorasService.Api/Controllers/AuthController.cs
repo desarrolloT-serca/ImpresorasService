@@ -91,7 +91,10 @@ public class AuthController : ControllerBase
 
     private string GenerateJwt(ImpresorasService.Domain.Entities.User user)
     {
-        var secret = _config["Jwt:Secret"] ?? "ImpresorasService-V1-SecretKey-Min32Chars!!";
+        var secret = _config["Jwt:Secret"];
+        if (string.IsNullOrWhiteSpace(secret))
+            throw new InvalidOperationException("Jwt:Secret no configurado.");
+
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 

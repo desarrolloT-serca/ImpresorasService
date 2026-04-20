@@ -69,7 +69,7 @@ public sealed class WindowsPrintSpooler : IPrinterSpooler
 
         if (!result.Success && _options.KeepTempFileOnFailure)
         {
-            _logger.LogInformation("PDF temporal conservado para depuracion: {Path}", tempPath);
+            _logger.LogInformation("PDF temporal conservado para depuracion (ruta omitida por seguridad).");
         }
         else
         {

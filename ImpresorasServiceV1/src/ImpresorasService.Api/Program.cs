@@ -10,6 +10,20 @@ using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
+static bool IsUnsafeJwtSecret(string? value)
+{
+    if (string.IsNullOrWhiteSpace(value))
+        return true;
+
+    var normalized = value.Trim();
+    if (normalized.Length < 32)
+        return true;
+
+    return string.Equals(normalized, "ImpresorasService-V1-SecretKey-Min32Chars!!", StringComparison.Ordinal)
+        || string.Equals(normalized, "ChangeMe123", StringComparison.Ordinal)
+        || string.Equals(normalized, "changeme", StringComparison.OrdinalIgnoreCase);
+}
+
 static async Task NormalizeLegacyUserRolesAsync(ImpresorasDbContext db)
 {
     var users = await db.Users.ToListAsync();
@@ -89,8 +103,9 @@ builder.Services.AddCors(options =>
 });
 
 var jwtSecret = builder.Configuration["Jwt:Secret"];
-if (string.IsNullOrWhiteSpace(jwtSecret))
-    throw new InvalidOperationException("Jwt:Secret es obligatorio.");
+if (IsUnsafeJwtSecret(jwtSecret))
+    throw new InvalidOperationException("Jwt:Secret es obligatorio, debe estar definido por entorno y no puede usar valores inseguros/default.");
+var jwtSecretValue = jwtSecret!.Trim();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -98,7 +113,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecretValue)),
             ValidateIssuer = true,
             ValidIssuer = builder.Configuration["Jwt:Issuer"] ?? "ImpresorasService",
             ValidateAudience = true,
