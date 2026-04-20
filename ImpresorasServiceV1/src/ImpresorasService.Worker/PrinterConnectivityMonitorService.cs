@@ -70,6 +70,8 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
 
         if (printers.Count == 0) return;
 
+        var updates = new List<ConnectivityUpdate>(printers.Count);
+
         foreach (var p in printers)
         {
             ct.ThrowIfCancellationRequested();
@@ -83,77 +85,76 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
             // Host no configurado: warning en dashboard, pero no incrementamos streak de "caída".
             if (string.IsNullOrWhiteSpace(host))
             {
-                await UpdatePrinterConnectivityAsync(
-                    db,
+                updates.Add(new ConnectivityUpdate(
                     p.PrinterId,
-                    lastOk: false,
-                    failuresStreak: 0,
-                    checkedAtUtc: now,
-                    transport: null,
-                    error: "HOST_NOT_CONFIGURED",
-                    ct);
+                    LastOk: false,
+                    FailuresStreak: 0,
+                    CheckedAtUtc: now,
+                    Transport: null,
+                    Error: "HOST_NOT_CONFIGURED"));
                 continue;
             }
 
             var result = await TryConnectAnyPortAsync(host!, ct);
             if (result.Ok)
             {
-                await UpdatePrinterConnectivityAsync(
-                    db,
+                updates.Add(new ConnectivityUpdate(
                     p.PrinterId,
-                    lastOk: true,
-                    failuresStreak: 0,
-                    checkedAtUtc: now,
-                    transport: result.Transport,
-                    error: null,
-                    ct);
+                    LastOk: true,
+                    FailuresStreak: 0,
+                    CheckedAtUtc: now,
+                    Transport: result.Transport,
+                    Error: null));
             }
             else
             {
                 var nextStreak = Math.Clamp(p.ConnectionFailuresStreak + 1, 0, 999);
-                await UpdatePrinterConnectivityAsync(
-                    db,
+                updates.Add(new ConnectivityUpdate(
                     p.PrinterId,
-                    lastOk: false,
-                    failuresStreak: nextStreak,
-                    checkedAtUtc: now,
-                    transport: null,
-                    error: result.Error ?? "NO_CONNECTION",
-                    ct);
+                    LastOk: false,
+                    FailuresStreak: nextStreak,
+                    CheckedAtUtc: now,
+                    Transport: null,
+                    Error: result.Error ?? "NO_CONNECTION"));
             }
         }
+
+        foreach (var update in updates)
+            ApplyConnectivityUpdate(db, update);
+
+        await db.SaveChangesAsync(ct);
     }
 
-    private static async Task UpdatePrinterConnectivityAsync(
+    private static void ApplyConnectivityUpdate(
         ImpresorasDbContext db,
-        int printerId,
-        bool lastOk,
-        int failuresStreak,
-        DateTimeOffset checkedAtUtc,
-        string? transport,
-        string? error,
-        CancellationToken ct)
+        ConnectivityUpdate update)
     {
         var entity = new ImpresorasService.Domain.Entities.Printer
         {
-            PrinterId = printerId
+            PrinterId = update.PrinterId
         };
 
         db.Attach(entity);
-        entity.LastConnectionOk = lastOk;
-        entity.ConnectionFailuresStreak = failuresStreak;
-        entity.LastConnectionCheckAtUtc = checkedAtUtc;
-        entity.LastConnectionTransport = transport;
-        entity.LastConnectionError = error;
+        entity.LastConnectionOk = update.LastOk;
+        entity.ConnectionFailuresStreak = update.FailuresStreak;
+        entity.LastConnectionCheckAtUtc = update.CheckedAtUtc;
+        entity.LastConnectionTransport = update.Transport;
+        entity.LastConnectionError = update.Error;
 
         db.Entry(entity).Property(x => x.LastConnectionOk).IsModified = true;
         db.Entry(entity).Property(x => x.ConnectionFailuresStreak).IsModified = true;
         db.Entry(entity).Property(x => x.LastConnectionCheckAtUtc).IsModified = true;
         db.Entry(entity).Property(x => x.LastConnectionTransport).IsModified = true;
         db.Entry(entity).Property(x => x.LastConnectionError).IsModified = true;
-
-        await db.SaveChangesAsync(ct);
     }
+
+    private sealed record ConnectivityUpdate(
+        int PrinterId,
+        bool LastOk,
+        int FailuresStreak,
+        DateTimeOffset CheckedAtUtc,
+        string? Transport,
+        string? Error);
 
     private static async Task<(bool Ok, string? Transport, string? Error)> TryConnectAnyPortAsync(string host, CancellationToken ct)
     {

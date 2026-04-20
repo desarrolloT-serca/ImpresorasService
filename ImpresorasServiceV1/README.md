@@ -22,13 +22,19 @@ Backend de gestion de trabajos de impresion con:
 ## Configuracion minima
 
 En `appsettings.json` de API/Worker:
-- `Database:Provider` (`Hana` objetivo productivo)
+- `Database:Provider` (`Sqlite` recomendado en local, `Hana` en entornos con provider SAP disponible)
 - `ConnectionStrings:PrintQueue`
 - `Ingestion:PollIntervalSeconds`, `Ingestion:BatchSize`
-- `Source:Mode` (`SapHana` objetivo productivo)
+- `Source:Mode` (`SqlTest` recomendado en local, `SapHana` para dual-run/modelo ORM actual)
 - `PrintExecution:*` (spooler real/simulado, reintentos)
+- `Jwt:Secret` (obligatorio por entorno, minimo 32 caracteres, sin defaults inseguros)
 
 El esquema se aplica al iniciar API/Worker mediante migraciones EF Core (`Database.Migrate`).
+
+### Nota importante sobre `SapHana` (estado actual)
+
+En el estado actual del proyecto, el adapter `SapHana` opera sobre `SourcePrintJobs` del `ImpresorasDbContext` (modelo ORM interno) y no sobre una lectura SQL remota directa a una tabla externa HANA.  
+Para desarrollo local se recomienda usar `Database:Provider=Sqlite` y `Source:Mode=SqlTest`.
 
 ## Arranque recomendado (flujo oficial)
 
@@ -42,6 +48,16 @@ dotnet restore
 dotnet build -c Debug
 dotnet run --project "src/ImpresorasService.Api"
 dotnet run --project "src/ImpresorasService.Worker"
+```
+
+Para local sin provider SAP:
+
+```powershell
+$env:Database__Provider = "Sqlite"
+$env:ConnectionStrings__PrintQueue = "Data Source=impresoras-local.db"
+$env:Source__Mode = "SqlTest"
+$env:Jwt__Secret = "REEMPLAZAR_CON_SECRETO_LARGO_MIN_32"
+$env:Bootstrap__SeedDefaultUsers = "false"
 ```
 
 2) Arrancar UI oficial (PHP), en otra terminal:
@@ -65,6 +81,7 @@ Para comprobar que API y Worker comparten BD: `.\scripts\verificar-bd.ps1`
 
 Estados habituales:
 - `SpoolAccepted`: exito
+- `PrintedUnknown`: cierre por watchdog sin confirmacion explicita de impresion
 - `RetryScheduled`: reintento pendiente
 - `ErrorFinal`: fallo definitivo
 

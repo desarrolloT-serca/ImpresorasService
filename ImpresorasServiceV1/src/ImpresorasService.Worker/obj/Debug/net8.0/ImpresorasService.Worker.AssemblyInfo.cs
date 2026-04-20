@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("ImpresorasService.Worker")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+1d72974dfc7d8660931c9e4452fc7f0529d573bc")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+5876d1988c715081d7f7be183f2c79261beac970")]
 [assembly: System.Reflection.AssemblyProductAttribute("ImpresorasService.Worker")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ImpresorasService.Worker")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

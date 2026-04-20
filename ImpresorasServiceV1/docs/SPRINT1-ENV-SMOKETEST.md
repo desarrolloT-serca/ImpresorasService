@@ -35,6 +35,14 @@ dotnet run --project "src/ImpresorasService.Api"
 En otra terminal (repitiendo variables de entorno):
 
 ```powershell
+$env:Source__Mode = "SapPostgres"
+$env:SapPostgres__ConnectionString = "Host=10.110.46.14;Port=5432;Database=serca;Username=cayetano;Password=cayetano"
+$env:SapPostgres__Schema = "sap"
+$env:SapPostgres__Table = "print_queue_aux"
+$env:SapPostgres__LeaseSeconds = "90"
+```
+
+```powershell
 dotnet run --project "src/ImpresorasService.Worker"
 ```
 

@@ -45,11 +45,14 @@ public class RoutingResolver : IRoutingResolver
         var activePrinterIds = printerIds.ToHashSet();
         rules = rules.Where(r => activePrinterIds.Contains(r.PrinterId)).ToList();
 
+        var normalizedDocumentType = NormalizeRequired(documentType);
+        var normalizedChannel = NormalizeNullable(channel);
+
         // Niveles de especificidad (mayor = más específico). Evaluar de mayor a menor.
-        var match = rules.FirstOrDefault(r => Matches(r, storeId, documentType, channel, specificity: 4))
-            ?? rules.FirstOrDefault(r => Matches(r, storeId, documentType, channel, specificity: 3))
-            ?? rules.FirstOrDefault(r => Matches(r, storeId, documentType, channel, specificity: 2))
-            ?? rules.FirstOrDefault(r => Matches(r, storeId, documentType, channel, specificity: 1));
+        var match = rules.FirstOrDefault(r => Matches(r, storeId, normalizedDocumentType, normalizedChannel, specificity: 4))
+            ?? rules.FirstOrDefault(r => Matches(r, storeId, normalizedDocumentType, normalizedChannel, specificity: 3))
+            ?? rules.FirstOrDefault(r => Matches(r, storeId, normalizedDocumentType, normalizedChannel, specificity: 2))
+            ?? rules.FirstOrDefault(r => Matches(r, storeId, normalizedDocumentType, normalizedChannel, specificity: 1));
 
         return match?.PrinterId;
     }
@@ -57,27 +60,43 @@ public class RoutingResolver : IRoutingResolver
     /// <summary>
     /// Comprueba si la regla coincide con el trabajo en el nivel de especificidad dado.
     /// </summary>
-    private static bool Matches(RoutingRule r, int storeId, string documentType, string channel, int specificity)
+    private static bool Matches(RoutingRule r, int storeId, string documentType, string? channel, int specificity)
     {
+        var ruleDocumentType = NormalizeNullable(r.DocumentType);
+        var ruleChannel = NormalizeNullable(r.Channel);
+
         return specificity switch
         {
             // StoreId + DocumentType + Channel (coincidencia total)
             4 => r.StoreId == storeId
-                && r.DocumentType == documentType
-                && r.Channel == channel,
+                && ruleDocumentType == documentType
+                && ruleChannel == channel,
             // StoreId + DocumentType
             3 => r.StoreId == storeId
-                && r.DocumentType == documentType
-                && r.Channel == null,
+                && ruleDocumentType == documentType
+                && ruleChannel == null,
             // StoreId
             2 => r.StoreId == storeId
-                && r.DocumentType == null
-                && r.Channel == null,
+                && ruleDocumentType == null
+                && ruleChannel == null,
             // Global
             1 => r.StoreId == null
-                && r.DocumentType == null
-                && r.Channel == null,
+                && ruleDocumentType == null
+                && ruleChannel == null,
             _ => false
         };
+    }
+
+    private static string NormalizeRequired(string value)
+    {
+        return (value ?? string.Empty).Trim().ToUpperInvariant();
+    }
+
+    private static string? NormalizeNullable(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        return value.Trim().ToUpperInvariant();
     }
 }

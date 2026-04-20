@@ -219,6 +219,13 @@ Mejorar eficiencia operativa y cerrar deuda tecnica priorizada sin cambios disru
 - Menor presion de escritura en monitor de conectividad.
 - Documentacion HANA coherente con el comportamiento real implementado.
 
+### Estado de ejecucion (avance actual)
+
+- [x] `GET /api/printjobs` optimizado (orden y limite en SQL).
+- [x] Monitor de conectividad refactorizado a guardado por lote por ciclo.
+- [x] Documentacion HANA/README alineada con el comportamiento real actual.
+- [ ] Decidir estrategia final de HANA remoto dedicado vs mantener enfoque ORM para dual-run.
+
 ---
 
 ## Matriz de impacto (para planificar sin romper contratos)

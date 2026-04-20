@@ -45,23 +45,49 @@ public class PrintJobsController : ControllerBase
 
         var safeLimit = Math.Clamp(limit ?? 200, 1, 5000);
 
-        var results = (await query
-            .Select(x => new
-            {
-                x.JobId,
-                x.ExternalJobId,
-                x.StoreId,
-                x.PrinterId,
-                x.DocumentType,
-                x.Status,
-                x.AttemptCount,
-                x.LastErrorCode,
-                x.CreatedAtUtc
-            })
-            .ToListAsync(cancellationToken))
-            .OrderByDescending(x => x.CreatedAtUtc)
-            .Take(safeLimit)
-            .ToList();
+        List<object> results;
+        if (_dbContext.Database.IsSqlite())
+        {
+            results = (await query
+                .Select(x => new
+                {
+                    x.JobId,
+                    x.ExternalJobId,
+                    x.StoreId,
+                    x.PrinterId,
+                    x.DocumentType,
+                    x.Status,
+                    x.AttemptCount,
+                    x.LastErrorCode,
+                    x.CreatedAtUtc
+                })
+                .ToListAsync(cancellationToken))
+                .OrderByDescending(x => x.CreatedAtUtc)
+                .Take(safeLimit)
+                .Cast<object>()
+                .ToList();
+        }
+        else
+        {
+            results = (await query
+                .OrderByDescending(x => x.CreatedAtUtc)
+                .Take(safeLimit)
+                .Select(x => new
+                {
+                    x.JobId,
+                    x.ExternalJobId,
+                    x.StoreId,
+                    x.PrinterId,
+                    x.DocumentType,
+                    x.Status,
+                    x.AttemptCount,
+                    x.LastErrorCode,
+                    x.CreatedAtUtc
+                })
+                .ToListAsync(cancellationToken))
+                .Cast<object>()
+                .ToList();
+        }
 
         return Ok(results);
     }
