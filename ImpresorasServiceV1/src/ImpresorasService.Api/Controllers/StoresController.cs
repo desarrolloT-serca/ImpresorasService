@@ -35,9 +35,7 @@ public class StoresController : ControllerBase
             {
                 x.StoreId,
                 x.Name,
-                x.IsActive,
-                x.CreatedAtUtc,
-                x.UpdatedAtUtc
+                x.IsActive
             })
             .ToListAsync(cancellationToken);
 
@@ -49,7 +47,14 @@ public class StoresController : ControllerBase
     {
         var store = await _dbContext.Stores
             .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.StoreId == storeId, cancellationToken);
+            .Where(x => x.StoreId == storeId)
+            .Select(x => new
+            {
+                x.StoreId,
+                x.Name,
+                x.IsActive
+            })
+            .FirstOrDefaultAsync(cancellationToken);
 
         return store is null ? NotFound() : Ok(store);
     }
@@ -63,7 +68,11 @@ public class StoresController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Name))
             return BadRequest(new { error = "El nombre de tienda es obligatorio." });
 
-        var exists = await _dbContext.Stores.AnyAsync(x => x.StoreId == request.StoreId, cancellationToken);
+        var exists = await _dbContext.Stores
+            .Where(x => x.StoreId == request.StoreId)
+            .Select(x => x.StoreId)
+            .Take(1)
+            .CountAsync(cancellationToken) > 0;
         if (exists)
             return Conflict(new { error = "Ya existe una tienda con ese numero." });
 
@@ -109,13 +118,22 @@ public class StoresController : ControllerBase
         [FromQuery] bool purgeHistory = false,
         CancellationToken cancellationToken = default)
     {
-        var store = await _dbContext.Stores.FindAsync(new object[] { storeId }, cancellationToken);
-        if (store is null)
+        var storeExists = await _dbContext.Stores
+            .AsNoTracking()
+            .Where(x => x.StoreId == storeId)
+            .Select(x => x.StoreId)
+            .Take(1)
+            .ToListAsync(cancellationToken);
+        if (storeExists.Count == 0)
             return NotFound();
 
         if (hardDelete)
         {
-            var usersAssigned = await _dbContext.Users.AnyAsync(x => x.StoreId == storeId, cancellationToken);
+            var usersAssigned = await _dbContext.Users
+                .Where(x => x.StoreId == storeId)
+                .Select(x => x.UserId)
+                .Take(1)
+                .CountAsync(cancellationToken) > 0;
             if (usersAssigned)
             {
                 return Conflict(new
@@ -145,9 +163,17 @@ public class StoresController : ControllerBase
             if (purgeHistory)
             {
                 // Borrado de historico: eventos -> trabajos -> staging de origen.
-                await _dbContext.Database.ExecuteSqlInterpolatedAsync(
-                    $"DELETE FROM PrintJobEvents WHERE JobId IN (SELECT JobId FROM PrintJobs WHERE StoreId = {storeId})",
-                    cancellationToken);
+                var jobIds = await _dbContext.PrintJobs
+                    .Where(x => x.StoreId == storeId)
+                    .Select(x => x.JobId)
+                    .ToListAsync(cancellationToken);
+
+                if (jobIds.Count > 0)
+                {
+                    await _dbContext.PrintJobEvents
+                        .Where(x => jobIds.Contains(x.JobId))
+                        .ExecuteDeleteAsync(cancellationToken);
+                }
 
                 await _dbContext.PrintJobs
                     .Where(x => x.StoreId == storeId)
@@ -162,8 +188,9 @@ public class StoresController : ControllerBase
                 .Where(x => x.StoreId == storeId)
                 .ExecuteDeleteAsync(cancellationToken);
 
-            _dbContext.Stores.Remove(store);
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            await _dbContext.Stores
+                .Where(x => x.StoreId == storeId)
+                .ExecuteDeleteAsync(cancellationToken);
             await tx.CommitAsync(cancellationToken);
 
             return Ok(new
@@ -174,27 +201,18 @@ public class StoresController : ControllerBase
             });
         }
 
-        var now = DateTimeOffset.UtcNow;
-
-        // Desactivar la tienda no elimina datos historicos.
-        // Si hay impresoras asociadas, tambien se desactivan para mantener coherencia operativa.
-        var storePrinters = await _dbContext.Printers
-            .Where(x => x.StoreId == storeId && x.IsActive)
-            .ToListAsync(cancellationToken);
-        foreach (var printer in storePrinters)
-        {
-            printer.IsActive = false;
-            printer.UpdatedAtUtc = now;
-        }
-
-        store.IsActive = false;
-        store.UpdatedAtUtc = now;
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        var nowText = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss");
+        var affectedPrinters = await _dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE \"printer_printer\" SET \"is_active\" = FALSE, \"updated_at_utc\" = {nowText} WHERE \"store_id\" = {storeId} AND \"is_active\" = TRUE",
+            cancellationToken);
+        await _dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE \"printer_store\" SET \"is_active\" = FALSE, \"updated_at_utc\" = {nowText} WHERE \"store_id\" = {storeId}",
+            cancellationToken);
 
         return Ok(new
         {
             message = "Tienda desactivada correctamente.",
-            affectedPrinters = storePrinters.Count
+            affectedPrinters
         });
     }
 

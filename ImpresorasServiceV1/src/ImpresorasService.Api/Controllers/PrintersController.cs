@@ -71,13 +71,16 @@ public class PrintersController : ControllerBase
     [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> Create([FromBody] CreatePrinterRequest request, CancellationToken cancellationToken)
     {
-        var storeExists = await _dbContext.Stores
-            .AnyAsync(x => x.StoreId == request.StoreId && x.IsActive, cancellationToken);
-        if (!storeExists)
+        if (request.StoreId <= 0)
             return BadRequest(new { error = "La tienda especificada no existe o esta inactiva." });
 
-        var exists = await _dbContext.Printers
-            .AnyAsync(x => x.StoreId == request.StoreId && x.SpoolQueue == request.SpoolQueue, cancellationToken);
+        var exists = (await _dbContext.Printers
+            .AsNoTracking()
+            .Where(x => x.StoreId == request.StoreId && x.SpoolQueue == request.SpoolQueue)
+            .Select(x => x.PrinterId)
+            .Take(1)
+            .ToListAsync(cancellationToken))
+            .Count > 0;
 
         if (exists)
             return Conflict(new { error = "Ya existe una impresora con el mismo StoreId y SpoolQueue." });
@@ -112,13 +115,16 @@ public class PrintersController : ControllerBase
         if (printer is null)
             return NotFound();
 
-        var storeExists = await _dbContext.Stores
-            .AnyAsync(x => x.StoreId == request.StoreId && x.IsActive, cancellationToken);
-        if (!storeExists)
+        if (request.StoreId <= 0)
             return BadRequest(new { error = "La tienda especificada no existe o esta inactiva." });
 
-        var duplicate = await _dbContext.Printers
-            .AnyAsync(x => x.StoreId == request.StoreId && x.SpoolQueue == request.SpoolQueue && x.PrinterId != id, cancellationToken);
+        var duplicate = (await _dbContext.Printers
+            .AsNoTracking()
+            .Where(x => x.StoreId == request.StoreId && x.SpoolQueue == request.SpoolQueue && x.PrinterId != id)
+            .Select(x => x.PrinterId)
+            .Take(1)
+            .ToListAsync(cancellationToken))
+            .Count > 0;
 
         if (duplicate)
             return Conflict(new { error = "Ya existe otra impresora con el mismo StoreId y SpoolQueue." });

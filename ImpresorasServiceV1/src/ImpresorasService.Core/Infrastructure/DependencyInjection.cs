@@ -26,8 +26,9 @@ public static class DependencyInjection
         services.Configure<SapHanaOptions>(configuration.GetSection(SapHanaOptions.SectionName));
 
         string provider = configuration.GetValue<string>("Database:Provider") ?? "Hana";
-        string connectionString = configuration.GetConnectionString("PrintQueue")
-            ?? "Data Source=impresoras-local.db";
+        string connectionString = configuration.GetConnectionString("PrintQueue") ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(connectionString))
+            throw new InvalidOperationException("ConnectionStrings:PrintQueue es obligatorio para el proveedor de base de datos.");
 
         services.AddDbContext<ImpresorasDbContext>(options =>
         {
@@ -35,13 +36,13 @@ public static class DependencyInjection
             {
                 options.UseSqlServer(connectionString);
             }
-            else if (string.Equals(provider, "Sqlite", StringComparison.OrdinalIgnoreCase))
+            else if (string.Equals(provider, "Hana", StringComparison.OrdinalIgnoreCase))
             {
-                options.UseSqlite(connectionString);
+                ConfigureHanaProvider(options, connectionString);
             }
             else
             {
-                ConfigureHanaProvider(options, connectionString);
+                throw new InvalidOperationException($"Proveedor de base de datos no soportado: '{provider}'. Use 'Hana' o 'SqlServer'.");
             }
         });
 
@@ -67,25 +68,65 @@ public static class DependencyInjection
 
     private static void ConfigureHanaProvider(DbContextOptionsBuilder options, string connectionString)
     {
-        var hanaUseMethod = AppDomain.CurrentDomain.GetAssemblies()
-            .SelectMany(a => a.GetTypes())
-            .Where(t => t.IsSealed && t.IsAbstract)
-            .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Static))
-            .FirstOrDefault(m =>
+        var hanaAssembly = Assembly.Load("Sap.EntityFrameworkCore.Hana.v8.0");
+        var extensionTypeNames = new[]
+        {
+            "Microsoft.EntityFrameworkCore.HanaDbContextOptionsBuilderExtensions",
+            "Sap.EntityFrameworkCore.Hana.Infrastructure.HanaDbContextOptionsBuilderExtensions"
+        };
+
+        Type? extensionsType = extensionTypeNames
+            .Select(hanaAssembly.GetType)
+            .FirstOrDefault(t => t is not null);
+
+        if (extensionsType is null)
+        {
+            extensionsType = hanaAssembly
+                .GetTypes()
+                .FirstOrDefault(t => t.Name == "HanaDbContextOptionsBuilderExtensions");
+        }
+
+        var hanaMethods = extensionsType?.GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .Where(m =>
             {
-                if (!string.Equals(m.Name, "UseHana", StringComparison.Ordinal))
+                if (!string.Equals(m.Name, "UseHana", StringComparison.Ordinal)
+                    && !string.Equals(m.Name, "AddHana", StringComparison.Ordinal))
                     return false;
 
                 var parameters = m.GetParameters();
-                return parameters.Length >= 2
-                       && parameters[0].ParameterType == typeof(DbContextOptionsBuilder)
-                       && parameters[1].ParameterType == typeof(string);
-            });
+                return parameters.Length >= 1
+                       && typeof(DbContextOptionsBuilder).IsAssignableFrom(parameters[0].ParameterType);
+            })
+            .OrderByDescending(m => m.GetParameters().Any(p => p.ParameterType == typeof(string)))
+            .ThenByDescending(m => m.GetParameters().Length)
+            .ToArray();
+
+        var hanaUseMethod = hanaMethods?.FirstOrDefault();
 
         if (hanaUseMethod is null)
             throw new InvalidOperationException(
                 "No se encontró el proveedor EF de SAP HANA en runtime. Revise instalación/licencia del provider SAP.");
 
-        hanaUseMethod.Invoke(null, [options, connectionString]);
+        var invokeArgs = hanaUseMethod.GetParameters()
+            .Select((p, idx) =>
+            {
+                if (idx == 0)
+                    return (object)options;
+
+                if (p.ParameterType == typeof(string))
+                    return (object)connectionString;
+
+                if (p.HasDefaultValue)
+                    return p.DefaultValue;
+
+                if (!p.ParameterType.IsValueType)
+                    return null;
+
+                return Activator.CreateInstance(p.ParameterType);
+            })
+            .ToArray();
+
+        hanaUseMethod.Invoke(null, invokeArgs);
     }
+
 }

@@ -73,14 +73,19 @@ public class RoutingRulesController : ControllerBase
     {
         if (request.StoreId.HasValue)
         {
-            var storeExists = await _dbContext.Stores
-                .AnyAsync(x => x.StoreId == request.StoreId.Value && x.IsActive, cancellationToken);
-            if (!storeExists)
+            var storeIsActive = await _dbContext.Stores
+                .Where(x => x.StoreId == request.StoreId.Value)
+                .Select(x => (bool?)x.IsActive)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (storeIsActive != true)
                 return BadRequest(new { error = "La tienda especificada no existe o esta inactiva." });
         }
 
         var printerExists = await _dbContext.Printers
-            .AnyAsync(x => x.PrinterId == request.PrinterId, cancellationToken);
+            .Where(x => x.PrinterId == request.PrinterId)
+            .Select(x => x.PrinterId)
+            .Take(1)
+            .CountAsync(cancellationToken) > 0;
 
         if (!printerExists)
             return BadRequest(new { error = "La impresora especificada no existe." });
@@ -119,14 +124,19 @@ public class RoutingRulesController : ControllerBase
 
         if (request.StoreId.HasValue)
         {
-            var storeExists = await _dbContext.Stores
-                .AnyAsync(x => x.StoreId == request.StoreId.Value && x.IsActive, cancellationToken);
-            if (!storeExists)
+            var storeIsActive = await _dbContext.Stores
+                .Where(x => x.StoreId == request.StoreId.Value)
+                .Select(x => (bool?)x.IsActive)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (storeIsActive != true)
                 return BadRequest(new { error = "La tienda especificada no existe o esta inactiva." });
         }
 
         var printerExists = await _dbContext.Printers
-            .AnyAsync(x => x.PrinterId == request.PrinterId, cancellationToken);
+            .Where(x => x.PrinterId == request.PrinterId)
+            .Select(x => x.PrinterId)
+            .Take(1)
+            .CountAsync(cancellationToken) > 0;
 
         if (!printerExists)
             return BadRequest(new { error = "La impresora especificada no existe." });

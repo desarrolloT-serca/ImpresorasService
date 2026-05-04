@@ -49,13 +49,19 @@ public class SapHanaJobSourceAdapter : IJobSourceAdapter
 
         await using var tx = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
 
-        var candidateIds = await _dbContext.SourcePrintJobs
-            .Where(x => !x.IsProcessed && (x.ClaimedUntilUtc == null || x.ClaimedUntilUtc <= now))
+        var preCandidates = await _dbContext.SourcePrintJobs
+            .Where(x => !x.IsProcessed)
+            .OrderBy(x => x.Id)
+            .Take(batchSize * 5)
+            .ToListAsync(cancellationToken);
+
+        var candidateIds = preCandidates
+            .Where(x => x.ClaimedUntilUtc == null || x.ClaimedUntilUtc <= now)
             .OrderBy(x => x.CreatedAtUtc)
             .ThenBy(x => x.Id)
             .Select(x => x.Id)
             .Take(batchSize)
-            .ToListAsync(cancellationToken);
+            .ToList();
 
         if (candidateIds.Count == 0)
         {
@@ -63,9 +69,11 @@ public class SapHanaJobSourceAdapter : IJobSourceAdapter
             return Array.Empty<IncomingPrintJob>();
         }
 
-        var claimedRows = await _dbContext.SourcePrintJobs
-            .Where(x => candidateIds.Contains(x.Id) && !x.IsProcessed && (x.ClaimedUntilUtc == null || x.ClaimedUntilUtc <= now))
-            .ToListAsync(cancellationToken);
+        var claimedRows = (await _dbContext.SourcePrintJobs
+            .Where(x => candidateIds.Contains(x.Id) && !x.IsProcessed)
+            .ToListAsync(cancellationToken))
+            .Where(x => x.ClaimedUntilUtc == null || x.ClaimedUntilUtc <= now)
+            .ToList();
 
         if (claimedRows.Count == 0)
         {
