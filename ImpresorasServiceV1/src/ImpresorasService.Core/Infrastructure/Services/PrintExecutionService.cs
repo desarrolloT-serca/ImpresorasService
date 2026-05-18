@@ -37,17 +37,17 @@ public sealed class PrintExecutionService : IPrintExecutionService
         // Nota de decisión: tratamos "Printing" como recuperable si lleva más que el timeout configurado + buffer.
         // Buffer evita que jobs válidos se reintenten mientras el spooler todavía está procesando.
         var stalePrintingAfter = TimeSpan.FromSeconds(_options.TimeoutSeconds + 10);
-        // Solo estados que la impresión puede avanzar. Un Where amplio (p.ej. AttemptCount < max) + Take sin orden
-        // en SQLite devuelve filas arbitrarias: con muchos Pending antiguos, ningún Routed entra en el lote y la cola se congela.
-        var takeWindow = Math.Max(batchSize * 4, 64);
+        // Solo traer trabajos realmente elegibles. Si hacemos Take antes de comprobar NextRetryAtUtc,
+        // muchos RetryScheduled todavia no vencidos pueden ocupar la ventana y dejar fuera reintentos listos.
         var candidates = await _db.PrintJobs
             .AsNoTracking()
             .Where(j =>
                 j.Status == PrintJobStatus.Routed
-                || j.Status == PrintJobStatus.RetryScheduled
-                || j.Status == PrintJobStatus.Printing)
-            .OrderBy(j => j.JobId)
-            .Take(takeWindow)
+                || (j.Status == PrintJobStatus.RetryScheduled && j.NextRetryAtUtc != null && j.NextRetryAtUtc <= now)
+                || (j.Status == PrintJobStatus.Printing && j.UpdatedAtUtc <= now - stalePrintingAfter))
+            .OrderBy(j => j.NextRetryAtUtc ?? j.CreatedAtUtc)
+            .ThenBy(j => j.CreatedAtUtc)
+            .Take(batchSize)
             .Select(j => new
             {
                 j.JobId,
@@ -64,12 +64,6 @@ public sealed class PrintExecutionService : IPrintExecutionService
             .ToListAsync(cancellationToken);
 
         var eligible = candidates
-            .Where(j =>
-                j.Status == PrintJobStatus.Routed
-                || (j.Status == PrintJobStatus.RetryScheduled && j.NextRetryAtUtc != null && j.NextRetryAtUtc <= now)
-                || (j.Status == PrintJobStatus.Printing && j.UpdatedAtUtc <= now - stalePrintingAfter))
-            .OrderBy(j => j.CreatedAtUtc)
-            .Take(batchSize)
             .Select(j => new { j.JobId, j.PrinterId, j.RowVersion, j.StoreId, j.DocumentType, j.Channel, j.Status })
             .ToList();
 
