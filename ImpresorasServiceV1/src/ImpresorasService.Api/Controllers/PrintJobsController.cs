@@ -28,6 +28,9 @@ public class PrintJobsController : ControllerBase
         [FromQuery] int? storeId,
         [FromQuery] PrintJobStatus? status,
         [FromQuery] int? limit,
+        [FromQuery] int? page,
+        [FromQuery] string? externalJobId,
+        [FromQuery] bool? includeTotal,
         CancellationToken cancellationToken)
     {
         IQueryable<PrintJob> query = _dbContext.PrintJobs.AsNoTracking();
@@ -43,8 +46,46 @@ public class PrintJobsController : ControllerBase
             query = query.Where(x => x.Status == status.Value);
         }
 
+        if (!string.IsNullOrWhiteSpace(externalJobId))
+        {
+            var needle = externalJobId.Trim();
+            query = query.Where(x => EF.Functions.Like(x.ExternalJobId, $"%{needle}%"));
+        }
+
         // Protege la UI de cargas masivas accidentales (polling + tablas grandes).
         var safeLimit = Math.Clamp(limit ?? 100, 1, 500);
+        var safePage = Math.Max(page ?? 1, 1);
+
+        if (includeTotal == true)
+        {
+            var total = await query.CountAsync(cancellationToken);
+            var pagedResults = await query
+                .OrderByDescending(x => x.CreatedAtUtc)
+                .Skip((safePage - 1) * safeLimit)
+                .Take(safeLimit)
+                .Select(x => new
+                {
+                    x.JobId,
+                    x.ExternalJobId,
+                    x.StoreId,
+                    x.PrinterId,
+                    x.DocumentType,
+                    x.Status,
+                    x.AttemptCount,
+                    x.LastErrorCode,
+                    x.CreatedAtUtc,
+                    x.UpdatedAtUtc
+                })
+                .ToListAsync(cancellationToken);
+
+            return Ok(new
+            {
+                Value = pagedResults,
+                Count = total,
+                Page = safePage,
+                PageSize = safeLimit
+            });
+        }
 
         var results = (await query
             .OrderByDescending(x => x.CreatedAtUtc)
@@ -59,7 +100,8 @@ public class PrintJobsController : ControllerBase
                 x.Status,
                 x.AttemptCount,
                 x.LastErrorCode,
-                x.CreatedAtUtc
+                x.CreatedAtUtc,
+                x.UpdatedAtUtc
             })
             .ToListAsync(cancellationToken))
             .Cast<object>()
