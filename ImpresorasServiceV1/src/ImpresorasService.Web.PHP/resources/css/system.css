@@ -1372,6 +1372,200 @@ html.dark .btn-warning {
     white-space: nowrap;
 }
 
+.dbx-risk-card {
+    --risk-accent: var(--ui-healthy);
+    border-color: color-mix(in srgb, var(--risk-accent) 20%, var(--ui-border));
+}
+
+.dbx-risk-card::before {
+    height: 4px;
+    background: linear-gradient(90deg, var(--ui-primary) 0%, var(--ui-primary) 82%, var(--risk-accent) 82%, var(--risk-accent) 100%);
+}
+
+.dbx-risk-healthy {
+    --risk-accent: var(--ui-healthy);
+}
+
+.dbx-risk-warning {
+    --risk-accent: var(--ui-warning);
+}
+
+.dbx-risk-critical {
+    --risk-accent: var(--ui-danger);
+}
+
+.dbx-risk-head {
+    padding: 11px 12px 9px;
+}
+
+.dbx-risk-kpi-strip {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin: 8px 12px;
+    border: 1px solid color-mix(in srgb, var(--ui-primary) 16%, var(--ui-border));
+    border-radius: var(--ui-radius-sm);
+    background: color-mix(in srgb, var(--ui-primary-soft) 30%, var(--ui-surface));
+    overflow: hidden;
+}
+
+.dbx-risk-kpi {
+    --risk-kpi-color: var(--ui-primary);
+    display: grid;
+    justify-items: center;
+    gap: 1px;
+    min-width: 0;
+    min-height: 2rem;
+    padding: 4px 6px;
+    text-align: center;
+}
+
+.dbx-risk-kpi + .dbx-risk-kpi {
+    border-left: 1px solid color-mix(in srgb, var(--ui-primary) 14%, var(--ui-border));
+}
+
+.dbx-risk-kpi.is-warning {
+    --risk-kpi-color: var(--ui-warning);
+}
+
+.dbx-risk-kpi.is-danger {
+    --risk-kpi-color: var(--ui-danger);
+}
+
+.dbx-risk-kpi span {
+    max-width: 100%;
+    color: var(--ui-text-muted);
+    font-size: 0.56rem;
+    font-weight: 850;
+    letter-spacing: 0.045em;
+    line-height: 1.05;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.dbx-risk-kpi strong {
+    color: var(--risk-kpi-color);
+    font-size: 0.95rem;
+    font-weight: 900;
+    line-height: 1;
+}
+
+.dbx-risk-printers {
+    padding: 4px 12px 0;
+}
+
+.dbx-risk-printer-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 104px 58px;
+    align-items: center;
+    gap: 8px;
+    min-height: 30px;
+    border-top: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 72%, transparent);
+    background: transparent !important;
+    color: var(--ui-text);
+    font-size: 0.76rem;
+    padding: 5px 0;
+}
+
+.dbx-risk-printer-row span:first-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dbx-store-summary-groups {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.dbx-store-summary-group {
+    display: grid;
+    align-content: start;
+    gap: 7px;
+    min-width: 0;
+    border: 1px solid color-mix(in srgb, var(--ui-primary) 16%, var(--ui-border));
+    border-radius: var(--ui-radius-sm);
+    background: color-mix(in srgb, var(--ui-primary-soft) 24%, var(--ui-surface));
+    padding: 12px;
+}
+
+.dbx-store-summary-title {
+    color: var(--ui-primary);
+    font-size: 0.7rem;
+    font-weight: 900;
+    letter-spacing: 0.055em;
+    line-height: 1;
+    text-transform: uppercase;
+}
+
+.dbx-store-summary-group p {
+    margin: 0;
+    color: var(--ui-text-muted);
+    font-size: 0.9rem;
+    font-weight: 750;
+    line-height: 1.35;
+}
+
+.dbx-store-summary-group p strong {
+    color: var(--ui-text);
+    font-size: 1.05rem;
+    font-weight: 900;
+}
+
+.dbx-store-summary-group .is-warning {
+    color: var(--ui-warning);
+}
+
+.dbx-store-summary-group .is-danger {
+    color: var(--ui-danger);
+}
+
+.dbx-store-summary-state {
+    display: inline-flex;
+    width: fit-content;
+    align-items: center;
+    min-height: 24px;
+    border: 1px solid color-mix(in srgb, var(--ui-primary) 26%, var(--ui-border));
+    border-radius: var(--ui-radius-sm);
+    background: var(--ui-surface);
+    color: var(--ui-primary);
+    font-size: 0.76rem;
+    font-weight: 850;
+    line-height: 1;
+    padding: 5px 8px;
+}
+
+.dbx-store-summary-state.healthy {
+    border-color: color-mix(in srgb, var(--ui-healthy) 34%, var(--ui-border));
+    color: var(--ui-healthy);
+}
+
+.dbx-store-summary-state.warning {
+    border-color: color-mix(in srgb, var(--ui-warning) 40%, var(--ui-border));
+    color: var(--ui-warning);
+}
+
+.dbx-store-summary-state.critical {
+    border-color: color-mix(in srgb, var(--ui-danger) 42%, var(--ui-border));
+    color: var(--ui-danger);
+}
+
+@media (max-width: 980px) {
+    .dbx-store-summary-groups {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 760px) {
+    .dbx-risk-printer-row {
+        grid-template-columns: minmax(0, 1fr) 88px 52px;
+    }
+}
+
 .dbx-printer-more {
     color: var(--ui-text-muted);
     font-size: 0.72rem;
