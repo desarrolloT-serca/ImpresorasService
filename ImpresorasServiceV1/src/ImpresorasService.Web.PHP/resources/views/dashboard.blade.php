@@ -655,6 +655,8 @@
                                             $connTransport = (string)($printer['lastConnectionTransport'] ?? '');
                                             $connCheckAt = (string)($printer['lastConnectionCheckAtUtc'] ?? '');
                                             $connStreak = (int)($printer['connectionFailuresStreak'] ?? 0);
+                                            $printerQueue = (int)($printer['queueCurrent'] ?? 0);
+                                            $showPrinterQueue = count($printerRows) > 1 && $printerQueue > 0;
                                             $connClass = $connOk === true ? 'ok' : 'off';
                                             if ($connOk === true) {
                                                 $connText = 'OK';
@@ -670,7 +672,11 @@
                                         <span class="dbx-printer-state {{ $connClass }}" title="{{ $connTitle }}">
                                             {!! $connText !!}
                                         </span>
-                                        <span>{{ $printer['queueCurrent'] ?? 0 }}</span>
+                                        <span class="dbx-printer-queue-slot">
+                                            @if($showPrinterQueue)
+                                                <span class="dbx-printer-queue-chip">Cola {{ $printerQueue }}</span>
+                                            @endif
+                                        </span>
                                     </div>
                                 @endforeach
                                 @if($hiddenPrinterCount > 0)

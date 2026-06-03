@@ -1262,9 +1262,10 @@ html.dark .btn-warning {
     --kpi-color: var(--ui-primary);
     display: grid;
     justify-items: center;
-    gap: 3px;
+    gap: 2px;
     min-width: 0;
-    padding: 8px 7px;
+    min-height: 2.35rem;
+    padding: 5px 7px;
     text-align: center;
 }
 
@@ -1283,7 +1284,7 @@ html.dark .btn-warning {
 .dbx-kpi-cell span {
     max-width: 100%;
     color: var(--ui-text-muted);
-    font-size: 0.62rem;
+    font-size: 0.58rem;
     font-weight: 850;
     letter-spacing: 0.045em;
     line-height: 1.05;
@@ -1295,7 +1296,7 @@ html.dark .btn-warning {
 
 .dbx-kpi-cell strong {
     color: var(--kpi-color);
-    font-size: 1.25rem;
+    font-size: 1.08rem;
     font-weight: 900;
     line-height: 1;
 }
@@ -1323,7 +1324,7 @@ html.dark .btn-warning {
 
 .dbx-diagnostic-printer-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 104px 42px;
+    grid-template-columns: minmax(0, 1fr) 104px 58px;
     align-items: center;
     gap: 8px;
 }
@@ -1350,6 +1351,27 @@ html.dark .btn-warning {
     font-weight: 800;
 }
 
+.dbx-printer-queue-slot {
+    display: flex;
+    justify-content: flex-end;
+    min-width: 0;
+}
+
+.dbx-printer-queue-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 22px;
+    border: 1px solid color-mix(in srgb, var(--ui-warning) 42%, var(--ui-border));
+    border-radius: var(--ui-radius-sm);
+    background: color-mix(in srgb, var(--ui-warning) 10%, var(--ui-surface));
+    color: var(--ui-warning);
+    font-size: 0.66rem;
+    font-weight: 850;
+    line-height: 1;
+    padding: 3px 6px;
+    white-space: nowrap;
+}
+
 .dbx-printer-more {
     color: var(--ui-text-muted);
     font-size: 0.72rem;
@@ -1372,7 +1394,7 @@ html.dark .btn-warning {
 }
 
 .dbx-store-grid.cols-4 .dbx-diagnostic-printer-row {
-    grid-template-columns: minmax(0, 1fr) 88px 34px;
+    grid-template-columns: minmax(0, 1fr) 88px 52px;
 }
 
 html.dark .dbx-printer-summary {
