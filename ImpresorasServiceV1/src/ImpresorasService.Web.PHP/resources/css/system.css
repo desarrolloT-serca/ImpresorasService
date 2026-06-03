@@ -1133,6 +1133,239 @@ html.dark .btn-warning {
     line-height: 1;
 }
 
+.dbx-diagnostic-card {
+    --diagnostic-accent: var(--ui-healthy);
+    display: flex;
+    flex-direction: column;
+    border-color: color-mix(in srgb, var(--diagnostic-accent) 24%, var(--ui-border));
+}
+
+.dbx-diagnostic-card::before {
+    height: 4px;
+    background: linear-gradient(90deg, var(--ui-primary) 0%, var(--ui-primary) 78%, var(--diagnostic-accent) 78%, var(--diagnostic-accent) 100%);
+}
+
+.dbx-diagnostic-healthy {
+    --diagnostic-accent: var(--ui-healthy);
+}
+
+.dbx-diagnostic-warning {
+    --diagnostic-accent: var(--ui-warning);
+}
+
+.dbx-diagnostic-critical {
+    --diagnostic-accent: var(--ui-danger);
+}
+
+.dbx-diagnostic-head {
+    padding: 12px 12px 10px;
+}
+
+.dbx-diagnostic-reason {
+    display: inline-flex;
+    align-items: center;
+    min-height: 22px;
+    max-width: 100%;
+    margin-top: 6px;
+    border: 1px solid color-mix(in srgb, var(--diagnostic-accent) 34%, var(--ui-border));
+    border-radius: var(--ui-radius-sm);
+    background: color-mix(in srgb, var(--diagnostic-accent) 8%, var(--ui-surface));
+    color: var(--ui-text);
+    font-size: 0.72rem;
+    font-weight: 800;
+    line-height: 1.2;
+    overflow: hidden;
+    padding: 4px 7px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dbx-diagnostic-body {
+    display: grid;
+    gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--ui-border);
+    background: color-mix(in srgb, var(--ui-surface-soft) 62%, var(--ui-surface));
+}
+
+.dbx-diagnostic-action {
+    display: grid;
+    gap: 2px;
+    border-left: 3px solid var(--diagnostic-accent);
+    padding-left: 9px;
+}
+
+.dbx-diagnostic-action span,
+.dbx-period-strip span {
+    color: var(--ui-text-muted);
+    font-size: 0.66rem;
+    font-weight: 850;
+    letter-spacing: 0.04em;
+    line-height: 1.15;
+    text-transform: uppercase;
+}
+
+.dbx-diagnostic-action strong {
+    color: var(--ui-text);
+    font-size: 0.9rem;
+    line-height: 1.2;
+}
+
+.dbx-diagnostic-action small {
+    color: var(--ui-text-muted);
+    font-size: 0.74rem;
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.dbx-diagnostic-kpis {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    padding: 0;
+    border-bottom: 0;
+    background: transparent;
+}
+
+.dbx-diagnostic-kpis > div {
+    min-width: 0;
+    padding: 7px 6px;
+}
+
+.dbx-diagnostic-kpis span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dbx-diagnostic-kpis strong {
+    font-size: 0.92rem;
+}
+
+.dbx-period-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    border-top: 1px solid color-mix(in srgb, var(--ui-border) 70%, transparent);
+    padding-top: 8px;
+}
+
+.dbx-period-strip strong {
+    color: var(--ui-text);
+    font-size: 0.75rem;
+}
+
+.dbx-diagnostic-printers {
+    display: grid;
+    gap: 0;
+    padding: 10px 12px 0;
+}
+
+.dbx-printer-summary {
+    min-height: 32px;
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius-sm);
+    background: var(--ui-surface);
+    color: var(--ui-text);
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1.3;
+    overflow: hidden;
+    padding: 8px 9px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dbx-diagnostic-printers-head,
+.dbx-diagnostic-printer-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 104px 42px;
+    align-items: center;
+    gap: 8px;
+}
+
+.dbx-diagnostic-printers-head {
+    min-height: 26px;
+    border-bottom: 1px solid var(--ui-border);
+    background: transparent !important;
+    color: var(--ui-text-muted) !important;
+    font-size: 0.66rem;
+    font-weight: 850;
+    letter-spacing: 0.04em;
+    padding: 0 0 6px;
+}
+
+.dbx-diagnostic-printer-row {
+    min-height: 34px;
+    border-top: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 72%, transparent);
+    background: transparent !important;
+    color: var(--ui-text);
+    font-size: 0.76rem;
+    padding: 6px 0;
+}
+
+.dbx-diagnostic-printer-row span:first-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dbx-diagnostic-printer-row span:last-child {
+    text-align: center;
+    font-weight: 800;
+}
+
+.dbx-printer-more {
+    color: var(--ui-text-muted);
+    font-size: 0.72rem;
+    font-weight: 800;
+    padding: 7px 0 2px;
+    text-align: right;
+}
+
+.dbx-diagnostic-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 7px;
+    margin-top: auto;
+    padding: 10px 12px 12px;
+}
+
+.dbx-diagnostic-actions .btn {
+    min-height: 30px;
+    padding: 5px 9px;
+}
+
+.dbx-store-grid.cols-4 .dbx-diagnostic-kpis,
+.dbx-store-grid.cols-3 .dbx-diagnostic-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dbx-store-grid.cols-4 .dbx-diagnostic-printers-head,
+.dbx-store-grid.cols-4 .dbx-diagnostic-printer-row {
+    grid-template-columns: minmax(0, 1fr) 88px 34px;
+}
+
+html.dark .dbx-printer-summary {
+    background: var(--ui-surface-raised);
+}
+
+@media (max-width: 760px) {
+    .dbx-diagnostic-kpis {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .dbx-diagnostic-head,
+    .dbx-diagnostic-actions {
+        align-items: flex-start;
+    }
+
+    .dbx-diagnostic-actions {
+        justify-content: flex-start;
+    }
+}
+
 .dbx-selectable-row {
     cursor: pointer;
 }

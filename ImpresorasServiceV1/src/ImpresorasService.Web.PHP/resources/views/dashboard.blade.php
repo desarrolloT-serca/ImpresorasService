@@ -563,59 +563,162 @@
                             ? 'critical'
                             : (($store['health'] ?? 'healthy') === 'warning' ? 'warning' : 'healthy');
                         $printerRows = is_array($store['printers'] ?? null) ? $store['printers'] : [];
-                        $storeIdText = (string)($store['storeId'] ?? '-');
+                        $storeId = $store['storeId'] ?? null;
+                        $storeIdText = (string)($storeId ?? '-');
                         $storeNameRaw = trim((string)($store['storeName'] ?? 'Sin nombre'));
                         $nameHasId = preg_match('/\b' . preg_quote($storeIdText, '/') . '\b/u', $storeNameRaw) === 1;
                         $storeTitle = $nameHasId ? $storeNameRaw : ('#' . $storeIdText . ' - ' . $storeNameRaw);
+                        $healthReason = (string)($store['healthReason'] ?? 'Operacion normal');
+                        $queuedCurrent = (int)($store['queuedCurrent'] ?? 0);
+                        $failedNoRetry = (int)($store['failedWithoutRetryCurrent'] ?? 0);
+                        $unassigned = (int)($store['unassignedQueueCurrent'] ?? 0);
+                        $connectedPrinters = (int)($store['connectedPrinters'] ?? 0);
+                        $printerTotal = count($printerRows);
+                        $hasConnectivityIssue = false;
+
+                        foreach ($printerRows as $printerForReason) {
+                            if (($printerForReason['lastConnectionOk'] ?? null) !== true) {
+                                $hasConnectivityIssue = true;
+                                break;
+                            }
+                        }
+
+                        $reasonSource = strtolower(strip_tags(html_entity_decode($healthReason)));
+                        if ($healthClass === 'healthy') {
+                            $reasonShort = 'Operaci&oacute;n normal';
+                            $actionText = 'Sin acci&oacute;n inmediata';
+                            $actionTarget = 'none';
+                        } elseif ($printerTotal === 0 || str_contains($reasonSource, 'sin impresora')) {
+                            $reasonShort = 'Sin impresoras';
+                            $actionText = 'Configurar impresoras activas';
+                            $actionTarget = 'printers';
+                        } elseif ($hasConnectivityIssue || str_contains($reasonSource, 'host') || str_contains($reasonSource, 'unc') || str_contains($reasonSource, 'conect')) {
+                            $reasonShort = 'Conectividad';
+                            $actionText = 'Revisar conectividad de impresoras';
+                            $actionTarget = 'printers';
+                        } elseif ($failedNoRetry > 0 || str_contains($reasonSource, 'sin reenviar') || str_contains($reasonSource, 'fallo')) {
+                            $reasonShort = 'Fallos sin reenviar';
+                            $actionText = 'Revisar trabajos pendientes';
+                            $actionTarget = 'queue';
+                        } elseif ($unassigned > 0 || str_contains($reasonSource, 'sin asignar')) {
+                            $reasonShort = 'Sin asignar';
+                            $actionText = 'Asignar impresora a trabajos';
+                            $actionTarget = 'queue';
+                        } elseif ($queuedCurrent > 0 || str_contains($reasonSource, 'cola')) {
+                            $reasonShort = 'Cola acumulada';
+                            $actionText = 'Revisar acumulaci&oacute;n de cola';
+                            $actionTarget = 'queue';
+                        } else {
+                            $reasonShort = 'Operaci&oacute;n normal';
+                            $actionText = 'Revisar detalle operativo';
+                            $actionTarget = 'none';
+                        }
+
+                        $queueUrl = url('/cola') . ($storeId !== null ? ('?storeId=' . urlencode((string)$storeId)) : '');
+                        $printersUrl = url('/impresoras') . ($storeId !== null ? ('?storeId=' . urlencode((string)$storeId)) : '');
+                        $sortedPrinterRows = $printerRows;
+                        usort($sortedPrinterRows, static function ($left, $right) {
+                            $leftIssue = (($left['lastConnectionOk'] ?? null) !== true ? 100 : 0) + ((int)($left['queueCurrent'] ?? 0) > 0 ? 10 : 0) + (int)($left['queueCurrent'] ?? 0);
+                            $rightIssue = (($right['lastConnectionOk'] ?? null) !== true ? 100 : 0) + ((int)($right['queueCurrent'] ?? 0) > 0 ? 10 : 0) + (int)($right['queueCurrent'] ?? 0);
+                            return $rightIssue <=> $leftIssue;
+                        });
+                        $visiblePrinterRows = $healthClass === 'healthy'
+                            ? array_slice($printerRows, 0, 1)
+                            : array_slice($sortedPrinterRows, 0, 3);
+                        $hiddenPrinterCount = max(0, count($sortedPrinterRows) - count($visiblePrinterRows));
                     @endphp
-                    <article class="dbx-store">
-                        <div class="dbx-store-head">
+                    <article class="dbx-store dbx-diagnostic-card dbx-diagnostic-{{ $healthClass }}">
+                        <div class="dbx-store-head dbx-diagnostic-head">
                             <div>
                                 <h3 class="dbx-store-title">{{ $storeTitle }}</h3>
-                                <p class="dbx-store-reason">{{ $store['healthReason'] ?? '-' }}</p>
+                                <p class="dbx-store-reason dbx-diagnostic-reason" title="{{ $healthReason }}">{!! $reasonShort !!}</p>
                             </div>
                             <span class="dbx-pill {{ $healthClass }}">{{ strtoupper($store['health'] ?? 'healthy') }}</span>
                         </div>
-                        <div class="dbx-mini-kpis">
-                            <div><span>Cola</span><strong>{{ $store['queuedCurrent'] ?? 0 }}</strong></div>
-                            <div><span>Fallos</span><strong>{{ $store['failedWithoutRetryCurrent'] ?? 0 }}</strong></div>
-                            <div><span>Impresoras</span><strong>{{ $store['connectedPrinters'] ?? 0 }}</strong></div>
-                            <div><span>Sin asignar</span><strong>{{ $store['unassignedQueueCurrent'] ?? 0 }}</strong></div>
-                        </div>
-                        <div class="dbx-printers">
-                            <div class="dbx-printers-head">
-                                <span>Impresora</span>
-                                <span>Estado</span>
-                                <span>Cola</span>
+                        <div class="dbx-diagnostic-body">
+                            <div class="dbx-diagnostic-action">
+                                <span>Causa principal</span>
+                                <strong>{!! $reasonShort !!}</strong>
+                                <small>{!! $actionText !!}</small>
                             </div>
+                            <div class="dbx-mini-kpis dbx-diagnostic-kpis">
+                                <div><span>Cola actual</span><strong>{{ $queuedCurrent }}</strong></div>
+                                <div><span>Sin reenviar</span><strong>{{ $failedNoRetry }}</strong></div>
+                                <div><span>Sin asignar</span><strong>{{ $unassigned }}</strong></div>
+                                <div>
+                                    <span>{{ $printerTotal > 0 ? 'Impresoras OK' : 'Conectadas' }}</span>
+                                    <strong>{{ $printerTotal > 0 ? ($connectedPrinters . ' / ' . $printerTotal) : $connectedPrinters }}</strong>
+                                </div>
+                            </div>
+                            <div class="dbx-period-strip">
+                                <span>Recibidos <strong>{{ $store['received'] ?? 0 }}</strong></span>
+                                <span>Impresos <strong>{{ $store['printed'] ?? 0 }}</strong></span>
+                                <span>Fallidos <strong>{{ $store['failed'] ?? 0 }}</strong></span>
+                            </div>
+                        </div>
+                        <div class="dbx-printers dbx-diagnostic-printers {{ $healthClass === 'healthy' ? 'is-compact' : '' }}">
                             @if(count($printerRows) === 0)
-                                <div class="dbx-printer-row"><span class="dbx-subtle">Sin impresoras activas en esta tienda</span><span></span><span></span></div>
+                                <div class="dbx-printer-summary dbx-subtle">Sin impresoras activas en esta tienda</div>
                             @else
-                                @foreach(array_slice($printerRows, 0, 6) as $printer)
-                                    <div class="dbx-printer-row">
-                                        <span title="{{ $printer['spoolQueue'] ?? '-' }}">{{ $printer['printerName'] ?? 'Impresora' }}</span>
-                                        @php
-                                            $connOk = $printer['lastConnectionOk'] ?? null;
-                                            $connError = strtoupper((string)($printer['lastConnectionError'] ?? ''));
-                                            $connTransport = (string)($printer['lastConnectionTransport'] ?? '');
-                                            $connCheckAt = (string)($printer['lastConnectionCheckAtUtc'] ?? '');
-                                            $connStreak = (int)($printer['connectionFailuresStreak'] ?? 0);
-                                            $connClass = $connOk === true ? 'ok' : 'off';
-                                            if ($connOk === true) {
-                                                $connText = 'OK';
-                                            } elseif ($connError === 'HOST_NOT_CONFIGURED' || $connCheckAt === '') {
-                                                $connText = 'Igual';
-                                            } else {
-                                                $connText = 'Sin conexion';
-                                            }
-                                        @endphp
-                                        <span class="dbx-printer-state {{ $connClass }}" title="&Uacute;ltimo chequeo: {{ $connCheckAt !== '' ? $connCheckAt : 'N/D' }}">
-                                            {{ $connText }}
-                                        </span>
-                                        <span>{{ $printer['queueCurrent'] ?? 0 }}</span>
+                                @if($healthClass === 'healthy')
+                                    @php
+                                        $printer = $visiblePrinterRows[0] ?? [];
+                                        $connOk = $printer['lastConnectionOk'] ?? null;
+                                        $connError = strtoupper((string)($printer['lastConnectionError'] ?? ''));
+                                        $connCheckAt = (string)($printer['lastConnectionCheckAtUtc'] ?? '');
+                                        $connQueue = (int)($printer['queueCurrent'] ?? 0);
+                                        $connText = $connOk === true
+                                            ? 'OK'
+                                            : ($connError === 'HOST_NOT_CONFIGURED'
+                                                ? 'Sin host'
+                                                : ($connCheckAt === '' ? 'No comprobada' : 'Sin conexi&oacute;n'));
+                                        $connTitle = trim('Error: ' . (string)($printer['lastConnectionError'] ?? '-') . ' | Chequeo: ' . ($connCheckAt !== '' ? $connCheckAt : 'N/D') . ' | Transporte: ' . (string)($printer['lastConnectionTransport'] ?? '-'));
+                                    @endphp
+                                    <div class="dbx-printer-summary" title="{{ $connTitle }}">
+                                        {{ $printer['printerName'] ?? 'Impresora' }} &middot; {!! $connText !!} &middot; cola {{ $connQueue }}
                                     </div>
-                                @endforeach
+                                @else
+                                    <div class="dbx-printers-head dbx-diagnostic-printers-head">
+                                        <span>Impresora</span>
+                                        <span>Estado</span>
+                                        <span>Cola</span>
+                                    </div>
+                                    @foreach($visiblePrinterRows as $printer)
+                                        <div class="dbx-printer-row dbx-diagnostic-printer-row">
+                                            <span title="{{ $printer['spoolQueue'] ?? '-' }}">{{ $printer['printerName'] ?? 'Impresora' }}</span>
+                                            @php
+                                                $connOk = $printer['lastConnectionOk'] ?? null;
+                                                $connError = strtoupper((string)($printer['lastConnectionError'] ?? ''));
+                                                $connTransport = (string)($printer['lastConnectionTransport'] ?? '');
+                                                $connCheckAt = (string)($printer['lastConnectionCheckAtUtc'] ?? '');
+                                                $connStreak = (int)($printer['connectionFailuresStreak'] ?? 0);
+                                                $connClass = $connOk === true ? 'ok' : 'off';
+                                                if ($connOk === true) {
+                                                    $connText = 'OK';
+                                                } elseif ($connError === 'HOST_NOT_CONFIGURED') {
+                                                    $connText = 'Sin host';
+                                                } elseif ($connCheckAt === '') {
+                                                    $connText = 'No comprobada';
+                                                } else {
+                                                    $connText = 'Sin conexi&oacute;n';
+                                                }
+                                                $connTitle = 'Error: ' . ((string)($printer['lastConnectionError'] ?? '-') ?: '-') . ' | Ultimo chequeo: ' . ($connCheckAt !== '' ? $connCheckAt : 'N/D') . ' | Transporte: ' . ($connTransport !== '' ? $connTransport : '-') . ' | Racha: ' . $connStreak;
+                                            @endphp
+                                            <span class="dbx-printer-state {{ $connClass }}" title="{{ $connTitle }}">
+                                                {!! $connText !!}
+                                            </span>
+                                            <span>{{ $printer['queueCurrent'] ?? 0 }}</span>
+                                        </div>
+                                    @endforeach
+                                    @if($hiddenPrinterCount > 0)
+                                        <div class="dbx-printer-more">+{{ $hiddenPrinterCount }} m&aacute;s</div>
+                                    @endif
+                                @endif
                             @endif
+                        </div>
+                        <div class="dbx-diagnostic-actions">
+                            <a href="{{ $queueUrl }}" class="btn {{ $actionTarget === 'queue' ? 'btn-primary' : 'btn-ghost' }}">Ver cola</a>
+                            <a href="{{ $printersUrl }}" class="btn {{ $actionTarget === 'printers' ? 'btn-primary' : 'btn-ghost' }}">Ver impresoras</a>
                         </div>
                     </article>
                 @endforeach
