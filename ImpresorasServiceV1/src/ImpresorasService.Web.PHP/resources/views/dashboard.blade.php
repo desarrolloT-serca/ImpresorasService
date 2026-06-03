@@ -203,28 +203,52 @@
                         <h2 class="dbx-title dbx-title-center">Estado de las tiendas</h2>
                     </div>
                     <div class="dbx-store-health-panel">
-                        <div class="dbx-store-health-main">
-                            <span class="dbx-store-health-label">Tiendas saludables</span>
-                            <strong>{{ $healthyShare }}%</strong>
-                            <span>{{ $healthyCount }} de {{ $storesTotal }} tiendas</span>
+                        <div
+                            class="dbx-health-ring"
+                            style="--healthy-end: {{ $healthyEnd }}%; --warning-end: {{ $warningEnd }}%;"
+                            aria-label="Tiendas saludables: {{ $healthyShare }}%"
+                        >
+                            <div class="dbx-health-ring-core">
+                                <strong>{{ $healthyShare }}%</strong>
+                                <span>
+                                    @if($criticalCount > 0)
+                                        Cr&iacute;tico
+                                    @elseif($warningCount > 0)
+                                        Warning
+                                    @else
+                                        OK
+                                    @endif
+                                </span>
+                            </div>
                         </div>
-                        <div class="dbx-health-segmented" aria-label="Distribuci&oacute;n del estado de las tiendas">
-                            <span class="dbx-health-segment success" style="width: {{ $healthyShare }}%" title="Saludables: {{ $healthyCount }} ({{ $healthyShare }}%)"></span>
-                            <span class="dbx-health-segment warning" style="width: {{ $warningShare }}%" title="Warning: {{ $warningCount }} ({{ $warningShare }}%)"></span>
-                            <span class="dbx-health-segment danger" style="width: {{ $criticalShare }}%" title="Cr&iacute;ticas: {{ $criticalCount }} ({{ $criticalShare }}%)"></span>
+                        <div class="dbx-health-ring-copy">
+                            <strong>{{ $healthyCount }} de {{ $storesTotal }} tiendas saludables</strong>
+                            <span>
+                                @if($criticalCount > 0)
+                                    {{ $criticalCount }} tienda(s) en estado cr&iacute;tico
+                                @else
+                                    Sin alertas cr&iacute;ticas activas
+                                @endif
+                            </span>
+                            @if($warningCount > 0 && $criticalCount === 0)
+                                <span>{{ $warningCount }} tienda(s) requieren seguimiento</span>
+                            @endif
                         </div>
-                        <div class="dbx-health-mini-grid">
-                            <div class="dbx-health-mini success">
+                        <div class="dbx-health-legend" aria-label="Resumen de estado por tiendas">
+                            <div class="dbx-health-legend-row">
+                                <span class="dbx-health-dot success"></span>
                                 <span>Saludables</span>
                                 <strong>{{ $healthyCount }}</strong>
                                 <small>{{ $healthyShare }}%</small>
                             </div>
-                            <div class="dbx-health-mini warning">
+                            <div class="dbx-health-legend-row">
+                                <span class="dbx-health-dot warning"></span>
                                 <span>Warning</span>
                                 <strong>{{ $warningCount }}</strong>
                                 <small>{{ $warningShare }}%</small>
                             </div>
-                            <div class="dbx-health-mini danger">
+                            <div class="dbx-health-legend-row">
+                                <span class="dbx-health-dot danger"></span>
                                 <span>Cr&iacute;ticas</span>
                                 <strong>{{ $criticalCount }}</strong>
                                 <small>{{ $criticalShare }}%</small>

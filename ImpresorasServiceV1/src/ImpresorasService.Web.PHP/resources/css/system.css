@@ -1002,22 +1002,55 @@ html.dark .btn-warning {
 
 .dbx-store-health-panel {
     display: grid;
-    gap: 14px;
+    justify-items: center;
+    gap: 12px;
     margin-top: 10px;
 }
 
-.dbx-store-health-main {
+.dbx-health-ring {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 152px;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background:
+        conic-gradient(
+            var(--ui-healthy) 0 var(--healthy-end),
+            var(--ui-warning) var(--healthy-end) var(--warning-end),
+            var(--ui-danger) var(--warning-end) 100%
+        );
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ui-border) 64%, transparent);
+}
+
+.dbx-health-ring::before {
+    content: "";
+    position: absolute;
+    inset: 12px;
+    border-radius: 50%;
+    background: var(--ui-surface);
+    box-shadow:
+        inset 0 0 0 1px var(--ui-border),
+        0 8px 18px color-mix(in srgb, var(--ui-primary) 10%, transparent);
+}
+
+.dbx-health-ring-core {
+    position: relative;
+    z-index: 1;
     display: grid;
     justify-items: center;
-    gap: 3px;
-    border: 1px solid var(--ui-border);
-    border-radius: var(--ui-radius-sm);
-    background: color-mix(in srgb, var(--ui-surface-soft) 70%, var(--ui-surface));
-    padding: 16px 12px;
+    gap: 2px;
     text-align: center;
 }
 
-.dbx-store-health-label {
+.dbx-health-ring-core strong {
+    color: var(--ui-text);
+    font-size: 1.75rem;
+    font-weight: 900;
+    line-height: 1;
+}
+
+.dbx-health-ring-core span {
     color: var(--ui-text-muted);
     font-size: 0.72rem;
     font-weight: 850;
@@ -1025,74 +1058,67 @@ html.dark .btn-warning {
     text-transform: uppercase;
 }
 
-.dbx-store-health-main strong {
-    color: var(--ui-text);
-    font-size: clamp(2rem, 4vw, 3rem);
-    line-height: 1;
+.dbx-health-ring-copy {
+    display: grid;
+    justify-items: center;
+    gap: 3px;
+    max-width: 22rem;
+    text-align: center;
 }
 
-.dbx-store-health-main span:last-child {
+.dbx-health-ring-copy strong {
+    color: var(--ui-text);
+    font-size: 0.86rem;
+    line-height: 1.25;
+}
+
+.dbx-health-ring-copy span {
     color: var(--ui-text-muted);
     font-size: 0.78rem;
     font-weight: 700;
+    line-height: 1.3;
 }
 
-.dbx-health-segmented {
-    display: flex;
-    width: 100%;
-    height: 12px;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--ui-border) 58%, var(--ui-surface));
-    overflow: hidden;
+.dbx-health-legend {
+    display: grid;
+    gap: 7px;
+    width: min(100%, 22rem);
+    margin-top: 2px;
 }
 
-.dbx-health-segment {
-    min-width: 0;
+.dbx-health-legend-row {
+    display: grid;
+    grid-template-columns: 10px minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 8px;
+    min-height: 26px;
+    border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 70%, transparent);
 }
 
-.dbx-health-segment.success {
+.dbx-health-legend-row:last-child {
+    border-bottom: 0;
+}
+
+.dbx-health-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.dbx-health-dot.success {
     background: var(--ui-healthy);
 }
 
-.dbx-health-segment.warning {
+.dbx-health-dot.warning {
     background: var(--ui-warning);
 }
 
-.dbx-health-segment.danger {
+.dbx-health-dot.danger {
     background: var(--ui-danger);
 }
 
-.dbx-health-mini-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
-}
-
-.dbx-health-mini {
-    --health-color: var(--ui-primary);
-    display: grid;
-    gap: 2px;
-    min-width: 0;
-    border: 1px solid color-mix(in srgb, var(--health-color) 32%, var(--ui-border));
-    border-radius: var(--ui-radius-sm);
-    background: color-mix(in srgb, var(--health-color) 8%, var(--ui-surface));
-    padding: 10px 8px;
-}
-
-.dbx-health-mini.success {
-    --health-color: var(--ui-healthy);
-}
-
-.dbx-health-mini.warning {
-    --health-color: var(--ui-warning);
-}
-
-.dbx-health-mini.danger {
-    --health-color: var(--ui-danger);
-}
-
-.dbx-health-mini span,
-.dbx-health-mini small {
+.dbx-health-legend-row span:not(.dbx-health-dot),
+.dbx-health-legend-row small {
     color: var(--ui-text-muted);
     font-size: 0.68rem;
     font-weight: 800;
@@ -1101,16 +1127,10 @@ html.dark .btn-warning {
     text-transform: uppercase;
 }
 
-.dbx-health-mini strong {
-    color: var(--health-color);
-    font-size: 1.2rem;
-    line-height: 1.1;
-}
-
-@media (max-width: 760px) {
-    .dbx-health-mini-grid {
-        grid-template-columns: 1fr;
-    }
+.dbx-health-legend-row strong {
+    color: var(--ui-text);
+    font-size: 0.9rem;
+    line-height: 1;
 }
 
 .dbx-selectable-row {
