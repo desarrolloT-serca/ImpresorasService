@@ -1476,6 +1476,103 @@ html.dark .btn-warning {
     white-space: nowrap;
 }
 
+.dbx-store-grid .dbx-risk-list-row {
+    grid-column: 1 / -1;
+}
+
+.dbx-risk-list-row {
+    --risk-row-accent: var(--ui-healthy);
+    display: grid;
+    grid-template-columns: minmax(13rem, 1.5fr) 92px minmax(8rem, 0.75fr) minmax(18rem, 1.4fr) auto;
+    align-items: center;
+    gap: 12px;
+    min-height: 48px;
+    border: 1px solid color-mix(in srgb, var(--risk-row-accent) 20%, var(--ui-border));
+    border-left: 4px solid var(--risk-row-accent);
+    border-radius: var(--ui-radius-sm);
+    background: color-mix(in srgb, var(--risk-row-accent) 4%, var(--ui-surface));
+    box-shadow: var(--ui-shadow-soft);
+    padding: 8px 10px;
+}
+
+.dbx-risk-row-healthy {
+    --risk-row-accent: var(--ui-healthy);
+}
+
+.dbx-risk-row-warning {
+    --risk-row-accent: var(--ui-warning);
+}
+
+.dbx-risk-row-critical {
+    --risk-row-accent: var(--ui-danger);
+}
+
+.dbx-risk-store-name,
+.dbx-risk-row-reason,
+.dbx-risk-row-metrics {
+    min-width: 0;
+}
+
+.dbx-risk-store-name {
+    color: var(--ui-text);
+    font-size: 0.9rem;
+    font-weight: 850;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dbx-risk-row-reason {
+    color: var(--ui-text-muted);
+    font-size: 0.78rem;
+    font-weight: 800;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dbx-risk-row-metrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px 10px;
+    color: var(--ui-text-muted);
+    font-size: 0.76rem;
+    font-weight: 760;
+}
+
+.dbx-risk-row-metrics span + span::before {
+    content: "·";
+    margin-right: 10px;
+    color: color-mix(in srgb, var(--ui-text-muted) 55%, transparent);
+}
+
+.dbx-risk-row-metrics strong {
+    color: var(--ui-primary);
+    font-weight: 900;
+}
+
+.dbx-risk-row-metrics .is-warning {
+    color: var(--ui-warning);
+}
+
+.dbx-risk-row-metrics .is-danger {
+    color: var(--ui-danger);
+}
+
+.dbx-risk-detail-link {
+    color: var(--ui-primary);
+    font-size: 0.76rem;
+    font-weight: 850;
+    text-align: right;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.dbx-risk-detail-link:hover {
+    color: var(--ui-primary-strong);
+    text-decoration: underline;
+}
+
 .dbx-store-summary-groups {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1485,12 +1582,12 @@ html.dark .btn-warning {
 .dbx-store-summary-group {
     display: grid;
     align-content: start;
-    gap: 7px;
+    gap: 8px;
     min-width: 0;
     border: 1px solid color-mix(in srgb, var(--ui-primary) 16%, var(--ui-border));
     border-radius: var(--ui-radius-sm);
     background: color-mix(in srgb, var(--ui-primary-soft) 24%, var(--ui-surface));
-    padding: 12px;
+    padding: 14px;
 }
 
 .dbx-store-summary-title {
@@ -1505,7 +1602,7 @@ html.dark .btn-warning {
 .dbx-store-summary-group p {
     margin: 0;
     color: var(--ui-text-muted);
-    font-size: 0.9rem;
+    font-size: 0.86rem;
     font-weight: 750;
     line-height: 1.35;
 }
@@ -1514,6 +1611,25 @@ html.dark .btn-warning {
     color: var(--ui-text);
     font-size: 1.05rem;
     font-weight: 900;
+}
+
+.dbx-store-summary-main {
+    color: var(--ui-text);
+    font-size: clamp(1.2rem, 2.4vw, 1.55rem);
+    font-weight: 900;
+    line-height: 1.1;
+}
+
+.dbx-store-summary-main.healthy {
+    color: var(--ui-healthy);
+}
+
+.dbx-store-summary-main.warning {
+    color: var(--ui-warning);
+}
+
+.dbx-store-summary-main.critical {
+    color: var(--ui-danger);
 }
 
 .dbx-store-summary-group .is-warning {
@@ -1557,6 +1673,36 @@ html.dark .btn-warning {
 @media (max-width: 980px) {
     .dbx-store-summary-groups {
         grid-template-columns: 1fr;
+    }
+
+    .dbx-risk-list-row {
+        grid-template-columns: minmax(0, 1fr) 88px;
+        grid-template-areas:
+            "name state"
+            "reason action"
+            "metrics metrics";
+    }
+
+    .dbx-risk-store-name {
+        grid-area: name;
+    }
+
+    .dbx-risk-list-row .dbx-pill {
+        grid-area: state;
+        justify-self: end;
+    }
+
+    .dbx-risk-row-reason {
+        grid-area: reason;
+    }
+
+    .dbx-risk-row-metrics {
+        grid-area: metrics;
+    }
+
+    .dbx-risk-detail-link {
+        grid-area: action;
+        justify-self: end;
     }
 }
 

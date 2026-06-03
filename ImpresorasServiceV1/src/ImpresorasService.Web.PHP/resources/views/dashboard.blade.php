@@ -325,71 +325,34 @@
                             $riskQueue = (int)($store['queuedCurrent'] ?? 0);
                             $riskFailedNoRetry = (int)($store['failedWithoutRetryCurrent'] ?? 0);
                             $riskUnassigned = (int)($store['unassignedQueueCurrent'] ?? 0);
+                            $riskReason = (string)($store['healthReason'] ?? 'Operacion normal');
+                            $riskReasonSource = strtolower(strip_tags(html_entity_decode($riskReason)));
+                            if ($healthClass === 'healthy') {
+                                $riskReasonShort = 'Operaci&oacute;n normal';
+                            } elseif (count($printerRows) === 0 || str_contains($riskReasonSource, 'sin impresora')) {
+                                $riskReasonShort = 'Sin impresoras';
+                            } elseif (str_contains($riskReasonSource, 'host') || str_contains($riskReasonSource, 'unc') || str_contains($riskReasonSource, 'conect')) {
+                                $riskReasonShort = 'Conectividad';
+                            } elseif ($riskFailedNoRetry > 0 || str_contains($riskReasonSource, 'sin reenviar') || str_contains($riskReasonSource, 'fallo')) {
+                                $riskReasonShort = 'Sin reenviar';
+                            } elseif ($riskUnassigned > 0 || str_contains($riskReasonSource, 'sin asignar')) {
+                                $riskReasonShort = 'Sin asignar';
+                            } elseif ($riskQueue > 0 || str_contains($riskReasonSource, 'cola')) {
+                                $riskReasonShort = 'Cola acumulada';
+                            } else {
+                                $riskReasonShort = 'Operaci&oacute;n normal';
+                            }
                         @endphp
-                        <article class="dbx-store dbx-risk-card dbx-risk-{{ $healthClass }}">
-                            <div class="dbx-store-head dbx-risk-head">
-                                <div>
-                                    <h3 class="dbx-store-title">{{ $storeTitle }}</h3>
-                                    <p class="dbx-store-reason">{{ $store['healthReason'] ?? '-' }}</p>
-                                </div>
-                                <span class="dbx-pill {{ $healthClass }}">{{ strtoupper($status) }}</span>
+                        <article class="dbx-risk-list-row dbx-risk-row-{{ $healthClass }}">
+                            <div class="dbx-risk-store-name">{{ $storeTitle }}</div>
+                            <span class="dbx-pill {{ $healthClass }}">{{ strtoupper($status) }}</span>
+                            <span class="dbx-risk-row-reason" title="{{ $riskReason }}">{!! $riskReasonShort !!}</span>
+                            <div class="dbx-risk-row-metrics">
+                                <span>Cola <strong class="{{ $riskQueue > 0 ? 'is-warning' : '' }}">{{ $riskQueue }}</strong></span>
+                                <span>Sin reenviar <strong class="{{ $riskFailedNoRetry > 0 ? 'is-danger' : '' }}">{{ $riskFailedNoRetry }}</strong></span>
+                                <span>Sin asignar <strong class="{{ $riskUnassigned > 0 ? 'is-warning' : '' }}">{{ $riskUnassigned }}</strong></span>
                             </div>
-                            <div class="dbx-risk-kpi-strip" aria-label="Indicadores de riesgo de tienda">
-                                <div class="dbx-risk-kpi {{ $riskQueue > 0 ? 'is-warning' : 'is-neutral' }}">
-                                    <span>Cola</span>
-                                    <strong>{{ $riskQueue }}</strong>
-                                </div>
-                                <div class="dbx-risk-kpi {{ $riskFailedNoRetry > 0 ? 'is-danger' : 'is-neutral' }}">
-                                    <span>Sin reenviar</span>
-                                    <strong>{{ $riskFailedNoRetry }}</strong>
-                                </div>
-                                <div class="dbx-risk-kpi {{ $riskUnassigned > 0 ? 'is-warning' : 'is-neutral' }}">
-                                    <span>Sin asignar</span>
-                                    <strong>{{ $riskUnassigned }}</strong>
-                                </div>
-                            </div>
-                            <div class="dbx-printers dbx-risk-printers">
-                                @if(count($printerRows) === 0)
-                                    <div class="dbx-printer-summary dbx-subtle">Sin impresoras activas en esta tienda</div>
-                                @else
-                                    @foreach(array_slice($printerRows, 0, 3) as $printer)
-                                        <div class="dbx-printer-row dbx-risk-printer-row">
-                                            <span title="{{ $printer['spoolQueue'] ?? '-' }}">{{ $printer['printerName'] ?? 'Impresora' }}</span>
-                                            @php
-                                                $connOk = $printer['lastConnectionOk'] ?? null;
-                                                $connError = strtoupper((string)($printer['lastConnectionError'] ?? ''));
-                                                $connTransport = (string)($printer['lastConnectionTransport'] ?? '');
-                                                $connCheckAt = (string)($printer['lastConnectionCheckAtUtc'] ?? '');
-                                                $connStreak = (int)($printer['connectionFailuresStreak'] ?? 0);
-                                                $printerQueue = (int)($printer['queueCurrent'] ?? 0);
-                                                $showPrinterQueue = count($printerRows) > 1 && $printerQueue > 0;
-                                                $connClass = $connOk === true ? 'ok' : 'off';
-                                                if ($connOk === true) {
-                                                    $connText = 'OK';
-                                                } elseif ($connError === 'HOST_NOT_CONFIGURED') {
-                                                    $connText = 'Sin host';
-                                                } elseif ($connCheckAt === '') {
-                                                    $connText = 'No comprobada';
-                                                } else {
-                                                    $connText = 'Sin conexi&oacute;n';
-                                                }
-                                                $connTitle = 'Error: ' . ((string)($printer['lastConnectionError'] ?? '-') ?: '-') . ' | Ultimo chequeo: ' . ($connCheckAt !== '' ? $connCheckAt : 'N/D') . ' | Transporte: ' . ($connTransport !== '' ? $connTransport : '-') . ' | Racha: ' . $connStreak;
-                                            @endphp
-                                            <span class="dbx-printer-state {{ $connClass }}" title="{{ $connTitle }}">
-                                                {!! $connText !!}
-                                            </span>
-                                            <span class="dbx-printer-queue-slot">
-                                                @if($showPrinterQueue)
-                                                    <span class="dbx-printer-queue-chip">Cola {{ $printerQueue }}</span>
-                                                @endif
-                                            </span>
-                                        </div>
-                                    @endforeach
-                                    @if(count($printerRows) > 3)
-                                        <div class="dbx-printer-more">+{{ count($printerRows) - 3 }} m&aacute;s</div>
-                                    @endif
-                                @endif
-                            </div>
+                            <a href="#detalle-tienda-{{ $storeIdText }}" class="dbx-risk-detail-link">Ver detalle</a>
                         </article>
                     @endforeach
                 </div>
@@ -408,17 +371,18 @@
             <div class="dbx-store-summary-groups mt-4">
                 <div class="dbx-store-summary-group">
                     <span class="dbx-store-summary-title">Cobertura</span>
-                    <p><strong>{{ count($storesList) }}</strong> tiendas <span>&middot;</span> <strong>{{ $printersTotalSummary }}</strong> impresoras <span>&middot;</span> <strong>{{ $usersTotalSummary }}</strong> usuarios</p>
+                    <strong class="dbx-store-summary-main">{{ count($storesList) }} tiendas</strong>
+                    <p><strong>{{ $printersTotalSummary }}</strong> impresoras <span>&middot;</span> <strong>{{ $usersTotalSummary }}</strong> usuarios</p>
                 </div>
                 <div class="dbx-store-summary-group">
                     <span class="dbx-store-summary-title">Salud</span>
+                    <strong class="dbx-store-summary-main {{ $generalHealthClass }}">{!! $generalHealthLabel !!}</strong>
                     <p><strong class="{{ $criticalCount > 0 ? 'is-danger' : '' }}">{{ $criticalCount }}</strong> cr&iacute;ticas <span>&middot;</span> <strong class="{{ $warningCount > 0 ? 'is-warning' : '' }}">{{ $warningCount }}</strong> warning</p>
-                    <strong class="dbx-store-summary-state {{ $generalHealthClass }}">{!! $generalHealthLabel !!}</strong>
                 </div>
                 <div class="dbx-store-summary-group">
                     <span class="dbx-store-summary-title">Carga operativa</span>
-                    <p>Cola <strong class="{{ $totalQueueAllStores > 0 ? 'is-warning' : '' }}">{{ $totalQueueAllStores }}</strong> <span>&middot;</span> Sin reenviar <strong class="{{ $totalFailedNoRetryAllStores > 0 ? 'is-danger' : '' }}">{{ $totalFailedNoRetryAllStores }}</strong></p>
-                    <strong class="dbx-store-summary-state neutral">&Eacute;xito {{ $successRate !== null ? $successRate . '%' : 'N/D' }}</strong>
+                    <strong class="dbx-store-summary-main {{ $totalQueueAllStores > 0 ? 'warning' : '' }}">Cola {{ $totalQueueAllStores }}</strong>
+                    <p>Sin reenviar <strong class="{{ $totalFailedNoRetryAllStores > 0 ? 'is-danger' : '' }}">{{ $totalFailedNoRetryAllStores }}</strong> <span>&middot;</span> &Eacute;xito <strong>{{ $successRate !== null ? $successRate . '%' : 'N/D' }}</strong></p>
                 </div>
             </div>
         </div>
@@ -625,7 +589,7 @@
                         $visiblePrinterRows = array_slice($healthClass === 'healthy' ? $printerRows : $sortedPrinterRows, 0, 3);
                         $hiddenPrinterCount = max(0, count($sortedPrinterRows) - count($visiblePrinterRows));
                     @endphp
-                    <article class="dbx-store dbx-diagnostic-card dbx-diagnostic-{{ $healthClass }}">
+                    <article id="detalle-tienda-{{ $storeIdText }}" class="dbx-store dbx-diagnostic-card dbx-diagnostic-{{ $healthClass }}">
                         <div class="dbx-store-head dbx-diagnostic-head">
                             <div>
                                 <h3 class="dbx-store-title">{{ $storeTitle }}</h3>
