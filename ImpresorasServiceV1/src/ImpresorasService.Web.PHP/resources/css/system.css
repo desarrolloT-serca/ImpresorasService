@@ -1182,71 +1182,60 @@ html.dark .btn-warning {
 
 .dbx-diagnostic-body {
     display: grid;
-    gap: 10px;
-    padding: 10px 12px;
+    gap: 7px;
+    padding: 8px 12px;
     border-bottom: 1px solid var(--ui-border);
     background: color-mix(in srgb, var(--ui-surface-soft) 62%, var(--ui-surface));
 }
 
-.dbx-diagnostic-action {
+.dbx-diagnostic-kpi-strip {
     display: grid;
-    gap: 2px;
-    border-left: 3px solid var(--diagnostic-accent);
-    padding-left: 9px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1px;
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius-sm);
+    background: var(--ui-border);
+    overflow: hidden;
 }
 
-.dbx-diagnostic-action span,
-.dbx-period-strip span {
+.dbx-diagnostic-kpi-strip > div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 6px;
+    min-width: 0;
+    background: var(--ui-surface);
+    padding: 7px 8px;
+}
+
+.dbx-diagnostic-kpi-strip span {
+    min-width: 0;
     color: var(--ui-text-muted);
     font-size: 0.66rem;
     font-weight: 850;
-    letter-spacing: 0.04em;
-    line-height: 1.15;
-    text-transform: uppercase;
-}
-
-.dbx-diagnostic-action strong {
-    color: var(--ui-text);
-    font-size: 0.9rem;
-    line-height: 1.2;
-}
-
-.dbx-diagnostic-action small {
-    color: var(--ui-text-muted);
-    font-size: 0.74rem;
-    font-weight: 700;
-    line-height: 1.25;
-}
-
-.dbx-diagnostic-kpis {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 6px;
-    padding: 0;
-    border-bottom: 0;
-    background: transparent;
-}
-
-.dbx-diagnostic-kpis > div {
-    min-width: 0;
-    padding: 7px 6px;
-}
-
-.dbx-diagnostic-kpis span {
+    letter-spacing: 0.035em;
+    line-height: 1.1;
     overflow: hidden;
     text-overflow: ellipsis;
+    text-transform: uppercase;
     white-space: nowrap;
 }
 
-.dbx-diagnostic-kpis strong {
-    font-size: 0.92rem;
+.dbx-diagnostic-kpi-strip strong {
+    color: var(--ui-text);
+    font-size: 1rem;
+    font-weight: 900;
+    line-height: 1;
 }
 
 .dbx-period-strip {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 12px;
-    border-top: 1px solid color-mix(in srgb, var(--ui-border) 70%, transparent);
-    padding-top: 8px;
+    color: var(--ui-text-muted);
+    font-size: 0.72rem;
+    font-weight: 750;
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .dbx-period-strip strong {
@@ -1257,7 +1246,7 @@ html.dark .btn-warning {
 .dbx-diagnostic-printers {
     display: grid;
     gap: 0;
-    padding: 10px 12px 0;
+    padding: 8px 12px 0;
 }
 
 .dbx-printer-summary {
@@ -1275,7 +1264,6 @@ html.dark .btn-warning {
     white-space: nowrap;
 }
 
-.dbx-diagnostic-printers-head,
 .dbx-diagnostic-printer-row {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 104px 42px;
@@ -1283,25 +1271,14 @@ html.dark .btn-warning {
     gap: 8px;
 }
 
-.dbx-diagnostic-printers-head {
-    min-height: 26px;
-    border-bottom: 1px solid var(--ui-border);
-    background: transparent !important;
-    color: var(--ui-text-muted) !important;
-    font-size: 0.66rem;
-    font-weight: 850;
-    letter-spacing: 0.04em;
-    padding: 0 0 6px;
-}
-
 .dbx-diagnostic-printer-row {
-    min-height: 34px;
+    min-height: 31px;
     border-top: 0;
     border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 72%, transparent);
     background: transparent !important;
     color: var(--ui-text);
     font-size: 0.76rem;
-    padding: 6px 0;
+    padding: 5px 0;
 }
 
 .dbx-diagnostic-printer-row span:first-child {
@@ -1337,12 +1314,6 @@ html.dark .btn-warning {
     padding: 5px 9px;
 }
 
-.dbx-store-grid.cols-4 .dbx-diagnostic-kpis,
-.dbx-store-grid.cols-3 .dbx-diagnostic-kpis {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.dbx-store-grid.cols-4 .dbx-diagnostic-printers-head,
 .dbx-store-grid.cols-4 .dbx-diagnostic-printer-row {
     grid-template-columns: minmax(0, 1fr) 88px 34px;
 }
@@ -1352,8 +1323,8 @@ html.dark .dbx-printer-summary {
 }
 
 @media (max-width: 760px) {
-    .dbx-diagnostic-kpis {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+    .dbx-diagnostic-kpi-strip {
+        grid-template-columns: 1fr;
     }
 
     .dbx-diagnostic-head,
