@@ -35,7 +35,9 @@ public class StoresController : ControllerBase
             {
                 x.StoreId,
                 x.Name,
-                x.IsActive
+                x.IsActive,
+                UsersCount = _dbContext.Users.Count(u => u.StoreId == x.StoreId),
+                PrintersCount = _dbContext.Printers.Count(p => p.StoreId == x.StoreId)
             })
             .ToListAsync(cancellationToken);
 

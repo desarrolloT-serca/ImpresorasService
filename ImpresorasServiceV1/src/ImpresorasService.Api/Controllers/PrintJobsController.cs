@@ -56,26 +56,33 @@ public class PrintJobsController : ControllerBase
         var safeLimit = Math.Clamp(limit ?? 100, 1, 500);
         var safePage = Math.Max(page ?? 1, 1);
 
+        var projectedQuery =
+            from job in query
+            join printer in _dbContext.Printers.AsNoTracking()
+                on job.PrinterId equals (int?)printer.PrinterId into printerJoin
+            from printer in printerJoin.DefaultIfEmpty()
+            orderby job.CreatedAtUtc descending
+            select new
+            {
+                job.JobId,
+                job.ExternalJobId,
+                job.StoreId,
+                job.PrinterId,
+                PrinterName = printer == null ? null : printer.PrinterName,
+                job.DocumentType,
+                job.Status,
+                job.AttemptCount,
+                job.LastErrorCode,
+                job.CreatedAtUtc,
+                job.UpdatedAtUtc
+            };
+
         if (includeTotal == true)
         {
             var total = await query.CountAsync(cancellationToken);
-            var pagedResults = await query
-                .OrderByDescending(x => x.CreatedAtUtc)
+            var pagedResults = await projectedQuery
                 .Skip((safePage - 1) * safeLimit)
                 .Take(safeLimit)
-                .Select(x => new
-                {
-                    x.JobId,
-                    x.ExternalJobId,
-                    x.StoreId,
-                    x.PrinterId,
-                    x.DocumentType,
-                    x.Status,
-                    x.AttemptCount,
-                    x.LastErrorCode,
-                    x.CreatedAtUtc,
-                    x.UpdatedAtUtc
-                })
                 .ToListAsync(cancellationToken);
 
             return Ok(new
@@ -87,22 +94,8 @@ public class PrintJobsController : ControllerBase
             });
         }
 
-        var results = (await query
-            .OrderByDescending(x => x.CreatedAtUtc)
+        var results = (await projectedQuery
             .Take(safeLimit)
-            .Select(x => new
-            {
-                x.JobId,
-                x.ExternalJobId,
-                x.StoreId,
-                x.PrinterId,
-                x.DocumentType,
-                x.Status,
-                x.AttemptCount,
-                x.LastErrorCode,
-                x.CreatedAtUtc,
-                x.UpdatedAtUtc
-            })
             .ToListAsync(cancellationToken))
             .Cast<object>()
             .ToList();
