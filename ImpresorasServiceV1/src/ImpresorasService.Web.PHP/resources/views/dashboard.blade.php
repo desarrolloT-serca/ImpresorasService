@@ -609,7 +609,6 @@
 
                         $queueUrl = url('/cola') . ($storeId !== null ? ('?storeId=' . urlencode((string)$storeId)) : '');
                         $printersUrl = url('/impresoras') . ($storeId !== null ? ('?storeId=' . urlencode((string)$storeId)) : '');
-                        $hasPendingWork = $queuedCurrent > 0 || $failedNoRetry > 0 || $unassigned > 0;
                         $sortedPrinterRows = $printerRows;
                         usort($sortedPrinterRows, static function ($left, $right) {
                             $leftIssue = (($left['lastConnectionOk'] ?? null) !== true ? 100 : 0) + ((int)($left['queueCurrent'] ?? 0) > 0 ? 10 : 0) + (int)($left['queueCurrent'] ?? 0);
@@ -628,19 +627,19 @@
                             <span class="dbx-pill {{ $healthClass }}">{{ strtoupper($store['health'] ?? 'healthy') }}</span>
                         </div>
                         <div class="dbx-diagnostic-body">
-                            <div class="dbx-diagnostic-kpi-line">
-                                @if(!$hasPendingWork)
-                                    <span>Sin trabajos pendientes</span>
-                                    <span>Sin fallos sin reenviar</span>
-                                    <span>Todo asignado</span>
-                                @else
-                                    <span class="dbx-kpi-chip {{ $queuedCurrent > 0 ? 'is-warning' : 'is-neutral' }}">Cola <strong>{{ $queuedCurrent }}</strong></span>
-                                    <span class="dbx-kpi-chip {{ $failedNoRetry > 0 ? 'is-danger' : 'is-neutral' }}">Sin reenviar <strong>{{ $failedNoRetry }}</strong></span>
-                                    <span class="dbx-kpi-chip {{ $unassigned > 0 ? 'is-warning' : 'is-neutral' }}">Sin asignar <strong>{{ $unassigned }}</strong></span>
-                                @endif
-                            </div>
-                            <div class="dbx-period-strip">
-                                Periodo: <strong>{{ $store['received'] ?? 0 }}</strong> recibidos &middot; <strong>{{ $store['printed'] ?? 0 }}</strong> impresos &middot; <strong>{{ $store['failed'] ?? 0 }}</strong> fallidos
+                            <div class="dbx-diagnostic-kpi-strip" aria-label="Indicadores operativos actuales">
+                                <div class="dbx-kpi-cell {{ $queuedCurrent > 0 ? 'is-warning' : 'is-neutral' }}">
+                                    <span>Cola</span>
+                                    <strong>{{ $queuedCurrent }}</strong>
+                                </div>
+                                <div class="dbx-kpi-cell {{ $failedNoRetry > 0 ? 'is-danger' : 'is-neutral' }}">
+                                    <span>Sin reenviar</span>
+                                    <strong>{{ $failedNoRetry }}</strong>
+                                </div>
+                                <div class="dbx-kpi-cell {{ $unassigned > 0 ? 'is-warning' : 'is-neutral' }}">
+                                    <span>Sin asignar</span>
+                                    <strong>{{ $unassigned }}</strong>
+                                </div>
                             </div>
                         </div>
                         <div class="dbx-printers dbx-diagnostic-printers">

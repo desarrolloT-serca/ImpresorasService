@@ -1249,6 +1249,57 @@ html.dark .btn-warning {
     font-size: 0.75rem;
 }
 
+.dbx-diagnostic-kpi-strip {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    border: 1px solid color-mix(in srgb, var(--ui-primary) 20%, var(--ui-border));
+    border-radius: var(--ui-radius-sm);
+    background: color-mix(in srgb, var(--ui-primary-soft) 42%, var(--ui-surface));
+    overflow: hidden;
+}
+
+.dbx-kpi-cell {
+    --kpi-color: var(--ui-primary);
+    display: grid;
+    justify-items: center;
+    gap: 3px;
+    min-width: 0;
+    padding: 8px 7px;
+    text-align: center;
+}
+
+.dbx-kpi-cell + .dbx-kpi-cell {
+    border-left: 1px solid color-mix(in srgb, var(--ui-primary) 18%, var(--ui-border));
+}
+
+.dbx-kpi-cell.is-warning {
+    --kpi-color: var(--ui-warning);
+}
+
+.dbx-kpi-cell.is-danger {
+    --kpi-color: var(--ui-danger);
+}
+
+.dbx-kpi-cell span {
+    max-width: 100%;
+    color: var(--ui-text-muted);
+    font-size: 0.62rem;
+    font-weight: 850;
+    letter-spacing: 0.045em;
+    line-height: 1.05;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.dbx-kpi-cell strong {
+    color: var(--kpi-color);
+    font-size: 1.25rem;
+    font-weight: 900;
+    line-height: 1;
+}
+
 .dbx-diagnostic-printers {
     display: grid;
     gap: 0;
