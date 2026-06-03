@@ -222,16 +222,15 @@
                             </div>
                         </div>
                         <div class="dbx-health-ring-copy">
-                            <strong>{{ $healthyCount }} de {{ $storesTotal }} tiendas saludables</strong>
-                            <span>
-                                @if($criticalCount > 0)
-                                    {{ $criticalCount }} tienda(s) en estado cr&iacute;tico
-                                @else
-                                    Sin alertas cr&iacute;ticas activas
-                                @endif
-                            </span>
-                            @if($warningCount > 0 && $criticalCount === 0)
-                                <span>{{ $warningCount }} tienda(s) requieren seguimiento</span>
+                            @if($criticalCount > 0)
+                                <strong>Atenci&oacute;n prioritaria</strong>
+                                <span>Hay incidencias cr&iacute;ticas activas.</span>
+                            @elseif($warningCount > 0)
+                                <strong>Seguimiento recomendado</strong>
+                                <span>Operativa estable con avisos abiertos.</span>
+                            @else
+                                <strong>Operativa estable</strong>
+                                <span>Sin alertas cr&iacute;ticas activas.</span>
                             @endif
                         </div>
                         <div class="dbx-health-legend" aria-label="Resumen de estado por tiendas">

@@ -1011,7 +1011,7 @@ html.dark .btn-warning {
     position: relative;
     display: grid;
     place-items: center;
-    width: 152px;
+    width: 156px;
     aspect-ratio: 1;
     border-radius: 50%;
     background:
@@ -1026,7 +1026,7 @@ html.dark .btn-warning {
 .dbx-health-ring::before {
     content: "";
     position: absolute;
-    inset: 12px;
+    inset: 18px;
     border-radius: 50%;
     background: var(--ui-surface);
     box-shadow:
