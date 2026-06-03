@@ -195,10 +195,17 @@ await using (var scope = app.Services.CreateAsyncScope())
     }
     await NormalizeLegacyUserRolesAsync(dbContext);
 
-    var seedDefaultUsers = app.Configuration.GetValue<bool?>("Bootstrap:SeedDefaultUsers")
-        ?? app.Environment.IsDevelopment();
+    var seedDefaultUsers = app.Configuration.GetValue<bool>("Bootstrap:SeedDefaultUsers");
     if (seedDefaultUsers)
+    {
+        if (!app.Environment.IsDevelopment() && !app.Environment.IsEnvironment("Testing"))
+        {
+            throw new InvalidOperationException(
+                "Bootstrap:SeedDefaultUsers solo está permitido en Development o Testing.");
+        }
+
         await SeedDefaultUsersAsync(dbContext);
+    }
 }
 
 // Configure the HTTP request pipeline.

@@ -3,15 +3,47 @@
 **/obj/
 **/_build_out/
 **/.tmp-build/
+*.dll
+*.exe
+*.pdb
+*.deps.json
+*.runtimeconfig.json
+*.cache
+*.user
 
-# Local database and sqlite sidecars
-**/impresoras-local.db-shm
-**/impresoras-local.db-wal
-src/ImpresorasService.Api/impresoras-local.db
+# NuGet / MSBuild local caches
+.nuget/
+**/.nuget/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# Local databases (SQLite histórico / desarrollo)
+*.db
+*.db-shm
+*.db-wal
+impresoras-*.db
+impresoras-*.db-shm
+impresoras-*.db-wal
+
+# IDE
+.vs/
+.idea/
 
 # Logs and temp files
 *.log
 *.tmp
+
+# Laravel / PHP (frontend oficial)
+src/ImpresorasService.Web.PHP/vendor/
+src/ImpresorasService.Web.PHP/node_modules/
+src/ImpresorasService.Web.PHP/.env
+src/ImpresorasService.Web.PHP/.env.*
+!src/ImpresorasService.Web.PHP/.env.example
+src/ImpresorasService.Web.PHP/storage/logs/
+src/ImpresorasService.Web.PHP/bootstrap/cache/
+src/ImpresorasService.Web.PHP/public/build/
+src/ImpresorasService.Web.PHP/public/hot/
 
 # Local IDE settings
 .cursor/

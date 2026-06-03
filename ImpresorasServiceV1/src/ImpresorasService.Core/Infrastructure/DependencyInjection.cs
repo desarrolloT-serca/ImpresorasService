@@ -22,7 +22,6 @@ public static class DependencyInjection
         services.Configure<SourceOptions>(configuration.GetSection(SourceOptions.SectionName));
         services.Configure<IngestionOptions>(configuration.GetSection(IngestionOptions.SectionName));
         services.Configure<PrintExecutionOptions>(configuration.GetSection(PrintExecutionOptions.SectionName));
-        services.Configure<SapPostgresOptions>(configuration.GetSection(SapPostgresOptions.SectionName));
         services.Configure<SapHanaOptions>(configuration.GetSection(SapHanaOptions.SectionName));
 
         string provider = configuration.GetValue<string>("Database:Provider") ?? "Hana";
@@ -32,24 +31,19 @@ public static class DependencyInjection
 
         services.AddDbContext<ImpresorasDbContext>(options =>
         {
-            if (string.Equals(provider, "SqlServer", StringComparison.OrdinalIgnoreCase))
-            {
-                options.UseSqlServer(connectionString);
-            }
-            else if (string.Equals(provider, "Hana", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(provider, "Hana", StringComparison.OrdinalIgnoreCase))
             {
                 ConfigureHanaProvider(options, connectionString);
             }
             else
             {
-                throw new InvalidOperationException($"Proveedor de base de datos no soportado: '{provider}'. Use 'Hana' o 'SqlServer'.");
+                throw new InvalidOperationException(
+                    $"Proveedor de base de datos no soportado: '{provider}'. Use 'Hana'.");
             }
         });
 
         services.AddScoped<IPrintJobRepository, PrintJobRepository>();
-        services.AddScoped<SqlTestJobSourceAdapter>();
         services.AddScoped<SapHanaJobSourceAdapter>();
-        services.AddScoped<SapPostgresJobSourceAdapter>();
         services.AddScoped<IJobSourceAdapter, ConfigurableJobSourceAdapter>();
         services.AddScoped<IRoutingResolver, RoutingResolver>();
         services.AddScoped<IRoutingService, RoutingService>();
@@ -128,5 +122,4 @@ public static class DependencyInjection
 
         hanaUseMethod.Invoke(null, invokeArgs);
     }
-
 }

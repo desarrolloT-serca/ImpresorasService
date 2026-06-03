@@ -27,6 +27,10 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
     {
         builder.UseEnvironment("Testing");
         builder.UseSetting("TestInstanceId", Interlocked.Increment(ref _instanceId).ToString());
+        builder.UseSetting("Jwt:Secret", "integration-tests-secret-32-chars-minimum!!");
+        builder.UseSetting("ConnectionStrings:PrintQueue", "ServerNode=localhost;UID=test;PWD=test;Current Schema=TEST");
+        builder.UseSetting("Database:Provider", "Hana");
+        builder.UseSetting("Source:Mode", "SapHana");
 
         builder.ConfigureTestServices(services =>
         {
@@ -105,11 +109,11 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
     {
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
-        await db.Database.ExecuteSqlRawAsync("DELETE FROM PrintJobEvents");
-        await db.Database.ExecuteSqlRawAsync("DELETE FROM PrintJobs");
-        await db.Database.ExecuteSqlRawAsync("DELETE FROM SourcePrintJobs");
-        await db.Database.ExecuteSqlRawAsync("DELETE FROM RoutingRules");
-        await db.Database.ExecuteSqlRawAsync("DELETE FROM Printers");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM printer_print_job_event");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM printer_print_job");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM printer_source_print_job");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM printer_routing_rule");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM printer_printer");
     }
 
     /// <summary>

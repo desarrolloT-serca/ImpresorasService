@@ -1,95 +1,88 @@
 # ImpresorasServiceV1
 
-Backend de gestion de trabajos de impresion con:
-- ingesta por polling,
-- idempotencia por `SourceSystem + ExternalJobId`,
-- cola interna en BD local/remota,
-- enrutado por reglas y ejecucion con reintentos.
+Plataforma de cola de impresión centrada en **SAP HANA**: ingesta por polling con claim/ack, cola interna, enrutado y ejecución con reintentos.
 
-## Decision de arquitectura (cohesion)
+## Arquitectura (4 bloques + tests)
 
-- **UI oficial de esta fase:** `src/ImpresorasService.Web.PHP` (Laravel).
-- **Punto de entrada funcional principal:** API + Worker + UI PHP.
+| Componente | Ruta | Rol |
+|------------|------|-----|
+| Frontend oficial | `src/ImpresorasService.Web.PHP` | UI Laravel (consume la API) |
+| API | `src/ImpresorasService.Api` | REST + JWT |
+| Worker | `src/ImpresorasService.Worker` | Ingesta, impresión, watchdog, monitorización |
+| Core | `src/ImpresorasService.Core` | Dominio, aplicación e infraestructura |
+| Tests | `tests/ImpresorasService.Api.IntegrationTests` | Integración (SQLite en memoria solo en tests) |
 
-## Estructura oficial (4 bloques)
+Estado Git del frontend: ver `docs/FRONTEND-WEB-PHP-GIT.md` (gitlink/submódulo no formalizado).
 
-- `src/ImpresorasService.Web.PHP`: frontend oficial (Laravel) que consume la API.
-- `src/ImpresorasService.Api`: backend HTTP (API REST y autenticacion JWT).
-- `src/ImpresorasService.Worker`: backend de procesos (ingesta y ejecucion de impresion).
-- `src/ImpresorasService.Core`: nucleo unico con dominio + casos de uso + infraestructura tecnica.
-- `tests/ImpresorasService.Api.IntegrationTests`: pruebas de integracion.
+## Configuración mínima oficial (HANA)
 
-## Configuracion minima
+En `appsettings.json` de API y Worker (secretos por entorno / variables):
 
-En `appsettings.json` de API/Worker:
-- `Database:Provider` (`Sqlite` recomendado en local, `Hana` en entornos con provider SAP disponible)
-- `ConnectionStrings:PrintQueue`
-- `Ingestion:PollIntervalSeconds`, `Ingestion:BatchSize`
-- `Source:Mode` (`SqlTest` recomendado en local, `SapHana` para dual-run/modelo ORM actual)
-- `PrintExecution:*` (spooler real/simulado, reintentos)
-- `Jwt:Secret` (obligatorio por entorno, minimo 32 caracteres, sin defaults inseguros)
+```json
+{
+  "Database": { "Provider": "Hana", "ApplyMigrations": false },
+  "ConnectionStrings": { "PrintQueue": "<HANA EF>" },
+  "Source": { "Mode": "SapHana" },
+  "SapHana": {
+    "ConnectionString": "<HANA ODBC para diagnóstico opcional>",
+    "Schema": "<schema>",
+    "Table": "printer_source_print_job",
+    "SourceSystem": "SAP-HANA",
+    "LeaseSeconds": 90
+  },
+  "Jwt": { "Secret": "<mínimo 32 caracteres>" },
+  "PrintExecution": { "UseRealSpooler": false }
+}
+```
 
-El esquema se aplica al iniciar API/Worker mediante migraciones EF Core (`Database.Migrate`).
+Variables de entorno equivalentes: `Database__Provider`, `ConnectionStrings__PrintQueue`, `Source__Mode`, `SapHana__ConnectionString`, `Jwt__Secret`, etc.
 
-### Nota importante sobre `SapHana` (estado actual)
+**No usar en producción:** `Sqlite`, `SqlTest`, `SqlServer`, `SapPostgres` (histórico; ver `docs/archive/` y `Infrastructure/Legacy/`).
 
-En el estado actual del proyecto, el adapter `SapHana` opera sobre `SourcePrintJobs` del `ImpresorasDbContext` (modelo ORM interno) y no sobre una lectura SQL remota directa a una tabla externa HANA.  
-Para desarrollo local se recomienda usar `Database:Provider=Sqlite` y `Source:Mode=SqlTest`.
+El esquema HANA se gestiona con DDL externo (`scripts/sql/`). `Database:ApplyMigrations` debe permanecer en `false`. Las migraciones EF en el repo son referencia histórica SQLite (ver `Infrastructure/Persistence/Migrations/README.md`).
 
-## Arranque recomendado (flujo oficial)
-
-**Importante:** API y Worker deben ejecutarse desde `ImpresorasServiceV1` para compartir `impresoras-local.db`.
-
-1) Arrancar backend:
+## Arranque
 
 ```powershell
 cd ImpresorasServiceV1
 dotnet restore
 dotnet build -c Debug
-dotnet run --project "src/ImpresorasService.Api"
-dotnet run --project "src/ImpresorasService.Worker"
-```
 
-Para local sin provider SAP:
-
-```powershell
-$env:Database__Provider = "Sqlite"
-$env:ConnectionStrings__PrintQueue = "Data Source=impresoras-local.db"
-$env:Source__Mode = "SqlTest"
+# Configurar secretos HANA (ejemplo)
+$env:Database__Provider = "Hana"
+$env:ConnectionStrings__PrintQueue = "ServerNode=...;UID=...;PWD=...;Current Schema=..."
+$env:Source__Mode = "SapHana"
+$env:SapHana__ConnectionString = "Driver={HDBODBC};ServerNode=...;UID=...;PWD=..."
+$env:SapHana__Schema = "ZTEST_VICENTE_2"
 $env:Jwt__Secret = "REEMPLAZAR_CON_SECRETO_LARGO_MIN_32"
 $env:Bootstrap__SeedDefaultUsers = "false"
+
+dotnet run --project src/ImpresorasService.Api
+dotnet run --project src/ImpresorasService.Worker
 ```
 
-2) Arrancar UI oficial (PHP), en otra terminal:
+UI Laravel (otra terminal; ver `docs/FRONTEND-WEB-PHP-GIT.md` si el gitlink no está inicializado):
 
 ```powershell
-cd ImpresorasServiceV1/src/ImpresorasService.Web.PHP
+cd src/ImpresorasService.Web.PHP
 composer install
 npm install
 php artisan serve
 ```
 
-Para comprobar que API y Worker comparten BD: `.\scripts\verificar-bd.ps1`
+Verificación HANA: `.\scripts\verificar-hana.ps1`
 
-## Pruebas rapidas
+## Pruebas
 
-- Crear trabajo de origen en Swagger: `POST /api/sourceprintjobs/test`
-- Consultar cola: `GET /api/printjobs`
-- Probar impresion:
-  - `.\scripts\probar-impresion.ps1`
-  - `.\scripts\verificar-estado.ps1`
+```powershell
+dotnet test tests/ImpresorasService.Api.IntegrationTests
+```
 
-Estados habituales:
-- `SpoolAccepted`: exito
-- `PrintedUnknown`: cierre por watchdog sin confirmacion explicita de impresion
-- `RetryScheduled`: reintento pendiente
-- `ErrorFinal`: fallo definitivo
+Scripts operativos: `scripts/probar-impresion.ps1`, `scripts/verificar-estado.ps1`
 
-## Documentacion relacionada
+## Documentación
 
-- Resumen rapido del proyecto: `docs/RESUMEN-PROYECTO.md`
-- Checklist de cohesion y limpieza: `docs/CHECKLIST-COHESION.md`
-- Despliegue frontend PHP: `docs/DESPLIEGUE-PHP.md`
-- Smoke tests de regresion: `docs/SMOKE-TESTS-PHP.md`
-- Checklist accesibilidad dark mode: `docs/CHECKLIST-ACCESIBILIDAD-DARKMODE.md`
-- Convenciones UI frontend PHP: `docs/UI-CONVENCIONES-FRONTEND-PHP.md`
+- Resumen: `docs/RESUMEN-PROYECTO.md`
+- Histórico (SQLite/Postgres/SqlTest): `docs/archive/`
+- Despliegue PHP: `docs/DESPLIEGUE-PHP.md`
+- Smoke UI: `docs/SMOKE-TESTS-PHP.md`

@@ -12,7 +12,7 @@ public class SourcePrintJobRecord
     public DateTimeOffset CreatedAtUtc { get; set; }
     public bool IsProcessed { get; set; }
 
-    /// <summary>Worker que reclamó la fila para ingesta (modo SqlTest).</summary>
+    /// <summary>Worker que reclamó la fila para ingesta (arrendamiento/concurrencia).</summary>
     public string? ClaimedBy { get; set; }
 
     /// <summary>Caducidad del arrendamiento; otra instancia puede reclamar si expira.</summary>
