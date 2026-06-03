@@ -139,11 +139,32 @@
             return 'Conectada (lenta)';
         }
 
-        if (isAdmin) {
-            return data.error || 'Error';
+        if (isHostNotConfigured(data)) {
+            return 'Sin host';
         }
 
-        return 'Sin conexion';
+        if (isAdmin) {
+            return 'Error';
+        }
+
+        return 'Sin conexión';
+    }
+
+    function isHostNotConfigured(data) {
+        const error = String(data?.error || data?.message || '').toLowerCase();
+        return error.includes('sin host')
+            || error.includes('host no configurado')
+            || error.includes('host not configured')
+            || error.includes('hostname no configurado');
+    }
+
+    function technicalStatusTitle(data) {
+        if (!data) return '';
+        if (data.error) return data.error;
+        if (data.message) return data.message;
+        if (data.transport) return data.transport;
+        if (data.latencyMs) return 'Latencia: ' + data.latencyMs + ' ms';
+        return '';
     }
 
     function applyConnectionBadgeClass(statusEl, data) {
@@ -180,6 +201,7 @@
         .then(data => {
             if (statusEl) {
                 statusEl.textContent = userFriendlyStatusText(data);
+                statusEl.title = technicalStatusTitle(data);
                 applyConnectionBadgeClass(statusEl, data);
             }
             if (portEl) {
@@ -194,6 +216,7 @@
         .catch(() => {
             if (statusEl) {
                 statusEl.textContent = 'Error';
+                statusEl.title = 'No se pudo comprobar la conectividad.';
                 statusEl.className = 'ping-status badge badge-danger';
             }
             if (portEl) {

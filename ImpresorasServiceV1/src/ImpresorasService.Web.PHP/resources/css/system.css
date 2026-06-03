@@ -826,6 +826,13 @@ html.dark .btn-warning {
     white-space: nowrap;
 }
 
+.ping-status {
+    max-width: 11rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle;
+}
+
 /* Operational queue/alerts refinements. */
 .dbx-operational-card .dbx-card-body {
     padding-top: 16px;
@@ -980,6 +987,130 @@ html.dark .btn-warning {
 .dbx-bar-fill.info,
 .local-flow-row i.info {
     background: var(--ui-primary) !important;
+}
+
+.dbx-empty-activity {
+    margin: 8px 0 12px;
+    border: 1px solid color-mix(in srgb, var(--ui-primary) 18%, var(--ui-border));
+    border-radius: var(--ui-radius-sm);
+    background: color-mix(in srgb, var(--ui-primary-soft) 58%, var(--ui-surface));
+    color: var(--ui-text-muted);
+    font-size: 0.82rem;
+    font-weight: 700;
+    padding: 9px 11px;
+}
+
+.dbx-store-health-panel {
+    display: grid;
+    gap: 14px;
+    margin-top: 10px;
+}
+
+.dbx-store-health-main {
+    display: grid;
+    justify-items: center;
+    gap: 3px;
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius-sm);
+    background: color-mix(in srgb, var(--ui-surface-soft) 70%, var(--ui-surface));
+    padding: 16px 12px;
+    text-align: center;
+}
+
+.dbx-store-health-label {
+    color: var(--ui-text-muted);
+    font-size: 0.72rem;
+    font-weight: 850;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.dbx-store-health-main strong {
+    color: var(--ui-text);
+    font-size: clamp(2rem, 4vw, 3rem);
+    line-height: 1;
+}
+
+.dbx-store-health-main span:last-child {
+    color: var(--ui-text-muted);
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.dbx-health-segmented {
+    display: flex;
+    width: 100%;
+    height: 12px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--ui-border) 58%, var(--ui-surface));
+    overflow: hidden;
+}
+
+.dbx-health-segment {
+    min-width: 0;
+}
+
+.dbx-health-segment.success {
+    background: var(--ui-healthy);
+}
+
+.dbx-health-segment.warning {
+    background: var(--ui-warning);
+}
+
+.dbx-health-segment.danger {
+    background: var(--ui-danger);
+}
+
+.dbx-health-mini-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.dbx-health-mini {
+    --health-color: var(--ui-primary);
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+    border: 1px solid color-mix(in srgb, var(--health-color) 32%, var(--ui-border));
+    border-radius: var(--ui-radius-sm);
+    background: color-mix(in srgb, var(--health-color) 8%, var(--ui-surface));
+    padding: 10px 8px;
+}
+
+.dbx-health-mini.success {
+    --health-color: var(--ui-healthy);
+}
+
+.dbx-health-mini.warning {
+    --health-color: var(--ui-warning);
+}
+
+.dbx-health-mini.danger {
+    --health-color: var(--ui-danger);
+}
+
+.dbx-health-mini span,
+.dbx-health-mini small {
+    color: var(--ui-text-muted);
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.035em;
+    line-height: 1.15;
+    text-transform: uppercase;
+}
+
+.dbx-health-mini strong {
+    color: var(--health-color);
+    font-size: 1.2rem;
+    line-height: 1.1;
+}
+
+@media (max-width: 760px) {
+    .dbx-health-mini-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 .dbx-selectable-row {

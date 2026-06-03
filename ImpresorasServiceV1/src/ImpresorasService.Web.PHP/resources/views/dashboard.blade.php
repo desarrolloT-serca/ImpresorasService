@@ -43,6 +43,7 @@
     $failedVal = (int) ($kpis['failed'] ?? 0);
     $queueVal = (int) ($kpis['queueCurrent'] ?? 0);
     $failedNoRetryVal = (int) ($kpis['failedWithoutRetryCurrent'] ?? 0);
+    $hasNoPrintActivity = $receivedVal === 0 && $queueVal === 0 && $failedVal === 0;
     $base = max(1, $receivedVal, $printedVal, $failedVal, $queueVal, $failedNoRetryVal);
     $totalPeriod = max(1, $receivedVal);
     $receivedPct = $totalPeriod > 0 ? 100 : 0;
@@ -125,6 +126,11 @@
                         %
                     </button>
                 </div>
+                @if($hasNoPrintActivity)
+                    <div class="dbx-empty-activity" role="status">
+                        Sin actividad de impresi&oacute;n en el periodo seleccionado.
+                    </div>
+                @endif
                 <div class="dbx-bars">
                     <div class="dbx-bar-row">
                         <span class="dbx-bar-label">Recibidos</span>
@@ -196,18 +202,33 @@
                     <div class="dbx-title-row dbx-title-row-center">
                         <h2 class="dbx-title dbx-title-center">Estado de las tiendas</h2>
                     </div>
-                    <div class="dbx-chart-wrap">
-                        <div
-                            class="dbx-donut"
-                            style="background: conic-gradient(var(--ui-healthy) 0 {{ $healthyEnd }}%, var(--ui-warning) {{ $healthyEnd }}% {{ $warningEnd }}%, var(--ui-danger) {{ $warningEnd }}% 100%);"
-                        >
+                    <div class="dbx-store-health-panel">
+                        <div class="dbx-store-health-main">
+                            <span class="dbx-store-health-label">Tiendas saludables</span>
                             <strong>{{ $healthyShare }}%</strong>
-                            <small>OK</small>
+                            <span>{{ $healthyCount }} de {{ $storesTotal }} tiendas</span>
                         </div>
-                        <div class="dbx-chart-legend">
-                            <div><span class="dot danger"></span><span>Cr&iacute;tica</span><strong>{{ $criticalCount }} ({{ $criticalShare }}%)</strong></div>
-                            <div><span class="dot warning"></span><span>Warning</span><strong>{{ $warningCount }} ({{ $warningShare }}%)</strong></div>
-                            <div><span class="dot success"></span><span>Saludable</span><strong>{{ $healthyCount }} ({{ $healthyShare }}%)</strong></div>
+                        <div class="dbx-health-segmented" aria-label="Distribuci&oacute;n del estado de las tiendas">
+                            <span class="dbx-health-segment success" style="width: {{ $healthyShare }}%" title="Saludables: {{ $healthyCount }} ({{ $healthyShare }}%)"></span>
+                            <span class="dbx-health-segment warning" style="width: {{ $warningShare }}%" title="Warning: {{ $warningCount }} ({{ $warningShare }}%)"></span>
+                            <span class="dbx-health-segment danger" style="width: {{ $criticalShare }}%" title="Cr&iacute;ticas: {{ $criticalCount }} ({{ $criticalShare }}%)"></span>
+                        </div>
+                        <div class="dbx-health-mini-grid">
+                            <div class="dbx-health-mini success">
+                                <span>Saludables</span>
+                                <strong>{{ $healthyCount }}</strong>
+                                <small>{{ $healthyShare }}%</small>
+                            </div>
+                            <div class="dbx-health-mini warning">
+                                <span>Warning</span>
+                                <strong>{{ $warningCount }}</strong>
+                                <small>{{ $warningShare }}%</small>
+                            </div>
+                            <div class="dbx-health-mini danger">
+                                <span>Cr&iacute;ticas</span>
+                                <strong>{{ $criticalCount }}</strong>
+                                <small>{{ $criticalShare }}%</small>
+                            </div>
                         </div>
                     </div>
                 @else
