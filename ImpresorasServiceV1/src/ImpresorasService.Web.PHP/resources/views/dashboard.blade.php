@@ -6,6 +6,14 @@
 @php
     $window = $window ?? 'today';
     $tab = $tab ?? 'global';
+    $storeView = request('storeView', 'estado');
+    if ($tab === 'stores') {
+        $tab = 'global';
+        $storeView = 'estado';
+    }
+    if (!in_array($storeView, ['estado', 'detalle'], true)) {
+        $storeView = 'estado';
+    }
     $health = $health ?? 'all';
     $showHealthy = (bool) ($showHealthy ?? true);
     $storeLimit = (int) ($storeLimit ?? 8);
@@ -111,6 +119,8 @@
     $criticalShare = max(0, 100 - $healthyShare - $warningShare);
     $healthyEnd = $healthyShare;
     $warningEnd = $healthyShare + $warningShare;
+    $topStores = $storesList;
+    $hasStoreRisk = $warningCount > 0 || $criticalCount > 0;
 @endphp
 
 @if($tab === 'global')
@@ -290,105 +300,7 @@
         </article>
     </section>
 
-@elseif($tab === 'stores')
-    @php
-        $topStores = array_slice($storesList, 0, min(4, count($storesList)));
-        $hasStoreRisk = $warningCount > 0 || $criticalCount > 0;
-        $generalHealthLabel = $criticalCount > 0
-            ? 'Atenci&oacute;n cr&iacute;tica'
-            : ($warningCount > 0 ? 'Seguimiento' : 'Operaci&oacute;n normal');
-        $generalHealthClass = $criticalCount > 0
-            ? 'critical'
-            : ($warningCount > 0 ? 'warning' : 'healthy');
-    @endphp
-    <section class="dbx-card">
-        <div class="dbx-card-body">
-            <div class="dbx-title-row">
-                <h2 class="dbx-title">{{ $hasStoreRisk ? 'Top tiendas por riesgo' : 'Estado por tienda' }}</h2>
-                <span class="dbx-subtle">Ordenadas por salud, cola y fallos sin reenviar</span>
-            </div>
-            @if(count($topStores) === 0)
-                <p class="dbx-subtle mt-2">No hay tiendas para los filtros actuales.</p>
-            @else
-                <div class="dbx-store-grid cols-2 mt-4">
-                    @foreach($topStores as $store)
-                        @php
-                            $status = $store['health'] ?? 'healthy';
-                            $healthClass = $status === 'critical'
-                                ? 'critical'
-                                : ($status === 'warning' ? 'warning' : 'healthy');
-                            $printerRows = is_array($store['printers'] ?? null) ? $store['printers'] : [];
-                            $storeIdText = (string)($store['storeId'] ?? '-');
-                            $storeNameRaw = trim((string)($store['storeName'] ?? 'Sin nombre'));
-                            $nameHasId = preg_match('/\b' . preg_quote($storeIdText, '/') . '\b/u', $storeNameRaw) === 1;
-                            $storeTitle = $nameHasId ? $storeNameRaw : ('#' . $storeIdText . ' - ' . $storeNameRaw);
-                            $riskQueue = (int)($store['queuedCurrent'] ?? 0);
-                            $riskFailedNoRetry = (int)($store['failedWithoutRetryCurrent'] ?? 0);
-                            $riskUnassigned = (int)($store['unassignedQueueCurrent'] ?? 0);
-                            $riskReason = (string)($store['healthReason'] ?? 'Operacion normal');
-                            $riskReasonSource = strtolower(strip_tags(html_entity_decode($riskReason)));
-                            if ($healthClass === 'healthy') {
-                                $riskReasonShort = 'Operaci&oacute;n normal';
-                            } elseif (count($printerRows) === 0 || str_contains($riskReasonSource, 'sin impresora')) {
-                                $riskReasonShort = 'Sin impresoras';
-                            } elseif (str_contains($riskReasonSource, 'host') || str_contains($riskReasonSource, 'unc') || str_contains($riskReasonSource, 'conect')) {
-                                $riskReasonShort = 'Conectividad';
-                            } elseif ($riskFailedNoRetry > 0 || str_contains($riskReasonSource, 'sin reenviar') || str_contains($riskReasonSource, 'fallo')) {
-                                $riskReasonShort = 'Sin reenviar';
-                            } elseif ($riskUnassigned > 0 || str_contains($riskReasonSource, 'sin asignar')) {
-                                $riskReasonShort = 'Sin asignar';
-                            } elseif ($riskQueue > 0 || str_contains($riskReasonSource, 'cola')) {
-                                $riskReasonShort = 'Cola acumulada';
-                            } else {
-                                $riskReasonShort = 'Operaci&oacute;n normal';
-                            }
-                        @endphp
-                        <article class="dbx-risk-list-row dbx-risk-row-{{ $healthClass }}">
-                            <div class="dbx-risk-store-name">{{ $storeTitle }}</div>
-                            <span class="dbx-pill {{ $healthClass }}">{{ strtoupper($status) }}</span>
-                            <span class="dbx-risk-row-reason" title="{{ $riskReason }}">{!! $riskReasonShort !!}</span>
-                            <div class="dbx-risk-row-metrics">
-                                <span>Cola <strong class="{{ $riskQueue > 0 ? 'is-warning' : '' }}">{{ $riskQueue }}</strong></span>
-                                <span>Sin reenviar <strong class="{{ $riskFailedNoRetry > 0 ? 'is-danger' : '' }}">{{ $riskFailedNoRetry }}</strong></span>
-                                <span>Sin asignar <strong class="{{ $riskUnassigned > 0 ? 'is-warning' : '' }}">{{ $riskUnassigned }}</strong></span>
-                            </div>
-                            <a href="#detalle-tienda-{{ $storeIdText }}" class="dbx-risk-detail-link">Ver detalle</a>
-                        </article>
-                    @endforeach
-                </div>
-            @endif
-        </div>
-    </section>
 @endif
-
-@if($isAdminView && $tab === 'stores')
-    <section class="dbx-card">
-        <div class="dbx-card-body">
-            <div class="dbx-title-row">
-                <h2 class="dbx-title">Resumen operativo por tiendas</h2>
-                <span class="dbx-subtle">Cobertura, salud y carga actual</span>
-            </div>
-            <div class="dbx-store-summary-groups mt-4">
-                <div class="dbx-store-summary-group">
-                    <span class="dbx-store-summary-title">Cobertura</span>
-                    <strong class="dbx-store-summary-main">{{ count($storesList) }} tiendas</strong>
-                    <p><strong>{{ $printersTotalSummary }}</strong> impresoras <span>&middot;</span> <strong>{{ $usersTotalSummary }}</strong> usuarios</p>
-                </div>
-                <div class="dbx-store-summary-group">
-                    <span class="dbx-store-summary-title">Salud</span>
-                    <strong class="dbx-store-summary-main {{ $generalHealthClass }}">{!! $generalHealthLabel !!}</strong>
-                    <p><strong class="{{ $criticalCount > 0 ? 'is-danger' : '' }}">{{ $criticalCount }}</strong> cr&iacute;ticas <span>&middot;</span> <strong class="{{ $warningCount > 0 ? 'is-warning' : '' }}">{{ $warningCount }}</strong> warning</p>
-                </div>
-                <div class="dbx-store-summary-group">
-                    <span class="dbx-store-summary-title">Carga operativa</span>
-                    <strong class="dbx-store-summary-main {{ $totalQueueAllStores > 0 ? 'warning' : '' }}">Cola {{ $totalQueueAllStores }}</strong>
-                    <p>Sin reenviar <strong class="{{ $totalFailedNoRetryAllStores > 0 ? 'is-danger' : '' }}">{{ $totalFailedNoRetryAllStores }}</strong> <span>&middot;</span> &Eacute;xito <strong>{{ $successRate !== null ? $successRate . '%' : 'N/D' }}</strong></p>
-                </div>
-            </div>
-        </div>
-    </section>
-@endif
-
 
 @if($isAdminUser)
     <section class="dbx-card">
@@ -518,6 +430,85 @@
         </div>
     </section>
 
+    @php
+        $storeViewParams = request()->except(['tab', 'storeView']);
+        $estadoUrl = route('dashboard', array_merge($storeViewParams, ['tab' => 'global', 'storeView' => 'estado']));
+        $detalleUrl = route('dashboard', array_merge($storeViewParams, ['tab' => 'global', 'storeView' => 'detalle']));
+    @endphp
+    <section class="dbx-card dbx-store-view-shell">
+        <div class="dbx-card-body">
+            <div class="dbx-title-row">
+                <h2 class="dbx-title">Tiendas</h2>
+                <span class="dbx-subtle">Alterna entre priorizaci&oacute;n y detalle operativo</span>
+            </div>
+            <div class="dbx-store-view-tabs" aria-label="Vista de tiendas">
+                <a href="{{ $estadoUrl }}" class="dbx-store-view-tab {{ $storeView === 'estado' ? 'is-active' : '' }}">Estado por tienda</a>
+                <a href="{{ $detalleUrl }}" class="dbx-store-view-tab {{ $storeView === 'detalle' ? 'is-active' : '' }}">Detalle compacto</a>
+            </div>
+        </div>
+    </section>
+
+    @if($storeView === 'estado')
+        <section class="dbx-card">
+            <div class="dbx-card-body">
+                <div class="dbx-title-row">
+                    <h2 class="dbx-title">{{ $hasStoreRisk ? 'Top tiendas por riesgo' : 'Estado por tienda' }}</h2>
+                    <span class="dbx-subtle">Ranking operativo para priorizar revisi&oacute;n</span>
+                </div>
+                @if(count($topStores) === 0)
+                    <p class="dbx-subtle mt-2">No hay tiendas para los filtros actuales.</p>
+                @else
+                    <div class="dbx-store-state-list mt-4">
+                        @foreach($topStores as $store)
+                            @php
+                                $status = $store['health'] ?? 'healthy';
+                                $healthClass = $status === 'critical'
+                                    ? 'critical'
+                                    : ($status === 'warning' ? 'warning' : 'healthy');
+                                $printerRows = is_array($store['printers'] ?? null) ? $store['printers'] : [];
+                                $storeIdText = (string)($store['storeId'] ?? '-');
+                                $storeNameRaw = trim((string)($store['storeName'] ?? 'Sin nombre'));
+                                $nameHasId = preg_match('/\b' . preg_quote($storeIdText, '/') . '\b/u', $storeNameRaw) === 1;
+                                $storeTitle = $nameHasId ? $storeNameRaw : ('#' . $storeIdText . ' - ' . $storeNameRaw);
+                                $riskQueue = (int)($store['queuedCurrent'] ?? 0);
+                                $riskFailedNoRetry = (int)($store['failedWithoutRetryCurrent'] ?? 0);
+                                $riskUnassigned = (int)($store['unassignedQueueCurrent'] ?? 0);
+                                $riskReason = (string)($store['healthReason'] ?? 'Operacion normal');
+                                $riskReasonSource = strtolower(strip_tags(html_entity_decode($riskReason)));
+                                if ($healthClass === 'healthy') {
+                                    $riskReasonShort = 'Operaci&oacute;n normal';
+                                } elseif (count($printerRows) === 0 || str_contains($riskReasonSource, 'sin impresora')) {
+                                    $riskReasonShort = 'Sin impresoras';
+                                } elseif (str_contains($riskReasonSource, 'host') || str_contains($riskReasonSource, 'unc') || str_contains($riskReasonSource, 'conect')) {
+                                    $riskReasonShort = 'Conectividad';
+                                } elseif ($riskFailedNoRetry > 0 || str_contains($riskReasonSource, 'sin reenviar') || str_contains($riskReasonSource, 'fallo')) {
+                                    $riskReasonShort = 'Sin reenviar';
+                                } elseif ($riskUnassigned > 0 || str_contains($riskReasonSource, 'sin asignar')) {
+                                    $riskReasonShort = 'Sin asignar';
+                                } elseif ($riskQueue > 0 || str_contains($riskReasonSource, 'cola')) {
+                                    $riskReasonShort = 'Cola acumulada';
+                                } else {
+                                    $riskReasonShort = 'Operaci&oacute;n normal';
+                                }
+                                $detailHref = $detalleUrl . '#detalle-tienda-' . rawurlencode($storeIdText);
+                            @endphp
+                            <article class="dbx-risk-list-row dbx-risk-row-{{ $healthClass }}">
+                                <div class="dbx-risk-store-name">{{ $storeTitle }}</div>
+                                <span class="dbx-pill {{ $healthClass }}">{{ strtoupper($status) }}</span>
+                                <span class="dbx-risk-row-reason" title="{{ $riskReason }}">{!! $riskReasonShort !!}</span>
+                                <div class="dbx-risk-row-metrics">
+                                    <span>Cola <strong class="{{ $riskQueue > 0 ? 'is-warning' : '' }}">{{ $riskQueue }}</strong></span>
+                                    <span>Sin reenviar <strong class="{{ $riskFailedNoRetry > 0 ? 'is-danger' : '' }}">{{ $riskFailedNoRetry }}</strong></span>
+                                    <span>Sin asignar <strong class="{{ $riskUnassigned > 0 ? 'is-warning' : '' }}">{{ $riskUnassigned }}</strong></span>
+                                </div>
+                                <a href="{{ $detailHref }}" class="dbx-risk-detail-link">Ver detalle</a>
+                            </article>
+                        @endforeach
+                    </div>
+                @endif
+            </div>
+        </section>
+    @else
     <section class="dbx-card">
         <div class="dbx-card-body">
         <div class="dbx-title-row">
@@ -665,6 +656,7 @@
         @endif
         </div>
     </section>
+    @endif
 @else
     <section class="dbx-card">
         <div class="dbx-card-body">
@@ -788,6 +780,9 @@
 
         const tabEl = form.querySelector('input[name="tab"]');
         if (tabEl && tabEl.value) prefs.tab = tabEl.value;
+
+        const storeViewEl = form.querySelector('input[name="storeView"]');
+        if (storeViewEl && storeViewEl.value) prefs.storeView = storeViewEl.value;
 
         const healthEl = document.getElementById('health');
         if (healthEl) prefs.health = healthEl.value;

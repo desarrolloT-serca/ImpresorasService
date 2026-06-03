@@ -1573,6 +1573,60 @@ html.dark .btn-warning {
     text-decoration: underline;
 }
 
+.dbx-store-view-shell .dbx-card-body {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.dbx-store-view-shell .dbx-title-row {
+    margin: 0;
+}
+
+.dbx-store-view-tabs {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border: 1px solid color-mix(in srgb, var(--ui-primary) 22%, var(--ui-border));
+    border-radius: var(--ui-radius-sm);
+    background: color-mix(in srgb, var(--ui-primary-soft) 34%, var(--ui-surface));
+    padding: 4px;
+}
+
+.dbx-store-view-tab {
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+    border: 1px solid transparent;
+    border-radius: var(--ui-radius-sm);
+    color: var(--ui-primary);
+    font-size: 0.76rem;
+    font-weight: 850;
+    line-height: 1;
+    padding: 7px 11px;
+    text-decoration: none;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.dbx-store-view-tab:hover {
+    background: var(--ui-surface);
+    color: var(--ui-primary-strong);
+}
+
+.dbx-store-view-tab.is-active {
+    border-color: var(--ui-primary);
+    background: var(--ui-primary);
+    color: #ffffff;
+}
+
+.dbx-store-state-list {
+    display: grid;
+    gap: 8px;
+}
+
 .dbx-store-summary-groups {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));

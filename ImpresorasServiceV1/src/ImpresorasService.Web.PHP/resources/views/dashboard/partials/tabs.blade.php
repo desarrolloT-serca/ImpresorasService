@@ -1,10 +1,7 @@
 @if($isAdminView)
     <div class="dbx-tabs">
-        <a href="{{ route('dashboard', ['tab' => 'global', 'window' => $window, 'showHealthy' => $showHealthy ? 1 : 0, 'autoRefresh' => $autoRefreshSeconds]) }}" class="dbx-tab {{ $tab === 'global' ? 'is-active' : '' }}">
+        <a href="{{ route('dashboard', ['tab' => 'global', 'storeView' => $storeView ?? 'estado', 'window' => $window, 'health' => $health, 'showHealthy' => $showHealthy ? 1 : 0, 'autoRefresh' => $autoRefreshSeconds]) }}" class="dbx-tab is-active">
             Vista global
-        </a>
-        <a href="{{ route('dashboard', ['tab' => 'stores', 'window' => $window, 'health' => $health, 'showHealthy' => $showHealthy ? 1 : 0, 'autoRefresh' => $autoRefreshSeconds]) }}" class="dbx-tab {{ $tab === 'stores' ? 'is-active' : '' }}">
-            Por tiendas
         </a>
     </div>
 @else

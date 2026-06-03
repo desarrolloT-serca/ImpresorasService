@@ -10,7 +10,7 @@
                     <option value="30d" {{ $window === '30d' ? 'selected' : '' }}>30 dias</option>
                 </select>
             </div>
-            @if($isAdminView && $tab === 'stores')
+            @if($isAdminView)
                 <div class="dbx-filter-item">
                     <label for="health" class="dbx-filter-label">Salud tienda</label>
                     <select id="health" name="health" class="select !w-auto" data-current="{{ $health }}">
@@ -63,6 +63,7 @@
                 </label>
             @endif
             <input type="hidden" name="tab" value="{{ $tab }}">
+            <input type="hidden" name="storeView" value="{{ $storeView ?? 'estado' }}">
         </div>
         </x-ui.toolbar>
     </form>
