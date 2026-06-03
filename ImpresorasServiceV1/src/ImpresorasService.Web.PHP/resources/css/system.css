@@ -1182,56 +1182,62 @@ html.dark .btn-warning {
 
 .dbx-diagnostic-body {
     display: grid;
-    gap: 7px;
-    padding: 8px 12px;
+    gap: 4px;
+    padding: 7px 12px;
     border-bottom: 1px solid var(--ui-border);
     background: color-mix(in srgb, var(--ui-surface-soft) 62%, var(--ui-surface));
 }
 
-.dbx-diagnostic-kpi-strip {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 1px;
-    border: 1px solid var(--ui-border);
-    border-radius: var(--ui-radius-sm);
-    background: var(--ui-border);
-    overflow: hidden;
-}
-
-.dbx-diagnostic-kpi-strip > div {
+.dbx-diagnostic-kpi-line {
     display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 6px;
-    min-width: 0;
-    background: var(--ui-surface);
-    padding: 7px 8px;
-}
-
-.dbx-diagnostic-kpi-strip span {
-    min-width: 0;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
     color: var(--ui-text-muted);
-    font-size: 0.66rem;
-    font-weight: 850;
-    letter-spacing: 0.035em;
-    line-height: 1.1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    text-transform: uppercase;
-    white-space: nowrap;
+    font-size: 0.76rem;
+    font-weight: 750;
+    line-height: 1.25;
 }
 
-.dbx-diagnostic-kpi-strip strong {
-    color: var(--ui-text);
-    font-size: 1rem;
+.dbx-diagnostic-kpi-line > span + span::before {
+    content: "·";
+    margin-right: 8px;
+    color: color-mix(in srgb, var(--ui-text-muted) 55%, transparent);
+}
+
+.dbx-kpi-chip {
+    --kpi-color: var(--ui-text-muted);
+}
+
+.dbx-kpi-chip.is-warning {
+    --kpi-color: var(--ui-warning);
+}
+
+.dbx-kpi-chip.is-danger {
+    --kpi-color: var(--ui-danger);
+}
+
+.dbx-kpi-chip strong {
+    color: var(--kpi-color);
+    font-size: 0.9rem;
     font-weight: 900;
     line-height: 1;
 }
 
+.dbx-kpi-chip.is-warning,
+.dbx-kpi-chip.is-danger {
+    color: color-mix(in srgb, var(--kpi-color) 72%, var(--ui-text));
+    font-weight: 850;
+}
+
+.dbx-kpi-chip.is-neutral strong {
+    color: var(--ui-text);
+}
+
 .dbx-period-strip {
     color: var(--ui-text-muted);
-    font-size: 0.72rem;
-    font-weight: 750;
+    font-size: 0.68rem;
+    font-weight: 700;
     line-height: 1.25;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1323,10 +1329,6 @@ html.dark .dbx-printer-summary {
 }
 
 @media (max-width: 760px) {
-    .dbx-diagnostic-kpi-strip {
-        grid-template-columns: 1fr;
-    }
-
     .dbx-diagnostic-head,
     .dbx-diagnostic-actions {
         align-items: flex-start;
