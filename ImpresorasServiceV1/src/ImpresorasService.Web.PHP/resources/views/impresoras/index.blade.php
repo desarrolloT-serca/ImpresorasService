@@ -8,7 +8,6 @@
     $selectedStoreGroup = is_array($selectedStoreGroup ?? null) ? $selectedStoreGroup : null;
     $selectedStoreId = $selectedStoreGroup['storeId'] ?? ($selectedStoreId ?? null);
     $selectedStoreKey = $selectedStoreId !== null ? (string) $selectedStoreId : 'none';
-    $isActiveFilter = (string) ($isActiveFilter ?? request('isActive', ''));
     $selectedStorePrintersCount = is_array($selectedStoreGroup['printers'] ?? null) ? count($selectedStoreGroup['printers']) : 0;
     $createUrl = $selectedStoreId !== null
         ? route('impresoras.create', ['storeId' => $selectedStoreId])
@@ -36,24 +35,36 @@
                         $storeId = $storeGroup['storeId'] ?? null;
                         $storeKey = $storeId !== null ? (string) $storeId : 'none';
                         $isSelected = $storeKey === $selectedStoreKey;
-                        $storeUrlParams = ['storeId' => $storeId, 'isActive' => $isActiveFilter];
+                        $storeUrlParams = ['storeId' => $storeId];
                         $storeUrlParams = array_filter($storeUrlParams, static fn ($value) => $value !== null && $value !== '');
                         $printersCount = (int) ($storeGroup['printersCount'] ?? 0);
                         $activePrintersCount = (int) ($storeGroup['activePrintersCount'] ?? 0);
-                        $connectionErrorCount = (int) ($storeGroup['connectionErrorCount'] ?? 0);
+                        $errorPrintersCount = (int) ($storeGroup['errorPrintersCount'] ?? $storeGroup['connectionErrorCount'] ?? 0);
+                        $uncheckedPrintersCount = (int) ($storeGroup['uncheckedPrintersCount'] ?? 0);
+                        $visualStatus = (string) ($storeGroup['visualStatus'] ?? 'empty');
+                        $visualStatusLabel = (string) ($storeGroup['visualStatusLabel'] ?? 'WARNING');
                         $printerWord = $printersCount === 1 ? 'impresora' : 'impresoras';
                     @endphp
                     <a href="{{ route('impresoras.index', $storeUrlParams) }}"
-                       class="dbx-routing-store-link {{ $isSelected ? 'is-active' : '' }} {{ $printersCount > 0 ? 'has-printers' : 'is-empty-store' }} {{ $connectionErrorCount > 0 ? 'has-printer-errors' : '' }}">
-                        <span class="dbx-routing-store-name">{{ $storeGroup['formattedStoreName'] ?? 'Sin tienda' }}</span>
+                       class="dbx-routing-store-link {{ $isSelected ? 'is-active' : '' }} is-printer-status-{{ $visualStatus }}">
+                        <span class="dbx-routing-store-line">
+                            <span class="dbx-routing-store-name">{{ $storeGroup['formattedStoreName'] ?? 'Sin tienda' }}</span>
+                            <span class="dbx-store-health-chip is-{{ $visualStatus }}">{{ $visualStatusLabel }}</span>
+                        </span>
                         <span class="dbx-routing-store-meta">
-                            {{ $printersCount }} {{ $printerWord }}
-                            &middot;
-                            {{ $activePrintersCount }} activas
-                            @if($connectionErrorCount > 0)
-                                &middot; {{ $connectionErrorCount }} con error
+                            @if($printersCount === 0)
+                                0 impresoras &middot; Sin configurar
+                            @elseif($errorPrintersCount === 0 && $uncheckedPrintersCount === 0 && $activePrintersCount > 0)
+                                {{ $printersCount }} {{ $printerWord }} &middot; OK
+                            @else
+                                {{ $printersCount }} {{ $printerWord }} &middot; {{ $activePrintersCount }} activas
                             @endif
                         </span>
+                        @if($errorPrintersCount > 0)
+                            <span class="dbx-routing-store-meta is-danger">{{ $errorPrintersCount }} con error</span>
+                        @elseif($uncheckedPrintersCount > 0)
+                            <span class="dbx-routing-store-meta is-warning">{{ $uncheckedPrintersCount }} sin comprobar</span>
+                        @endif
                     </a>
                 @endforeach
             </div>
@@ -73,17 +84,6 @@
                 <span class="dbx-subtle">Estado, conectividad y configuraci&oacute;n</span>
             </div>
             <div class="dbx-printer-panel-tools">
-                <form method="GET" class="dbx-printer-state-filter">
-                    @if($selectedStoreId !== null)
-                        <input type="hidden" name="storeId" value="{{ $selectedStoreId }}">
-                    @endif
-                    <label for="isActive" class="dbx-filter-label">Estado</label>
-                    <select name="isActive" id="isActive" class="select" onchange="this.form.submit()">
-                        <option value="" {{ $isActiveFilter === '' ? 'selected' : '' }}>Todas</option>
-                        <option value="1" {{ $isActiveFilter === '1' ? 'selected' : '' }}>Activas</option>
-                        <option value="0" {{ $isActiveFilter === '0' ? 'selected' : '' }}>Inactivas</option>
-                    </select>
-                </form>
                 @if($isAdmin ?? false)
                     <a href="{{ $createUrl }}" class="btn btn-primary dbx-routing-create-btn" title="Crear impresora para esta tienda" aria-label="Crear impresora para esta tienda">+ Nueva impresora</a>
                 @endif
@@ -94,8 +94,6 @@
             <div class="dbx-empty-state">No hay tienda seleccionada.</div>
         @elseif($selectedStorePrintersCount === 0)
             <div class="dbx-empty-state">Esta tienda no tiene impresoras configuradas.</div>
-        @elseif(count($printers) === 0)
-            <div class="dbx-empty-state">No hay impresoras con el filtro actual.</div>
         @else
             <x-ui.table class="dbx-actions-table dbx-routing-rules-table dbx-printers-table">
                 <thead>
@@ -118,6 +116,33 @@
                             $host = trim((string) ($p['host'] ?? $p['Host'] ?? ''));
                             $isActive = (bool) ($p['isActive'] ?? $p['IsActive'] ?? false);
                             $editUrl = $id ? route('impresoras.edit', ['impresora' => $id, 'storeId' => $selectedStoreId]) : '#';
+                            $lastConnectionOkRaw = $p['lastConnectionOk'] ?? $p['LastConnectionOk'] ?? null;
+                            $lastConnectionOk = ($lastConnectionOkRaw === null || $lastConnectionOkRaw === '')
+                                ? null
+                                : (is_bool($lastConnectionOkRaw) ? $lastConnectionOkRaw : filter_var($lastConnectionOkRaw, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE));
+                            $lastConnectionError = trim((string) ($p['lastConnectionError'] ?? $p['LastConnectionError'] ?? ''));
+                            $lastConnectionCheckAtUtc = trim((string) ($p['lastConnectionCheckAtUtc'] ?? $p['LastConnectionCheckAtUtc'] ?? ''));
+                            $normalizedError = strtolower($lastConnectionError);
+                            $isHostNotConfigured = str_contains($normalizedError, 'sin host')
+                                || str_contains($normalizedError, 'host no configurado')
+                                || str_contains($normalizedError, 'host not configured')
+                                || str_contains($normalizedError, 'hostname no configurado');
+                            if ($isHostNotConfigured) {
+                                $connectionLabel = 'Sin host';
+                                $connectionClass = 'badge-warning';
+                            } elseif ($lastConnectionCheckAtUtc === '') {
+                                $connectionLabel = 'No comprobada';
+                                $connectionClass = 'badge-neutral';
+                            } elseif ($lastConnectionOk === true) {
+                                $connectionLabel = 'OK';
+                                $connectionClass = 'badge-success';
+                            } elseif ($lastConnectionOk === false || $lastConnectionError !== '') {
+                                $connectionLabel = ($isAdmin ?? false) ? 'Error' : html_entity_decode('Sin conexi&oacute;n', ENT_QUOTES, 'UTF-8');
+                                $connectionClass = 'badge-danger';
+                            } else {
+                                $connectionLabel = 'No comprobada';
+                                $connectionClass = 'badge-neutral';
+                            }
                         @endphp
                         <tr data-printer-id="{{ $id ?? '' }}">
                             <td class="text-col">{{ $name }}</td>
@@ -129,7 +154,7 @@
                                 </span>
                             </td>
                             <td class="status-col">
-                                <span class="ping-status badge badge-neutral" data-id="{{ $id ?? '' }}">-</span>
+                                <span class="ping-status badge {{ $connectionClass }}" data-id="{{ $id ?? '' }}" title="{{ $lastConnectionError }}">{{ $connectionLabel }}</span>
                             </td>
                             <td class="status-col">
                                 <span class="ping-port badge badge-neutral" data-id="{{ $id ?? '' }}">-</span>
@@ -165,12 +190,9 @@
     const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
     const pingInterval = {{ $pingIntervalSeconds ?? 30 }} * 1000;
     const isAdmin = {{ ($isAdmin ?? false) ? 'true' : 'false' }};
-    const slowLatencyMs = 250;
 
     function classifyConnectionState(data) {
         if (!data || !data.reachable) return 'error';
-        const latency = Number(data.latencyMs || 0);
-        if (latency > slowLatencyMs) return 'slow';
         return 'ok';
     }
 
@@ -178,17 +200,7 @@
         const state = classifyConnectionState(data);
 
         if (state === 'ok') {
-            if (isAdmin) {
-                if (data.latencyMs) return data.latencyMs + ' ms';
-            }
-            return 'Conectada';
-        }
-
-        if (state === 'slow') {
-            if (isAdmin) {
-                if (data.latencyMs) return 'Lenta: ' + data.latencyMs + ' ms';
-            }
-            return 'Conectada (lenta)';
+            return 'OK';
         }
 
         if (isHostNotConfigured(data)) {
@@ -199,7 +211,7 @@
             return 'Error';
         }
 
-        return 'Sin conexión';
+        return 'Sin conexi\u00f3n';
     }
 
     function isHostNotConfigured(data) {
@@ -223,10 +235,6 @@
         const state = classifyConnectionState(data);
         if (state === 'ok') {
             statusEl.className = 'ping-status badge badge-success';
-            return;
-        }
-        if (state === 'slow') {
-            statusEl.className = 'ping-status badge badge-warning';
             return;
         }
         statusEl.className = 'ping-status badge badge-danger';

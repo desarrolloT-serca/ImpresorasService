@@ -22,7 +22,6 @@ class ImpresorasController extends Controller
         $selectedStoreId = $effectiveStore !== null
             ? $effectiveStore
             : ($request->filled('storeId') ? $request->integer('storeId') : null);
-        $isActiveFilter = $request->filled('isActive') ? $request->boolean('isActive') : null;
 
         $params = [];
         if ($effectiveStore !== null) {
@@ -54,7 +53,12 @@ class ImpresorasController extends Controller
                 'formattedStoreName' => StoreFormat::label($storeId, $storeName),
                 'printersCount' => 0,
                 'activePrintersCount' => 0,
+                'errorPrintersCount' => 0,
+                'uncheckedPrintersCount' => 0,
+                'okPrintersCount' => 0,
                 'connectionErrorCount' => 0,
+                'visualStatus' => 'empty',
+                'visualStatusLabel' => 'WARNING',
                 'printers' => [],
             ];
         }
@@ -75,14 +79,28 @@ class ImpresorasController extends Controller
                     'formattedStoreName' => StoreFormat::label($storeId, $storeName),
                     'printersCount' => 0,
                     'activePrintersCount' => 0,
+                    'errorPrintersCount' => 0,
+                    'uncheckedPrintersCount' => 0,
+                    'okPrintersCount' => 0,
                     'connectionErrorCount' => 0,
+                    'visualStatus' => 'empty',
+                    'visualStatusLabel' => 'WARNING',
                     'printers' => [],
                 ];
             }
 
             $isActive = (bool) ($printer['isActive'] ?? $printer['IsActive'] ?? false);
-            $lastConnectionOk = $printer['lastConnectionOk'] ?? $printer['LastConnectionOk'] ?? null;
-            $hasConnectionError = $lastConnectionOk === false || trim((string) ($printer['lastConnectionError'] ?? $printer['LastConnectionError'] ?? '')) !== '';
+            $lastConnectionOk = $this->nullableBool($printer['lastConnectionOk'] ?? $printer['LastConnectionOk'] ?? null);
+            $lastConnectionError = trim((string) ($printer['lastConnectionError'] ?? $printer['LastConnectionError'] ?? ''));
+            $lastConnectionCheckAtUtc = trim((string) ($printer['lastConnectionCheckAtUtc'] ?? $printer['LastConnectionCheckAtUtc'] ?? ''));
+            $connectionFailuresStreak = (int) ($printer['connectionFailuresStreak'] ?? $printer['ConnectionFailuresStreak'] ?? 0);
+            $hasConnectionError = $isActive && (
+                $lastConnectionOk === false
+                || $connectionFailuresStreak > 0
+                || ($lastConnectionError !== '' && ! $this->isHostNotConfiguredError($lastConnectionError))
+            );
+            $isUnchecked = $isActive && $lastConnectionCheckAtUtc === '';
+            $isOk = $isActive && $lastConnectionOk === true;
 
             $printersByStore[$groupKey]['printers'][] = $printer;
             $printersByStore[$groupKey]['printersCount']++;
@@ -90,11 +108,36 @@ class ImpresorasController extends Controller
                 $printersByStore[$groupKey]['activePrintersCount']++;
             }
             if ($hasConnectionError) {
+                $printersByStore[$groupKey]['errorPrintersCount']++;
                 $printersByStore[$groupKey]['connectionErrorCount']++;
+            }
+            if ($isUnchecked) {
+                $printersByStore[$groupKey]['uncheckedPrintersCount']++;
+            }
+            if ($isOk) {
+                $printersByStore[$groupKey]['okPrintersCount']++;
             }
         }
 
-        uasort($printersByStore, static fn (array $left, array $right): int => ((int) $left['storeId']) <=> ((int) $right['storeId']));
+        foreach ($printersByStore as &$storeGroup) {
+            $storeGroup['visualStatus'] = $this->printerStoreVisualStatus($storeGroup);
+            $storeGroup['visualStatusLabel'] = match ($storeGroup['visualStatus']) {
+                'error' => 'ERROR',
+                'ok' => 'OK',
+                default => 'WARNING',
+            };
+        }
+        unset($storeGroup);
+
+        uasort($printersByStore, static function (array $left, array $right): int {
+            $priority = ['error' => 0, 'warning' => 1, 'empty' => 1, 'ok' => 2];
+            $leftPriority = $priority[$left['visualStatus'] ?? 'ok'] ?? 2;
+            $rightPriority = $priority[$right['visualStatus'] ?? 'ok'] ?? 2;
+
+            return $leftPriority === $rightPriority
+                ? ((int) $left['storeId']) <=> ((int) $right['storeId'])
+                : $leftPriority <=> $rightPriority;
+        });
 
         $selectedKey = $selectedStoreId !== null ? (string) (int) $selectedStoreId : null;
         if ($selectedKey === null || !isset($printersByStore[$selectedKey])) {
@@ -103,11 +146,6 @@ class ImpresorasController extends Controller
 
         $selectedStoreGroup = $selectedKey !== null ? ($printersByStore[$selectedKey] ?? null) : null;
         $selectedPrinters = is_array($selectedStoreGroup['printers'] ?? null) ? $selectedStoreGroup['printers'] : [];
-        if ($isActiveFilter !== null) {
-            $selectedPrinters = array_values(array_filter($selectedPrinters, static function (array $printer) use ($isActiveFilter): bool {
-                return (bool) ($printer['isActive'] ?? $printer['IsActive'] ?? false) === $isActiveFilter;
-            }));
-        }
 
         return view('impresoras.index', [
             'printers' => $selectedPrinters,
@@ -115,9 +153,53 @@ class ImpresorasController extends Controller
             'selectedStoreGroup' => $selectedStoreGroup,
             'selectedStoreId' => $selectedStoreGroup['storeId'] ?? null,
             'hasAnyPrinters' => count($printers) > 0,
-            'isActiveFilter' => $request->query('isActive', ''),
             'pingIntervalSeconds' => config('impresoras.ping_interval_seconds', 30),
         ]);
+    }
+
+    private function nullableBool(mixed $value): ?bool
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        return filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+    }
+
+    private function isHostNotConfiguredError(string $error): bool
+    {
+        $normalized = strtolower($error);
+
+        return str_contains($normalized, 'sin host')
+            || str_contains($normalized, 'host no configurado')
+            || str_contains($normalized, 'host not configured')
+            || str_contains($normalized, 'hostname no configurado');
+    }
+
+    private function printerStoreVisualStatus(array $storeGroup): string
+    {
+        $printersCount = (int) ($storeGroup['printersCount'] ?? 0);
+        $activePrintersCount = (int) ($storeGroup['activePrintersCount'] ?? 0);
+        $errorPrintersCount = (int) ($storeGroup['errorPrintersCount'] ?? 0);
+        $uncheckedPrintersCount = (int) ($storeGroup['uncheckedPrintersCount'] ?? 0);
+
+        if ($printersCount === 0) {
+            return 'empty';
+        }
+
+        if ($errorPrintersCount > 0) {
+            return 'error';
+        }
+
+        if ($activePrintersCount === 0 || $uncheckedPrintersCount > 0) {
+            return 'warning';
+        }
+
+        return 'ok';
     }
 
     public function create(Request $request): View

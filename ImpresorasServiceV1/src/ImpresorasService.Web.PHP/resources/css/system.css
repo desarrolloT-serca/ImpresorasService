@@ -2462,25 +2462,53 @@ html.dark .login-logo-frame {
 
 .dbx-routing-store-link.is-active {
     border-color: color-mix(in srgb, var(--ui-primary) 34%, var(--ui-border));
-    border-left-color: var(--ui-danger);
     background: color-mix(in srgb, var(--ui-primary-soft) 46%, var(--ui-surface));
     box-shadow: var(--ui-shadow-sm);
-}
-
-.dbx-routing-store-link.is-empty-store {
-    border-left-color: color-mix(in srgb, var(--ui-primary) 18%, var(--ui-border));
 }
 
 .dbx-routing-store-link.has-active-rules:not(.is-active) {
     border-left-color: color-mix(in srgb, var(--ui-primary) 62%, var(--ui-border));
 }
 
-.dbx-routing-store-link.has-printers:not(.is-active) {
-    border-left-color: color-mix(in srgb, var(--ui-primary) 62%, var(--ui-border));
+.dbx-routing-store-link.is-printer-status-error {
+    border-left-color: var(--ui-danger);
 }
 
-.dbx-routing-store-link.has-printer-errors:not(.is-active) {
-    border-left-color: color-mix(in srgb, var(--ui-danger) 72%, var(--ui-border));
+.dbx-routing-store-link.is-printer-status-warning {
+    border-left-color: var(--ui-warning);
+}
+
+.dbx-routing-store-link.is-printer-status-ok {
+    border-left-color: var(--ui-success);
+}
+
+.dbx-routing-store-link.is-printer-status-empty,
+.dbx-routing-store-link.is-empty-store {
+    border-left-color: color-mix(in srgb, var(--ui-primary) 20%, var(--ui-border));
+}
+
+.dbx-routing-store-link.is-printer-status-error.is-active {
+    border-color: color-mix(in srgb, var(--ui-danger) 34%, var(--ui-border));
+    border-left-color: var(--ui-danger);
+    background: color-mix(in srgb, var(--ui-danger) 8%, var(--ui-surface));
+}
+
+.dbx-routing-store-link.is-printer-status-warning.is-active {
+    border-color: color-mix(in srgb, var(--ui-warning) 38%, var(--ui-border));
+    border-left-color: var(--ui-warning);
+    background: color-mix(in srgb, var(--ui-warning) 10%, var(--ui-surface));
+}
+
+.dbx-routing-store-link.is-printer-status-ok.is-active {
+    border-left-color: var(--ui-success);
+}
+
+.dbx-routing-store-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
 }
 
 .dbx-routing-store-name {
@@ -2495,6 +2523,48 @@ html.dark .login-logo-frame {
     font-size: 0.72rem;
     font-weight: 750;
     line-height: 1.2;
+}
+
+.dbx-routing-store-meta.is-danger {
+    color: var(--ui-danger);
+}
+
+.dbx-routing-store-meta.is-warning {
+    color: var(--ui-warning);
+}
+
+.dbx-store-health-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 3.6rem;
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius-sm);
+    padding: 2px 7px;
+    font-size: 0.63rem;
+    font-weight: 850;
+    line-height: 1.2;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.dbx-store-health-chip.is-error {
+    border-color: color-mix(in srgb, var(--ui-danger) 46%, var(--ui-border));
+    background: var(--ui-danger-soft);
+    color: var(--ui-danger);
+}
+
+.dbx-store-health-chip.is-warning,
+.dbx-store-health-chip.is-empty {
+    border-color: color-mix(in srgb, var(--ui-warning) 46%, var(--ui-border));
+    background: var(--ui-warning-soft);
+    color: var(--ui-warning);
+}
+
+.dbx-store-health-chip.is-ok {
+    border-color: color-mix(in srgb, var(--ui-success) 42%, var(--ui-border));
+    background: var(--ui-success-soft);
+    color: var(--ui-success);
 }
 
 .dbx-routing-rules-table .dbx-table th:not(:first-child),
@@ -2520,16 +2590,6 @@ html.dark .login-logo-frame {
     justify-content: flex-end;
     gap: 10px;
     margin-left: auto;
-}
-
-.dbx-printer-state-filter {
-    display: flex;
-    align-items: end;
-    gap: 8px;
-}
-
-.dbx-printer-state-filter .select {
-    width: 9.5rem;
 }
 
 .dbx-printers-table .dbx-table th,
@@ -2707,8 +2767,6 @@ html.dark .login-logo-frame {
         width: 100%;
     }
 
-    .dbx-printer-state-filter,
-    .dbx-printer-state-filter .select,
     .dbx-routing-create-btn {
         width: 100%;
     }
