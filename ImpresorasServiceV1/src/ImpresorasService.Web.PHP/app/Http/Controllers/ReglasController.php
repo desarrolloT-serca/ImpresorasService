@@ -152,9 +152,10 @@ class ReglasController extends Controller
         $effectiveStore = AuthHelper::getEffectiveStoreId();
 
         $storeIdFromOld = $request->old('storeId');
+        $storeIdFromRequest = $request->filled('storeId') ? $request->integer('storeId') : null;
         $selectedStoreId = ($effectiveStore !== null)
             ? $effectiveStore
-            : ($storeIdFromOld !== null && (string)$storeIdFromOld !== '' ? (int)$storeIdFromOld : null);
+            : ($storeIdFromOld !== null && (string)$storeIdFromOld !== '' ? (int)$storeIdFromOld : $storeIdFromRequest);
 
         $printersPath = 'api/printers' . ($selectedStoreId !== null ? '?storeId=' . $selectedStoreId : '');
         $printers = $this->api->get($printersPath) ?? [];
@@ -164,6 +165,7 @@ class ReglasController extends Controller
             'printers' => is_array($printers) ? $printers : [],
             'storeIdLocked' => $effectiveStore !== null,
             'effectiveStoreId' => $effectiveStore,
+            'selectedStoreId' => $selectedStoreId,
         ]);
     }
 
@@ -230,6 +232,7 @@ class ReglasController extends Controller
                 'printers' => is_array($printers) ? $printers : [],
                 'storeIdLocked' => $effectiveStore !== null,
                 'effectiveStoreId' => $effectiveStore,
+                'selectedStoreId' => $selectedStoreId,
             ]);
         } catch (\Throwable) {
             return redirect()->route('reglas.index')->with('error', 'Regla no encontrada.');

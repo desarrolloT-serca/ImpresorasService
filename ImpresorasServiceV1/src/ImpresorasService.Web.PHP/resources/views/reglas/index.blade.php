@@ -10,6 +10,10 @@
     $selectedStoreKey = $selectedStoreId !== null ? (string) $selectedStoreId : 'global';
     $isActiveFilter = (string) ($isActiveFilter ?? request('isActive', ''));
     $hasAnyRules = (bool) ($hasAnyRules ?? false);
+    $createUrl = $selectedStoreId !== null
+        ? route('reglas.create', ['storeId' => $selectedStoreId])
+        : route('reglas.create');
+    $createLabel = $selectedStoreId !== null ? 'Crear regla para esta tienda' : 'Crear regla';
     $storeNameById = [];
     foreach ($rulesByStore as $storeGroup) {
         $sid = $storeGroup['storeId'] ?? null;
@@ -23,31 +27,6 @@
 @endif
 
 <div class="dbx-wrap">
-<x-ui.card>
-    <x-ui.toolbar>
-        <form method="GET" class="dbx-filters">
-            @if($selectedStoreId !== null)
-                <input type="hidden" name="storeId" value="{{ $selectedStoreId }}">
-            @endif
-            <div>
-                <label class="dbx-filter-label">Estado</label>
-                <select name="isActive" class="select">
-                    <option value="" {{ $isActiveFilter === '' ? 'selected' : '' }}>Todas</option>
-                    <option value="1" {{ $isActiveFilter === '1' ? 'selected' : '' }}>Activas</option>
-                    <option value="0" {{ $isActiveFilter === '0' ? 'selected' : '' }}>Inactivas</option>
-                </select>
-            </div>
-            <div class="dbx-form-actions">
-                <button type="submit" class="btn btn-primary">Aplicar</button>
-                <a href="{{ route('reglas.index') }}" class="btn btn-ghost">Limpiar</a>
-            </div>
-        </form>
-        <div class="dbx-form-actions">
-            <a href="{{ route('reglas.create') }}" class="btn btn-primary">Nueva regla</a>
-        </div>
-    </x-ui.toolbar>
-</x-ui.card>
-
 <section class="dbx-routing-layout">
     <x-ui.card class="dbx-routing-stores-card">
         <div class="dbx-title-row">
@@ -69,8 +48,9 @@
                             $storeUrlParams['storeId'] = $storeId;
                         }
                         $storeUrlParams = array_filter($storeUrlParams, static fn ($value) => $value !== null && $value !== '');
+                        $hasActiveRules = (int) ($storeGroup['activeCount'] ?? 0) > 0;
                     @endphp
-                    <a href="{{ route('reglas.index', $storeUrlParams) }}" class="dbx-routing-store-link {{ $isSelected ? 'is-active' : '' }}">
+                    <a href="{{ route('reglas.index', $storeUrlParams) }}" class="dbx-routing-store-link {{ $isSelected ? 'is-active' : '' }} {{ $hasActiveRules ? 'has-active-rules' : 'is-empty-store' }}">
                         <span class="dbx-routing-store-name">{{ $storeGroup['formattedStoreName'] ?? 'Sin tienda' }}</span>
                         <span class="dbx-routing-store-meta">
                             {{ (int) ($storeGroup['rulesCount'] ?? 0) }} reglas
@@ -84,34 +64,34 @@
     </x-ui.card>
 
     <x-ui.card class="dbx-routing-rules-card">
-        <div class="dbx-title-row">
-            <h2 class="dbx-title">
-                @if($selectedStoreGroup)
-                    Reglas de {{ $selectedStoreGroup['formattedStoreName'] ?? 'la tienda seleccionada' }}
-                @else
-                    Reglas de enrutado
-                @endif
-            </h2>
-            <span class="dbx-subtle">
-                @if($isActiveFilter === '1')
-                    Solo activas
-                @elseif($isActiveFilter === '0')
-                    Solo inactivas
-                @else
-                    Todas las reglas
-                @endif
-            </span>
+        <div class="dbx-title-row dbx-routing-title-row">
+            <div>
+                <h2 class="dbx-title">
+                    @if($selectedStoreGroup)
+                        Reglas de {{ $selectedStoreGroup['formattedStoreName'] ?? 'la tienda seleccionada' }}
+                    @else
+                        Reglas de enrutado
+                    @endif
+                </h2>
+                <span class="dbx-subtle">Prioridad, condiciones y destino de impresi&oacute;n</span>
+            </div>
+            <a href="{{ $createUrl }}" class="btn btn-primary dbx-routing-create-btn" title="{{ $createLabel }}" aria-label="{{ $createLabel }}">+ Nueva regla</a>
         </div>
 
         @if(!$hasAnyRules)
-            <div class="dbx-empty-state">No hay reglas de enrutado configuradas.</div>
+            <div class="dbx-empty-state">
+                <span>No hay reglas de enrutado configuradas.</span>
+                <a href="{{ $createUrl }}" class="btn btn-primary">+ Crear primera regla</a>
+            </div>
         @elseif(!$selectedStoreGroup || count($rules) === 0)
-            <div class="dbx-empty-state">Esta tienda no tiene reglas configuradas.</div>
+            <div class="dbx-empty-state">
+                <span>Esta tienda no tiene reglas configuradas.</span>
+                <a href="{{ $createUrl }}" class="btn btn-primary">+ Crear primera regla</a>
+            </div>
         @else
             <x-ui.table class="dbx-actions-table dbx-routing-rules-table">
                 <thead>
                     <tr>
-                        <th class="text-col">Tienda</th>
                         <th class="number-col">Prioridad</th>
                         <th class="status-col">Tipo doc</th>
                         <th class="status-col">Canal</th>
@@ -123,17 +103,10 @@
                 <tbody>
                     @foreach($rules as $r)
                         @php
-                            $rowStoreId = $r['storeId'] ?? $r['StoreId'] ?? null;
-                            $rowStoreName = $rowStoreId !== null
-                                ? ($storeNameById[(string) $rowStoreId] ?? null)
-                                : 'Todas las tiendas';
                             $id = $r['ruleId'] ?? $r['RuleId'] ?? null;
                             $isActive = (bool) ($r['isActive'] ?? $r['IsActive'] ?? false);
                         @endphp
                         <tr>
-                            <td class="text-col">
-                                {{ $rowStoreId !== null ? \App\Helpers\StoreFormat::label($rowStoreId, $rowStoreName) : 'Todas las tiendas' }}
-                            </td>
                             <td class="number-col">{{ $r['priority'] ?? $r['Priority'] ?? '-' }}</td>
                             <td class="status-col">{{ $r['documentType'] ?? $r['DocumentType'] ?? '-' }}</td>
                             <td class="status-col">{{ $r['channel'] ?? $r['Channel'] ?? '-' }}</td>
