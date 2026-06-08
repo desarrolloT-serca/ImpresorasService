@@ -4,112 +4,160 @@
 
 @section('content')
 @php
-    $storeNameById = collect($storeOptions ?? [])->mapWithKeys(fn ($store) => [(string) ($store['storeId'] ?? '') => $store['name'] ?? null]);
+    $printersByStore = is_array($printersByStore ?? null) ? $printersByStore : [];
+    $selectedStoreGroup = is_array($selectedStoreGroup ?? null) ? $selectedStoreGroup : null;
+    $selectedStoreId = $selectedStoreGroup['storeId'] ?? ($selectedStoreId ?? null);
+    $selectedStoreKey = $selectedStoreId !== null ? (string) $selectedStoreId : 'none';
+    $isActiveFilter = (string) ($isActiveFilter ?? request('isActive', ''));
+    $selectedStorePrintersCount = is_array($selectedStoreGroup['printers'] ?? null) ? count($selectedStoreGroup['printers']) : 0;
+    $createUrl = $selectedStoreId !== null
+        ? route('impresoras.create', ['storeId' => $selectedStoreId])
+        : route('impresoras.create');
 @endphp
+
 @if(session('success'))
     <div class="mb-4 alert alert-success">{{ session('success') }}</div>
 @endif
 
 <div class="dbx-wrap">
-<x-ui.card>
-    <x-ui.toolbar>
-        <form method="GET" class="dbx-filters">
-            <div>
-                <label class="dbx-filter-label">Tienda</label>
-                @if($isAdmin ?? false)
-                <select name="storeId" class="select">
-                    <option value="">Todas</option>
-                    @foreach($storeOptions ?? [] as $store)
-                        <option value="{{ $store['storeId'] }}" {{ (string)request('storeId', '') === (string)$store['storeId'] ? 'selected' : '' }}>
-                            {{ \App\Helpers\StoreFormat::label($store['storeId'], $store['name']) }}
-                        </option>
-                    @endforeach
-                </select>
-                @else
-                <input type="text" value="{{ \App\Helpers\StoreFormat::label($effectiveStoreId ?? null, $storeNameById[(string) ($effectiveStoreId ?? '')] ?? null) }}" class="input !w-auto" disabled>
-                @endif
-            </div>
-            <div>
-                <label class="dbx-filter-label">Estado</label>
-                <select name="isActive" class="select">
-                    <option value="">Todas</option>
-                    <option value="1" {{ request('isActive') === '1' ? 'selected' : '' }}>Activas</option>
-                    <option value="0" {{ request('isActive') === '0' ? 'selected' : '' }}>Inactivas</option>
-                </select>
-            </div>
-            <div class="dbx-form-actions">
-                <a href="{{ route('impresoras.index') }}" class="btn btn-ghost">Limpiar</a>
-            </div>
-        </form>
-        @if($isAdmin ?? false)
-            <div class="dbx-form-actions">
-                <a href="{{ route('impresoras.create') }}" class="btn btn-primary">Nueva impresora</a>
+<section class="dbx-routing-layout">
+    <x-ui.card class="dbx-routing-stores-card">
+        <div class="dbx-title-row">
+            <h2 class="dbx-title">Tiendas</h2>
+            <span class="dbx-subtle">Selecciona una tienda</span>
+        </div>
+
+        @if(count($printersByStore) === 0)
+            <p class="dbx-subtle">No hay tiendas disponibles.</p>
+        @else
+            <div class="dbx-routing-store-list">
+                @foreach($printersByStore as $storeGroup)
+                    @php
+                        $storeId = $storeGroup['storeId'] ?? null;
+                        $storeKey = $storeId !== null ? (string) $storeId : 'none';
+                        $isSelected = $storeKey === $selectedStoreKey;
+                        $storeUrlParams = ['storeId' => $storeId, 'isActive' => $isActiveFilter];
+                        $storeUrlParams = array_filter($storeUrlParams, static fn ($value) => $value !== null && $value !== '');
+                        $printersCount = (int) ($storeGroup['printersCount'] ?? 0);
+                        $activePrintersCount = (int) ($storeGroup['activePrintersCount'] ?? 0);
+                        $connectionErrorCount = (int) ($storeGroup['connectionErrorCount'] ?? 0);
+                        $printerWord = $printersCount === 1 ? 'impresora' : 'impresoras';
+                    @endphp
+                    <a href="{{ route('impresoras.index', $storeUrlParams) }}"
+                       class="dbx-routing-store-link {{ $isSelected ? 'is-active' : '' }} {{ $printersCount > 0 ? 'has-printers' : 'is-empty-store' }} {{ $connectionErrorCount > 0 ? 'has-printer-errors' : '' }}">
+                        <span class="dbx-routing-store-name">{{ $storeGroup['formattedStoreName'] ?? 'Sin tienda' }}</span>
+                        <span class="dbx-routing-store-meta">
+                            {{ $printersCount }} {{ $printerWord }}
+                            &middot;
+                            {{ $activePrintersCount }} activas
+                            @if($connectionErrorCount > 0)
+                                &middot; {{ $connectionErrorCount }} con error
+                            @endif
+                        </span>
+                    </a>
+                @endforeach
             </div>
         @endif
-    </x-ui.toolbar>
-</x-ui.card>
+    </x-ui.card>
 
-<x-ui.card>
-    <div class="dbx-title-row">
-        <h2 class="dbx-title">Impresoras</h2>
-        <span class="dbx-subtle">Estado y conectividad</span>
-    </div>
-<x-ui.table class="dbx-actions-table">
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Nombre</th>
-                <th>SpoolQueue</th>
-                <th>Tienda</th>
-                <th>Activa</th>
-                <th>Estado</th>
-                <th>Puerto</th>
-                <th>Acciones</th>
-            </tr>
-        </thead>
-        <tbody>
-            @forelse($printers as $p)
-            <tr data-printer-id="{{ $p['printerId'] ?? $p['PrinterId'] ?? '' }}">
-                <td>{{ $p['printerId'] ?? $p['PrinterId'] ?? '-' }}</td>
-                <td>{{ $p['printerName'] ?? $p['PrinterName'] ?? '-' }}</td>
-                <td>{{ $p['spoolQueue'] ?? $p['SpoolQueue'] ?? '-' }}</td>
-                @php $rowStoreId = $p['storeId'] ?? $p['StoreId'] ?? null; @endphp
-                <td>{{ \App\Helpers\StoreFormat::label($rowStoreId, $storeNameById[(string) $rowStoreId] ?? null) }}</td>
-                <td>
-                    <span class="badge status-chip {{ ($p['isActive'] ?? $p['IsActive'] ?? false) ? 'badge-success' : 'badge-danger' }}" aria-label="{{ ($p['isActive'] ?? $p['IsActive'] ?? false) ? 'Impresora activa' : 'Impresora inactiva' }}">
-                        {{ ($p['isActive'] ?? $p['IsActive'] ?? false) ? 'Si' : 'No' }}
-                    </span>
-                </td>
-                <td>
-                    <span class="ping-status badge badge-neutral" data-id="{{ $p['printerId'] ?? $p['PrinterId'] ?? '' }}">-</span>
-                </td>
-                <td>
-                    <span class="ping-port badge badge-neutral" data-id="{{ $p['printerId'] ?? $p['PrinterId'] ?? '' }}">-</span>
-                </td>
-                <td>
-                    @if($isAdmin ?? false)
-                    @php $id = $p['printerId'] ?? $p['PrinterId'] ?? null; @endphp
-                    @if($id)
-                    <x-ui.action-buttons>
-                        <a href="{{ route('impresoras.edit', $id) }}" class="btn btn-ghost">Editar</a>
-                        <form action="{{ route('impresoras.destroy', $id) }}" method="POST" onsubmit="return confirm('¿Eliminar?')">
-                            @csrf
-                            @method('DELETE')
-                            <button type="submit" class="btn btn-danger">Eliminar</button>
-                        </form>
-                    </x-ui.action-buttons>
-                    @endif
+    <x-ui.card class="dbx-routing-rules-card">
+        <div class="dbx-title-row dbx-routing-title-row">
+            <div>
+                <h2 class="dbx-title">
+                    @if($selectedStoreGroup)
+                        Impresoras de {{ $selectedStoreGroup['formattedStoreName'] ?? 'la tienda seleccionada' }}
                     @else
-                    <span class="text-slate-400 text-sm">-</span>
+                        Impresoras
                     @endif
-                </td>
-            </tr>
-            @empty
-            <x-ui.empty-row colspan="8" message="No hay impresoras." />
-            @endforelse
-        </tbody>
-</x-ui.table>
-</x-ui.card>
+                </h2>
+                <span class="dbx-subtle">Estado, conectividad y configuraci&oacute;n</span>
+            </div>
+            <div class="dbx-printer-panel-tools">
+                <form method="GET" class="dbx-printer-state-filter">
+                    @if($selectedStoreId !== null)
+                        <input type="hidden" name="storeId" value="{{ $selectedStoreId }}">
+                    @endif
+                    <label for="isActive" class="dbx-filter-label">Estado</label>
+                    <select name="isActive" id="isActive" class="select" onchange="this.form.submit()">
+                        <option value="" {{ $isActiveFilter === '' ? 'selected' : '' }}>Todas</option>
+                        <option value="1" {{ $isActiveFilter === '1' ? 'selected' : '' }}>Activas</option>
+                        <option value="0" {{ $isActiveFilter === '0' ? 'selected' : '' }}>Inactivas</option>
+                    </select>
+                </form>
+                @if($isAdmin ?? false)
+                    <a href="{{ $createUrl }}" class="btn btn-primary dbx-routing-create-btn" title="Crear impresora para esta tienda" aria-label="Crear impresora para esta tienda">+ Nueva impresora</a>
+                @endif
+            </div>
+        </div>
+
+        @if(!$selectedStoreGroup)
+            <div class="dbx-empty-state">No hay tienda seleccionada.</div>
+        @elseif($selectedStorePrintersCount === 0)
+            <div class="dbx-empty-state">Esta tienda no tiene impresoras configuradas.</div>
+        @elseif(count($printers) === 0)
+            <div class="dbx-empty-state">No hay impresoras con el filtro actual.</div>
+        @else
+            <x-ui.table class="dbx-actions-table dbx-routing-rules-table dbx-printers-table">
+                <thead>
+                    <tr>
+                        <th class="text-col">Nombre</th>
+                        <th class="text-col">SpoolQueue</th>
+                        <th class="text-col">Host</th>
+                        <th class="status-col">Activa</th>
+                        <th class="status-col">Conectividad</th>
+                        <th class="status-col">Puerto</th>
+                        <th class="actions-col">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach($printers as $p)
+                        @php
+                            $id = $p['printerId'] ?? $p['PrinterId'] ?? null;
+                            $name = $p['printerName'] ?? $p['PrinterName'] ?? '-';
+                            $spoolQueue = $p['spoolQueue'] ?? $p['SpoolQueue'] ?? '-';
+                            $host = trim((string) ($p['host'] ?? $p['Host'] ?? ''));
+                            $isActive = (bool) ($p['isActive'] ?? $p['IsActive'] ?? false);
+                            $editUrl = $id ? route('impresoras.edit', ['impresora' => $id, 'storeId' => $selectedStoreId]) : '#';
+                        @endphp
+                        <tr data-printer-id="{{ $id ?? '' }}">
+                            <td class="text-col">{{ $name }}</td>
+                            <td class="text-col dbx-printer-text-cell" title="{{ $spoolQueue }}">{{ $spoolQueue }}</td>
+                            <td class="text-col dbx-printer-text-cell" title="{{ $host !== '' ? $host : 'Sin host configurado' }}">{{ $host !== '' ? $host : '-' }}</td>
+                            <td class="status-col">
+                                <span class="badge status-chip {{ $isActive ? 'badge-success' : 'badge-danger' }}" aria-label="{{ $isActive ? 'Impresora activa' : 'Impresora inactiva' }}">
+                                    {{ $isActive ? 'Si' : 'No' }}
+                                </span>
+                            </td>
+                            <td class="status-col">
+                                <span class="ping-status badge badge-neutral" data-id="{{ $id ?? '' }}">-</span>
+                            </td>
+                            <td class="status-col">
+                                <span class="ping-port badge badge-neutral" data-id="{{ $id ?? '' }}">-</span>
+                            </td>
+                            <td class="actions-col">
+                                @if(($isAdmin ?? false) && $id)
+                                    <x-ui.action-buttons>
+                                        <a href="{{ $editUrl }}" class="btn btn-ghost">Editar</a>
+                                        <form action="{{ route('impresoras.destroy', $id) }}" method="POST" onsubmit="return confirm('&iquest;Eliminar?')">
+                                            @csrf
+                                            @method('DELETE')
+                                            @if($selectedStoreId !== null)
+                                                <input type="hidden" name="storeId" value="{{ $selectedStoreId }}">
+                                            @endif
+                                            <button type="submit" class="btn btn-danger">Eliminar</button>
+                                        </form>
+                                    </x-ui.action-buttons>
+                                @else
+                                    <span class="text-slate-400 text-sm">-</span>
+                                @endif
+                            </td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </x-ui.table>
+        @endif
+    </x-ui.card>
+</section>
 </div>
 
 <script>
@@ -226,8 +274,7 @@
             if (portEl) {
                 portEl.textContent = '-';
             }
-        })
-        .finally(() => {});
+        });
     }
 
     function netConnectionAll() {

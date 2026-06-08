@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Helpers\AuthHelper;
+use App\Helpers\StoreFormat;
 use App\Services\ApiClient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -17,33 +18,122 @@ class ImpresorasController extends Controller
 
     public function index(Request $request): View
     {
-        $params = [];
         $effectiveStore = AuthHelper::getEffectiveStoreId();
-        if ($request->filled('storeId')) {
-            $params['storeId'] = $request->integer('storeId');
-        } elseif ($effectiveStore !== null) {
+        $selectedStoreId = $effectiveStore !== null
+            ? $effectiveStore
+            : ($request->filled('storeId') ? $request->integer('storeId') : null);
+        $isActiveFilter = $request->filled('isActive') ? $request->boolean('isActive') : null;
+
+        $params = [];
+        if ($effectiveStore !== null) {
             $params['storeId'] = $effectiveStore;
-        }
-        if ($request->filled('isActive')) {
-            // La API .NET espera bool en query: "true"/"false" (no 1/0).
-            $raw = strtolower(trim((string) $request->input('isActive')));
-            $params['isActive'] = in_array($raw, ['1', 'true', 'yes', 'on'], true) ? 'true' : 'false';
         }
         $path = 'api/printers' . (empty($params) ? '' : '?' . http_build_query($params));
         $printers = $this->api->get($path) ?? [];
+        $stores = $this->api->get('api/stores?isActive=true') ?? [];
+
+        $printers = is_array($printers) ? $printers : [];
+        $stores = is_array($stores) ? $stores : [];
+
+        $printersByStore = [];
+        foreach ($stores as $store) {
+            $storeId = $store['storeId'] ?? $store['StoreId'] ?? null;
+            if ($storeId === null || (string) $storeId === '') {
+                continue;
+            }
+
+            $storeId = (int) $storeId;
+            if ($effectiveStore !== null && $storeId !== (int) $effectiveStore) {
+                continue;
+            }
+
+            $storeName = (string) ($store['name'] ?? $store['Name'] ?? ('Tienda ' . $storeId));
+            $printersByStore[(string) $storeId] = [
+                'storeId' => $storeId,
+                'storeName' => $storeName,
+                'formattedStoreName' => StoreFormat::label($storeId, $storeName),
+                'printersCount' => 0,
+                'activePrintersCount' => 0,
+                'connectionErrorCount' => 0,
+                'printers' => [],
+            ];
+        }
+
+        foreach ($printers as $printer) {
+            $printerStoreId = $printer['storeId'] ?? $printer['StoreId'] ?? null;
+            if ($printerStoreId === null || (string) $printerStoreId === '') {
+                continue;
+            }
+
+            $storeId = (int) $printerStoreId;
+            $groupKey = (string) $storeId;
+            if (!isset($printersByStore[$groupKey])) {
+                $storeName = (string) ($printer['storeName'] ?? $printer['StoreName'] ?? ('Tienda ' . $storeId));
+                $printersByStore[$groupKey] = [
+                    'storeId' => $storeId,
+                    'storeName' => $storeName,
+                    'formattedStoreName' => StoreFormat::label($storeId, $storeName),
+                    'printersCount' => 0,
+                    'activePrintersCount' => 0,
+                    'connectionErrorCount' => 0,
+                    'printers' => [],
+                ];
+            }
+
+            $isActive = (bool) ($printer['isActive'] ?? $printer['IsActive'] ?? false);
+            $lastConnectionOk = $printer['lastConnectionOk'] ?? $printer['LastConnectionOk'] ?? null;
+            $hasConnectionError = $lastConnectionOk === false || trim((string) ($printer['lastConnectionError'] ?? $printer['LastConnectionError'] ?? '')) !== '';
+
+            $printersByStore[$groupKey]['printers'][] = $printer;
+            $printersByStore[$groupKey]['printersCount']++;
+            if ($isActive) {
+                $printersByStore[$groupKey]['activePrintersCount']++;
+            }
+            if ($hasConnectionError) {
+                $printersByStore[$groupKey]['connectionErrorCount']++;
+            }
+        }
+
+        uasort($printersByStore, static fn (array $left, array $right): int => ((int) $left['storeId']) <=> ((int) $right['storeId']));
+
+        $selectedKey = $selectedStoreId !== null ? (string) (int) $selectedStoreId : null;
+        if ($selectedKey === null || !isset($printersByStore[$selectedKey])) {
+            $selectedKey = count($printersByStore) > 0 ? (string) array_key_first($printersByStore) : null;
+        }
+
+        $selectedStoreGroup = $selectedKey !== null ? ($printersByStore[$selectedKey] ?? null) : null;
+        $selectedPrinters = is_array($selectedStoreGroup['printers'] ?? null) ? $selectedStoreGroup['printers'] : [];
+        if ($isActiveFilter !== null) {
+            $selectedPrinters = array_values(array_filter($selectedPrinters, static function (array $printer) use ($isActiveFilter): bool {
+                return (bool) ($printer['isActive'] ?? $printer['IsActive'] ?? false) === $isActiveFilter;
+            }));
+        }
+
         return view('impresoras.index', [
-            'printers' => is_array($printers) ? $printers : [],
+            'printers' => $selectedPrinters,
+            'printersByStore' => array_values($printersByStore),
+            'selectedStoreGroup' => $selectedStoreGroup,
+            'selectedStoreId' => $selectedStoreGroup['storeId'] ?? null,
+            'hasAnyPrinters' => count($printers) > 0,
+            'isActiveFilter' => $request->query('isActive', ''),
             'pingIntervalSeconds' => config('impresoras.ping_interval_seconds', 30),
         ]);
     }
 
-    public function create(): View
+    public function create(Request $request): View
     {
         $effectiveStore = AuthHelper::getEffectiveStoreId();
+        $storeIdFromOld = $request->old('storeId');
+        $storeIdFromRequest = $request->filled('storeId') ? $request->integer('storeId') : null;
+        $selectedStoreId = ($effectiveStore !== null)
+            ? $effectiveStore
+            : ($storeIdFromOld !== null && (string) $storeIdFromOld !== '' ? (int) $storeIdFromOld : $storeIdFromRequest);
+
         return view('impresoras.form', [
             'printer' => null,
             'storeIdLocked' => $effectiveStore !== null,
             'effectiveStoreId' => $effectiveStore,
+            'selectedStoreId' => $selectedStoreId,
         ]);
     }
 
@@ -69,17 +159,28 @@ class ImpresorasController extends Controller
                 'storeId' => $storeId,
                 'isActive' => $request->boolean('isActive', true),
             ]);
-            return redirect()->route('impresoras.index')->with('success', 'Impresora creada.');
+            return redirect()->route('impresoras.index', ['storeId' => $storeId])->with('success', 'Impresora creada.');
         } catch (\GuzzleHttp\Exception\RequestException $e) {
             return back()->withInput()->withErrors($this->extractApiErrors($e, 'printerName'));
         }
     }
 
-    public function edit(int $impresora): View|RedirectResponse
+    public function edit(Request $request, int $impresora): View|RedirectResponse
     {
         try {
             $printer = $this->api->get("api/printers/{$impresora}");
-            return view('impresoras.form', ['printer' => $printer]);
+            $effectiveStore = AuthHelper::getEffectiveStoreId();
+            $printerStoreId = $printer['storeId'] ?? $printer['StoreId'] ?? null;
+            $selectedStoreId = $effectiveStore
+                ?? ($request->filled('storeId') ? $request->integer('storeId') : null)
+                ?? $printerStoreId;
+
+            return view('impresoras.form', [
+                'printer' => $printer,
+                'storeIdLocked' => $effectiveStore !== null,
+                'effectiveStoreId' => $effectiveStore,
+                'selectedStoreId' => $selectedStoreId,
+            ]);
         } catch (\Throwable) {
             return redirect()->route('impresoras.index')->with('error', 'Impresora no encontrada.');
         }
@@ -104,17 +205,18 @@ class ImpresorasController extends Controller
                 'storeId' => $request->integer('storeId'),
                 'isActive' => $request->boolean('isActive'),
             ]);
-            return redirect()->route('impresoras.index')->with('success', 'Impresora actualizada.');
+            return redirect()->route('impresoras.index', ['storeId' => $request->integer('storeId')])->with('success', 'Impresora actualizada.');
         } catch (\GuzzleHttp\Exception\RequestException $e) {
             return back()->withInput()->withErrors($this->extractApiErrors($e, 'printerName'));
         }
     }
 
-    public function destroy(int $impresora): RedirectResponse
+    public function destroy(Request $request, int $impresora): RedirectResponse
     {
         try {
             $this->api->delete("api/printers/{$impresora}");
-            return redirect()->route('impresoras.index')->with('success', 'Impresora eliminada.');
+            $storeId = $request->integer('storeId') ?: null;
+            return redirect()->route('impresoras.index', array_filter(['storeId' => $storeId]))->with('success', 'Impresora eliminada.');
         } catch (\GuzzleHttp\Exception\RequestException $e) {
             return back()->withErrors($this->extractApiErrors($e, 'form'));
         }
