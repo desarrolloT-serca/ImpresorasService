@@ -2512,10 +2512,6 @@ html.dark .login-logo-frame {
 }
 
 .dbx-empty-state {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
     border: 1px solid color-mix(in srgb, var(--ui-primary) 16%, var(--ui-border));
     border-radius: var(--ui-radius-sm);
     background: color-mix(in srgb, var(--ui-primary-soft) 30%, var(--ui-surface));
@@ -2526,13 +2522,17 @@ html.dark .login-logo-frame {
 }
 
 .dbx-rule-form-card {
+    width: 100%;
     max-width: 980px;
     margin: 0 auto;
+    min-width: 0;
 }
 
 .dbx-rule-form {
     display: grid;
     gap: 18px;
+    width: 100%;
+    min-width: 0;
 }
 
 .dbx-rule-form-header {
@@ -2556,6 +2556,7 @@ html.dark .login-logo-frame {
 .dbx-rule-form-section {
     display: grid;
     gap: 12px;
+    min-width: 0;
     border: 1px solid color-mix(in srgb, var(--ui-primary) 14%, var(--ui-border));
     border-left: 4px solid color-mix(in srgb, var(--ui-primary) 58%, var(--ui-border));
     border-radius: var(--ui-radius-sm);
@@ -2590,6 +2591,24 @@ html.dark .login-logo-frame {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 14px;
+    width: 100%;
+    min-width: 0;
+}
+
+.dbx-rule-form-grid > div {
+    min-width: 0;
+}
+
+.dbx-rule-form-grid .input,
+.dbx-rule-form-grid .select {
+    width: 100%;
+    min-width: 0;
+}
+
+.dbx-rule-form-grid select {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .dbx-rule-active-field {
@@ -2627,8 +2646,7 @@ html.dark .login-logo-frame {
     }
 
     .dbx-rule-form-header,
-    .dbx-rule-form-section-title,
-    .dbx-empty-state {
+    .dbx-rule-form-section-title {
         align-items: flex-start;
         flex-direction: column;
     }

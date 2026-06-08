@@ -79,15 +79,9 @@
         </div>
 
         @if(!$hasAnyRules)
-            <div class="dbx-empty-state">
-                <span>No hay reglas de enrutado configuradas.</span>
-                <a href="{{ $createUrl }}" class="btn btn-primary">+ Crear primera regla</a>
-            </div>
+            <div class="dbx-empty-state">No hay reglas de enrutado configuradas.</div>
         @elseif(!$selectedStoreGroup || count($rules) === 0)
-            <div class="dbx-empty-state">
-                <span>Esta tienda no tiene reglas configuradas.</span>
-                <a href="{{ $createUrl }}" class="btn btn-primary">+ Crear primera regla</a>
-            </div>
+            <div class="dbx-empty-state">Esta tienda no tiene reglas configuradas.</div>
         @else
             <x-ui.table class="dbx-actions-table dbx-routing-rules-table">
                 <thead>
