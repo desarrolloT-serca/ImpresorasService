@@ -2425,6 +2425,84 @@ html.dark .login-logo-frame {
     background: rgba(255, 255, 255, 0.94);
 }
 
+.dbx-routing-layout {
+    display: grid;
+    grid-template-columns: minmax(230px, 300px) minmax(0, 1fr);
+    gap: 14px;
+    align-items: start;
+}
+
+.dbx-routing-stores-card,
+.dbx-routing-rules-card {
+    min-width: 0;
+}
+
+.dbx-routing-store-list {
+    display: grid;
+    gap: 8px;
+}
+
+.dbx-routing-store-link {
+    display: grid;
+    gap: 4px;
+    border: 1px solid var(--ui-border);
+    border-left: 4px solid transparent;
+    border-radius: var(--ui-radius-sm);
+    background: var(--ui-surface);
+    color: var(--ui-text);
+    padding: 10px 12px;
+    text-decoration: none;
+    transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dbx-routing-store-link:hover {
+    border-color: color-mix(in srgb, var(--ui-primary) 36%, var(--ui-border));
+    background: color-mix(in srgb, var(--ui-primary-soft) 32%, var(--ui-surface));
+}
+
+.dbx-routing-store-link.is-active {
+    border-color: color-mix(in srgb, var(--ui-primary) 34%, var(--ui-border));
+    border-left-color: var(--ui-danger);
+    background: color-mix(in srgb, var(--ui-primary-soft) 46%, var(--ui-surface));
+    box-shadow: var(--ui-shadow-sm);
+}
+
+.dbx-routing-store-name {
+    color: var(--ui-primary);
+    font-size: 0.86rem;
+    font-weight: 850;
+    line-height: 1.2;
+}
+
+.dbx-routing-store-meta {
+    color: var(--ui-text-muted);
+    font-size: 0.72rem;
+    font-weight: 750;
+    line-height: 1.2;
+}
+
+.dbx-routing-rules-table .dbx-table th:not(:first-child),
+.dbx-routing-rules-table .dbx-table td:not(:first-child) {
+    text-align: center;
+}
+
+.dbx-routing-rules-table .dbx-table th:first-child,
+.dbx-routing-rules-table .dbx-table td:first-child,
+.dbx-routing-rules-table .dbx-table th:nth-child(5),
+.dbx-routing-rules-table .dbx-table td:nth-child(5) {
+    text-align: left;
+}
+
+.dbx-empty-state {
+    border: 1px solid color-mix(in srgb, var(--ui-primary) 16%, var(--ui-border));
+    border-radius: var(--ui-radius-sm);
+    background: color-mix(in srgb, var(--ui-primary-soft) 30%, var(--ui-surface));
+    color: var(--ui-text-muted);
+    font-size: 0.86rem;
+    font-weight: 750;
+    padding: 18px;
+}
+
 @media (max-width: 1100px) {
     .dbx-queue-topbar {
         grid-template-columns: 1fr;
@@ -2433,6 +2511,12 @@ html.dark .login-logo-frame {
     .dbx-queue-topbar .dbx-bulk-toolbar {
         flex-wrap: wrap;
         justify-content: flex-start;
+    }
+}
+
+@media (max-width: 900px) {
+    .dbx-routing-layout {
+        grid-template-columns: 1fr;
     }
 }
 

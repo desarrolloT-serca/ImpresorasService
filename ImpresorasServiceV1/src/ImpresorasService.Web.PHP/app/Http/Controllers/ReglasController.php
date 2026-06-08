@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Helpers\AuthHelper;
+use App\Helpers\StoreFormat;
 use App\Services\ApiClient;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,20 +18,132 @@ class ReglasController extends Controller
 
     public function index(Request $request): View
     {
-        $params = [];
         $effectiveStore = AuthHelper::getEffectiveStoreId();
-        if ($request->filled('storeId')) {
-            $params['storeId'] = $request->integer('storeId');
-        } elseif ($effectiveStore !== null) {
+        $selectedStoreId = $effectiveStore !== null
+            ? $effectiveStore
+            : ($request->filled('storeId') ? $request->integer('storeId') : null);
+        $isActiveFilter = $request->filled('isActive') ? $request->boolean('isActive') : null;
+
+        $params = [];
+        if ($effectiveStore !== null) {
             $params['storeId'] = $effectiveStore;
         }
-        if ($request->filled('isActive')) $params['isActive'] = $request->boolean('isActive');
         $path = 'api/routingrules' . (empty($params) ? '' : '?' . http_build_query($params));
         $rules = $this->api->get($path) ?? [];
         $printers = $this->api->get('api/printers') ?? [];
+        $stores = $this->api->get('api/stores?isActive=true') ?? [];
+
+        $rules = is_array($rules) ? $rules : [];
+        $printers = is_array($printers) ? $printers : [];
+        $stores = is_array($stores) ? $stores : [];
+
+        $storesById = [];
+        foreach ($stores as $store) {
+            $storeId = $store['storeId'] ?? $store['StoreId'] ?? null;
+            if ($storeId === null || (string) $storeId === '') {
+                continue;
+            }
+
+            $storeId = (int) $storeId;
+            if ($effectiveStore !== null && $storeId !== (int) $effectiveStore) {
+                continue;
+            }
+
+            $storeName = (string) ($store['name'] ?? $store['Name'] ?? ('Tienda ' . $storeId));
+            $storesById[(string) $storeId] = [
+                'storeId' => $storeId,
+                'storeName' => $storeName,
+                'formattedStoreName' => StoreFormat::label($storeId, $storeName),
+                'rulesCount' => 0,
+                'activeCount' => 0,
+                'inactiveCount' => 0,
+                'rules' => [],
+            ];
+        }
+
+        $globalKey = 'global';
+
+        foreach ($rules as $rule) {
+            $ruleStoreId = $rule['storeId'] ?? $rule['StoreId'] ?? null;
+            $groupKey = ($ruleStoreId === null || (string) $ruleStoreId === '') ? $globalKey : (string) (int) $ruleStoreId;
+
+            if ($groupKey === $globalKey) {
+                if (!isset($storesById[$globalKey])) {
+                    $storesById[$globalKey] = [
+                        'storeId' => null,
+                        'storeName' => 'Todas las tiendas',
+                        'formattedStoreName' => 'Todas las tiendas',
+                        'rulesCount' => 0,
+                        'activeCount' => 0,
+                        'inactiveCount' => 0,
+                        'rules' => [],
+                    ];
+                }
+            } elseif (!isset($storesById[$groupKey])) {
+                $storeId = (int) $groupKey;
+                $storeName = (string) ($rule['storeName'] ?? $rule['StoreName'] ?? ('Tienda ' . $storeId));
+                $storesById[$groupKey] = [
+                    'storeId' => $storeId,
+                    'storeName' => $storeName,
+                    'formattedStoreName' => StoreFormat::label($storeId, $storeName),
+                    'rulesCount' => 0,
+                    'activeCount' => 0,
+                    'inactiveCount' => 0,
+                    'rules' => [],
+                ];
+            }
+
+            $isActive = (bool) ($rule['isActive'] ?? $rule['IsActive'] ?? false);
+            $storesById[$groupKey]['rules'][] = $rule;
+            $storesById[$groupKey]['rulesCount']++;
+            if ($isActive) {
+                $storesById[$groupKey]['activeCount']++;
+            } else {
+                $storesById[$groupKey]['inactiveCount']++;
+            }
+        }
+
+        uasort($storesById, static function (array $left, array $right): int {
+            if (($left['storeId'] ?? null) === null) {
+                return -1;
+            }
+            if (($right['storeId'] ?? null) === null) {
+                return 1;
+            }
+
+            return ((int) $left['storeId']) <=> ((int) $right['storeId']);
+        });
+
+        $selectedKey = $selectedStoreId !== null ? (string) (int) $selectedStoreId : null;
+        if ($selectedKey === null || !isset($storesById[$selectedKey])) {
+            $selectedKey = null;
+            foreach ($storesById as $key => $group) {
+                if ((int) ($group['rulesCount'] ?? 0) > 0) {
+                    $selectedKey = (string) $key;
+                    break;
+                }
+            }
+            if ($selectedKey === null && count($storesById) > 0) {
+                $selectedKey = (string) array_key_first($storesById);
+            }
+        }
+
+        $selectedStoreGroup = $selectedKey !== null ? ($storesById[$selectedKey] ?? null) : null;
+        $selectedRules = is_array($selectedStoreGroup['rules'] ?? null) ? $selectedStoreGroup['rules'] : [];
+        if ($isActiveFilter !== null) {
+            $selectedRules = array_values(array_filter($selectedRules, static function (array $rule) use ($isActiveFilter): bool {
+                return (bool) ($rule['isActive'] ?? $rule['IsActive'] ?? false) === $isActiveFilter;
+            }));
+        }
+
         return view('reglas.index', [
-            'rules' => is_array($rules) ? $rules : [],
-            'printers' => is_array($printers) ? $printers : [],
+            'rules' => $selectedRules,
+            'rulesByStore' => array_values($storesById),
+            'selectedStoreGroup' => $selectedStoreGroup,
+            'selectedStoreId' => $selectedStoreGroup['storeId'] ?? null,
+            'hasAnyRules' => count($rules) > 0,
+            'isActiveFilter' => $request->query('isActive', ''),
+            'printers' => $printers,
         ]);
     }
 
