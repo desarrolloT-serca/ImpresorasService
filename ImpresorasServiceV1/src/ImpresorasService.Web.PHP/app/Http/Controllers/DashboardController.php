@@ -30,7 +30,6 @@ class DashboardController extends Controller
         $tab = request()->query('tab', 'global');
         $health = request()->query('health', 'all');
         $showHealthy = request()->boolean('showHealthy', true);
-        $storeLimit = max(1, min(24, (int) request()->query('storeLimit', 8)));
         $storeSort = request()->query('storeSort', 'severity');
         $storeCols = max(1, min(4, (int) request()->query('storeCols', 4)));
         $autoRefreshSecondsRaw = (int) request()->query('autoRefresh', 30);
@@ -66,7 +65,6 @@ class DashboardController extends Controller
             $tab = 'stores';
             $health = 'all';
             $showHealthy = true;
-            $storeLimit = 1;
             $storeCols = 1;
             $storeSort = 'severity';
         }
@@ -328,8 +326,6 @@ class DashboardController extends Controller
         if (in_array($health, ['healthy', 'warning', 'critical'], true)) {
             $stores = array_values(array_filter($stores, fn (array $row): bool => ($row['health'] ?? '') === $health));
         }
-        $stores = array_slice($stores, 0, $storeLimit);
-
         $viewName = $isAdminDashboard ? 'dashboard' : 'dashboard-local';
 
         return view($viewName, [
@@ -339,7 +335,6 @@ class DashboardController extends Controller
             'tab' => $tab,
             'health' => $health,
             'showHealthy' => $showHealthy,
-            'storeLimit' => $storeLimit,
             'storeSort' => $storeSort,
             'storeCols' => $storeCols,
             'autoRefreshSeconds' => $autoRefreshSeconds,

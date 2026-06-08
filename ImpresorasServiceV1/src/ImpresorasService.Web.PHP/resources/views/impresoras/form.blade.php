@@ -39,7 +39,7 @@
             <option value="">Seleccionar tienda...</option>
             @foreach($storeOptions ?? [] as $store)
                 <option value="{{ $store['storeId'] }}" {{ (string)$selectedStoreId === (string)$store['storeId'] ? 'selected' : '' }}>
-                    {{ $store['name'] }} ({{ $store['storeId'] }})
+                    {{ \App\Helpers\StoreFormat::label($store['storeId'], $store['name']) }}
                 </option>
             @endforeach
         </select>

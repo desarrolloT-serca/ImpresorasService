@@ -51,7 +51,7 @@
                         $sname = $store['name'] ?? $store['Name'] ?? ('Tienda ' . $sid);
                     @endphp
                     <option value="{{ $sid }}" {{ (string)$storeId === (string)$sid ? 'selected' : '' }}>
-                        {{ $sname }} ({{ $sid }})
+                        {{ \App\Helpers\StoreFormat::label($sid, $sname) }}
                     </option>
                 @endforeach
             </select>

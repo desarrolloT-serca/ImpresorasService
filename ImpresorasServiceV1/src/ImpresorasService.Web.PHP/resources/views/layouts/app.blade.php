@@ -71,11 +71,18 @@
                     <h1 class="text-2xl font-semibold">@yield('title', 'Dashboard')</h1>
                 </div>
                 <div class="app-topbar-actions flex items-center gap-2 flex-wrap">
+                    @php
+                        $contextStoreId = $effectiveStoreId ?? $authStoreId ?? null;
+                        $contextStore = $contextStoreId !== null
+                            ? collect($storeOptions ?? [])->firstWhere('storeId', (int) $contextStoreId)
+                            : null;
+                        $contextStoreName = is_array($contextStore ?? null) ? ($contextStore['name'] ?? null) : null;
+                    @endphp
                     <span class="badge badge-neutral app-context-badge">
                         @if($isAdmin ?? false)
                             {{ $authRoleLabel ?? 'Administrador' }}
-                        @elseif(($effectiveStoreId ?? $authStoreId ?? null) !== null)
-                            Tienda {{ $effectiveStoreId ?? $authStoreId }}
+                        @elseif($contextStoreId !== null)
+                            {{ \App\Helpers\StoreFormat::label($contextStoreId, $contextStoreName) }}
                         @else
                             {{ $authRoleLabel ?? 'Empleado' }}
                         @endif
@@ -88,7 +95,7 @@
                                 <option value="">Todas</option>
                                 @foreach($storeOptions ?? [] as $store)
                                     <option value="{{ $store['storeId'] }}" {{ (string)($selectedStoreId ?? '') === (string)$store['storeId'] ? 'selected' : '' }}>
-                                        {{ $store['name'] }} ({{ $store['storeId'] }})
+                                        {{ \App\Helpers\StoreFormat::label($store['storeId'], $store['name']) }}
                                     </option>
                                 @endforeach
                             </select>

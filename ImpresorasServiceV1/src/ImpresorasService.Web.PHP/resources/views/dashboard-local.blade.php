@@ -9,10 +9,7 @@
     $stores = is_array($stores ?? null) ? $stores : [];
     $store = $stores[0] ?? [];
     $storeId = (int) ($store['storeId'] ?? ($effectiveStoreId ?? 0));
-    $storeNameRaw = trim((string) ($store['storeName'] ?? 'Mi tienda'));
-    $storeName = $storeId > 0 && preg_match('/\b' . preg_quote((string) $storeId, '/') . '\b/u', $storeNameRaw) !== 1
-        ? '#' . $storeId . ' - ' . $storeNameRaw
-        : $storeNameRaw;
+    $storeName = \App\Helpers\StoreFormat::label($storeId, $store['storeName'] ?? 'Mi tienda');
     $health = strtolower((string) ($store['health'] ?? 'healthy'));
     $healthClass = in_array($health, ['critical', 'warning', 'healthy'], true) ? $health : 'healthy';
     $healthLabel = match($healthClass) {

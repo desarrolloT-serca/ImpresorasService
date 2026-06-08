@@ -16,7 +16,6 @@
     }
     $health = $health ?? 'all';
     $showHealthy = (bool) ($showHealthy ?? true);
-    $storeLimit = (int) ($storeLimit ?? 8);
     $storeSort = $storeSort ?? 'severity';
     $storeCols = (int) ($storeCols ?? 4);
     $autoRefreshSeconds = (int) ($autoRefreshSeconds ?? 0);
@@ -31,6 +30,7 @@
     $alerts = is_array($alerts ?? null) ? $alerts : [];
     $alertsVisibleRows = 10;
     $stores = is_array($stores ?? null) ? $stores : [];
+    $formatStoreLabel = static fn ($storeId, $storeName = null): string => \App\Helpers\StoreFormat::label($storeId, $storeName);
 
     $windowLabel = match($window) {
         '7d' => 'Ultimos 7 dias',
@@ -391,7 +391,7 @@
                                 @endphp
                                 <tr class="{{ $idx === 0 ? 'dbx-alert-group-start' : 'dbx-alert-group-cont' }}" @if($href) data-alert-href="{{ $href }}" @endif>
                                     @if($idx === 0)
-                                        <td rowspan="{{ $rowspan }}">#{{ $groupStoreId ?? '-' }} - {{ $group['storeName'] ?? 'Sin nombre' }}</td>
+                                        <td rowspan="{{ $rowspan }}">{{ $formatStoreLabel($groupStoreId, $group['storeName'] ?? 'Sin nombre') }}</td>
                                     @endif
                                     <td><span class="dbx-pill {{ $status }}">{{ strtoupper($status) }}</span></td>
                                     <td>
@@ -467,9 +467,7 @@
                                     : ($status === 'warning' ? 'warning' : 'healthy');
                                 $printerRows = is_array($store['printers'] ?? null) ? $store['printers'] : [];
                                 $storeIdText = (string)($store['storeId'] ?? '-');
-                                $storeNameRaw = trim((string)($store['storeName'] ?? 'Sin nombre'));
-                                $nameHasId = preg_match('/\b' . preg_quote($storeIdText, '/') . '\b/u', $storeNameRaw) === 1;
-                                $storeTitle = $nameHasId ? $storeNameRaw : ('#' . $storeIdText . ' - ' . $storeNameRaw);
+                                $storeTitle = $formatStoreLabel($storeIdText, $store['storeName'] ?? 'Sin nombre');
                                 $riskQueue = (int)($store['queuedCurrent'] ?? 0);
                                 $riskFailedNoRetry = (int)($store['failedWithoutRetryCurrent'] ?? 0);
                                 $riskUnassigned = (int)($store['unassignedQueueCurrent'] ?? 0);
@@ -527,9 +525,7 @@
                         $printerRows = is_array($store['printers'] ?? null) ? $store['printers'] : [];
                         $storeId = $store['storeId'] ?? null;
                         $storeIdText = (string)($storeId ?? '-');
-                        $storeNameRaw = trim((string)($store['storeName'] ?? 'Sin nombre'));
-                        $nameHasId = preg_match('/\b' . preg_quote($storeIdText, '/') . '\b/u', $storeNameRaw) === 1;
-                        $storeTitle = $nameHasId ? $storeNameRaw : ('#' . $storeIdText . ' - ' . $storeNameRaw);
+                        $storeTitle = $formatStoreLabel($storeIdText, $store['storeName'] ?? 'Sin nombre');
                         $healthReason = (string)($store['healthReason'] ?? 'Operacion normal');
                         $queuedCurrent = (int)($store['queuedCurrent'] ?? 0);
                         $failedNoRetry = (int)($store['failedWithoutRetryCurrent'] ?? 0);
@@ -678,9 +674,7 @@
                         : ($status === 'warning' ? 'warning' : 'healthy');
                     $printerRows = is_array($store['printers'] ?? null) ? $store['printers'] : [];
                     $storeIdText = (string)($store['storeId'] ?? '-');
-                    $storeNameRaw = trim((string)($store['storeName'] ?? 'Sin nombre'));
-                    $nameHasId = preg_match('/\b' . preg_quote($storeIdText, '/') . '\b/u', $storeNameRaw) === 1;
-                    $storeTitle = $nameHasId ? $storeNameRaw : ('#' . $storeIdText . ' - ' . $storeNameRaw);
+                    $storeTitle = $formatStoreLabel($storeIdText, $store['storeName'] ?? 'Sin nombre');
                 @endphp
                 <article class="dbx-store">
                     <div class="dbx-store-head">
@@ -789,9 +783,6 @@
 
         const autoRefreshEl = document.getElementById('autoRefresh');
         if (autoRefreshEl) prefs.autoRefresh = autoRefreshEl.value;
-
-        const storeLimitEl = document.getElementById('storeLimit');
-        if (storeLimitEl) prefs.storeLimit = storeLimitEl.value;
 
         const storeSortEl = document.getElementById('storeSort');
         if (storeSortEl) prefs.storeSort = storeSortEl.value;

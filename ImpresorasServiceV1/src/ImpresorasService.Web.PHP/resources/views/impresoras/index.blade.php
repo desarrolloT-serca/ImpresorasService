@@ -3,6 +3,9 @@
 @section('title', 'Impresoras')
 
 @section('content')
+@php
+    $storeNameById = collect($storeOptions ?? [])->mapWithKeys(fn ($store) => [(string) ($store['storeId'] ?? '') => $store['name'] ?? null]);
+@endphp
 @if(session('success'))
     <div class="mb-4 alert alert-success">{{ session('success') }}</div>
 @endif
@@ -18,12 +21,12 @@
                     <option value="">Todas</option>
                     @foreach($storeOptions ?? [] as $store)
                         <option value="{{ $store['storeId'] }}" {{ (string)request('storeId', '') === (string)$store['storeId'] ? 'selected' : '' }}>
-                            {{ $store['name'] }} ({{ $store['storeId'] }})
+                            {{ \App\Helpers\StoreFormat::label($store['storeId'], $store['name']) }}
                         </option>
                     @endforeach
                 </select>
                 @else
-                <input type="text" value="Tienda {{ $effectiveStoreId ?? '-' }}" class="input !w-auto" disabled>
+                <input type="text" value="{{ \App\Helpers\StoreFormat::label($effectiveStoreId ?? null, $storeNameById[(string) ($effectiveStoreId ?? '')] ?? null) }}" class="input !w-auto" disabled>
                 @endif
             </div>
             <div>
@@ -70,7 +73,8 @@
                 <td>{{ $p['printerId'] ?? $p['PrinterId'] ?? '-' }}</td>
                 <td>{{ $p['printerName'] ?? $p['PrinterName'] ?? '-' }}</td>
                 <td>{{ $p['spoolQueue'] ?? $p['SpoolQueue'] ?? '-' }}</td>
-                <td>{{ $p['storeId'] ?? $p['StoreId'] ?? '-' }}</td>
+                @php $rowStoreId = $p['storeId'] ?? $p['StoreId'] ?? null; @endphp
+                <td>{{ \App\Helpers\StoreFormat::label($rowStoreId, $storeNameById[(string) $rowStoreId] ?? null) }}</td>
                 <td>
                     <span class="badge status-chip {{ ($p['isActive'] ?? $p['IsActive'] ?? false) ? 'badge-success' : 'badge-danger' }}" aria-label="{{ ($p['isActive'] ?? $p['IsActive'] ?? false) ? 'Impresora activa' : 'Impresora inactiva' }}">
                         {{ ($p['isActive'] ?? $p['IsActive'] ?? false) ? 'Si' : 'No' }}

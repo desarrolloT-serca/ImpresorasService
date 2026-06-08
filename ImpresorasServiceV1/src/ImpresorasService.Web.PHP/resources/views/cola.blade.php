@@ -1,5 +1,8 @@
 @extends('layouts.app')
-@php use App\Helpers\DateTimeFormat; @endphp
+@php
+    use App\Helpers\DateTimeFormat;
+    $storeNameById = collect($storeOptions ?? [])->mapWithKeys(fn ($store) => [(string) ($store['storeId'] ?? '') => $store['name'] ?? null]);
+@endphp
 
 @section('title', 'Cola de impresión')
 
@@ -20,12 +23,12 @@
                         <option value="">Todas</option>
                         @foreach($storeOptions ?? [] as $store)
                             <option value="{{ $store['storeId'] }}" {{ (string)old('storeId', $storeId ?? '') === (string)$store['storeId'] ? 'selected' : '' }}>
-                                {{ $store['name'] }} ({{ $store['storeId'] }})
+                                {{ \App\Helpers\StoreFormat::label($store['storeId'], $store['name']) }}
                             </option>
                         @endforeach
                     </select>
                     @else
-                    <input id="cola-store" type="text" value="Tienda {{ $effectiveStoreId ?? '-' }}" class="input" disabled>
+                    <input id="cola-store" type="text" value="{{ \App\Helpers\StoreFormat::label($effectiveStoreId ?? null, $storeNameById[(string) ($effectiveStoreId ?? '')] ?? null) }}" class="input" disabled>
                     @endif
                 </div>
                 <div class="min-w-44">
@@ -127,7 +130,8 @@
                     <input type="checkbox" class="bulk-row" value="{{ $rowJobId ?? '' }}" aria-label="Seleccionar trabajo {{ $rowJobId ?? '' }}" {{ $rowCanBulk ? '' : 'disabled' }} />
                 </td>
                 <td class="long-text-col"><code class="external-job-id" title="{{ $job['externalJobId'] ?? $job['ExternalJobId'] ?? '-' }}">{{ $job['externalJobId'] ?? $job['ExternalJobId'] ?? '-' }}</code></td>
-                <td class="number-col">{{ $job['storeId'] ?? $job['StoreId'] ?? '-' }}</td>
+                @php $rowStoreId = $job['storeId'] ?? $job['StoreId'] ?? null; @endphp
+                <td class="number-col">{{ \App\Helpers\StoreFormat::label($rowStoreId, $storeNameById[(string) $rowStoreId] ?? null) }}</td>
                 <td>{{ $job['documentType'] ?? $job['DocumentType'] ?? '-' }}</td>
                 @php
                     $stRaw = $job['_status'] ?? $job['status'] ?? $job['Status'] ?? null;

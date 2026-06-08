@@ -3,6 +3,9 @@
 @section('title', 'Reglas de enrutado')
 
 @section('content')
+@php
+    $storeNameById = collect($storeOptions ?? [])->mapWithKeys(fn ($store) => [(string) ($store['storeId'] ?? '') => $store['name'] ?? null]);
+@endphp
 @if(session('success'))
     <div class="mb-4 alert alert-success">{{ session('success') }}</div>
 @endif
@@ -17,7 +20,7 @@
                     <option value="">Todas</option>
                     @foreach($storeOptions ?? [] as $store)
                         <option value="{{ $store['storeId'] }}" {{ (string)request('storeId', '') === (string)$store['storeId'] ? 'selected' : '' }}>
-                            {{ $store['name'] }} ({{ $store['storeId'] }})
+                            {{ \App\Helpers\StoreFormat::label($store['storeId'], $store['name']) }}
                         </option>
                     @endforeach
                 </select>
@@ -63,7 +66,8 @@
             <tr>
                 <td>{{ $r['ruleId'] ?? $r['RuleId'] ?? '-' }}</td>
                 <td>{{ $r['priority'] ?? $r['Priority'] ?? '-' }}</td>
-                <td>{{ $r['storeId'] ?? $r['StoreId'] ?? '-' }}</td>
+                @php $rowStoreId = $r['storeId'] ?? $r['StoreId'] ?? null; @endphp
+                <td>{{ \App\Helpers\StoreFormat::label($rowStoreId, $storeNameById[(string) $rowStoreId] ?? null) }}</td>
                 <td>{{ $r['documentType'] ?? $r['DocumentType'] ?? '-' }}</td>
                 <td>{{ $r['channel'] ?? $r['Channel'] ?? '-' }}</td>
                 <td>{{ ($r['printer'] ?? null) ? ($r['printer']['printerName'] ?? $r['printer']['PrinterName'] ?? $r['printerId'] ?? $r['PrinterId']) : ($r['printerId'] ?? $r['PrinterId'] ?? '-') }}</td>

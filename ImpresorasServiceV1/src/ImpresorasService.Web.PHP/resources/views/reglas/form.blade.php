@@ -3,6 +3,9 @@
 @section('title', $rule ? 'Editar regla' : 'Nueva regla')
 
 @section('content')
+@php
+    $storeNameById = collect($storeOptions ?? [])->mapWithKeys(fn ($store) => [(string) ($store['storeId'] ?? '') => $store['name'] ?? null]);
+@endphp
 <x-ui.card class="max-w-2xl">
 <form method="POST" action="{{ $rule ? route('reglas.update', $rule['ruleId'] ?? $rule['RuleId'] ?? 0) : route('reglas.store') }}" class="dbx-form-grid">
     @csrf
@@ -18,7 +21,7 @@
         <label for="storeId" class="form-label">Tienda (opcional)</label>
         @if($storeIdLocked ?? false)
         <input type="hidden" name="storeId" value="{{ $effectiveStoreId ?? '' }}">
-        <input type="number" id="storeId" value="{{ $effectiveStoreId ?? '' }}" disabled class="input opacity-70 cursor-not-allowed">
+        <input type="text" id="storeId" value="{{ \App\Helpers\StoreFormat::label($effectiveStoreId ?? null, $storeNameById[(string) ($effectiveStoreId ?? '')] ?? null) }}" disabled class="input opacity-70 cursor-not-allowed">
         <p class="form-hint">Fijado a tu tienda (Jefe de tienda)</p>
         @else
         @php $selectedStoreId = old('storeId', $rule ? ($rule['storeId'] ?? $rule['StoreId'] ?? '') : ''); @endphp
@@ -26,7 +29,7 @@
             <option value="">Todas las tiendas</option>
             @foreach($storeOptions ?? [] as $store)
                 <option value="{{ $store['storeId'] }}" {{ (string)$selectedStoreId === (string)$store['storeId'] ? 'selected' : '' }}>
-                    {{ $store['name'] }} ({{ $store['storeId'] }})
+                    {{ \App\Helpers\StoreFormat::label($store['storeId'], $store['name']) }}
                 </option>
             @endforeach
         </select>

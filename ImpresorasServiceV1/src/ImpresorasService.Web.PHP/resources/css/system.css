@@ -1164,6 +1164,7 @@ html.dark .btn-warning {
 .dbx-diagnostic-reason {
     display: inline-flex;
     align-items: center;
+    width: max-content;
     min-height: 22px;
     max-width: 100%;
     margin-top: 6px;
@@ -1174,9 +1175,8 @@ html.dark .btn-warning {
     font-size: 0.72rem;
     font-weight: 800;
     line-height: 1.2;
-    overflow: hidden;
-    padding: 4px 7px;
-    text-overflow: ellipsis;
+    overflow-wrap: anywhere;
+    padding: 0.18rem 0.55rem;
     white-space: nowrap;
 }
 

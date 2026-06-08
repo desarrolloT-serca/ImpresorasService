@@ -33,14 +33,6 @@
                     </select>
                 </div>
                 <div class="dbx-filter-item">
-                    <label for="storeLimit" class="dbx-filter-label">Tiendas</label>
-                    <select id="storeLimit" name="storeLimit" class="select !w-auto" data-current="{{ $storeLimit }}">
-                        @foreach([4, 8, 12, 24] as $limitOption)
-                            <option value="{{ $limitOption }}" {{ $storeLimit === $limitOption ? 'selected' : '' }}>{{ $limitOption }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                <div class="dbx-filter-item">
                     <label for="storeSort" class="dbx-filter-label">Orden</label>
                     <select id="storeSort" name="storeSort" class="select !w-auto" data-current="{{ $storeSort }}">
                         <option value="severity" {{ $storeSort === 'severity' ? 'selected' : '' }}>Severidad</option>
