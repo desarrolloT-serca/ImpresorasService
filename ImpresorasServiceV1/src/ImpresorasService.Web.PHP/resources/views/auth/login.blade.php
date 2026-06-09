@@ -13,6 +13,15 @@
     @else
         <script src="https://cdn.tailwindcss.com"></script>
     @endif
+    <script>
+        (function() {
+            var t = localStorage.getItem('theme');
+            if (t === 'dark') {
+                document.documentElement.setAttribute('data-theme', 'dark');
+                document.documentElement.classList.add('dark');
+            }
+        })();
+    </script>
 </head>
 <body class="login-page">
     <main class="login-shell">

@@ -5,8 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'Impresoras Service')</title>
-    <link rel="preconnect" href="https://fonts.bunny.net">
-    <link href="https://fonts.bunny.net/css?family=poppins:400,500,600,700" rel="stylesheet" />
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @yield('page_styles')
     @vite('resources/css/dbx.css')
@@ -32,18 +30,42 @@
             </div>
 
             <nav class="app-nav">
-                <a href="{{ route('dashboard') }}" class="app-nav-link {{ request()->routeIs('dashboard') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('dashboard')) aria-current="page" @endif>Dashboard</a>
-                <a href="{{ url('/cola') }}" class="app-nav-link {{ request()->is('cola*') ? 'app-nav-link-active' : '' }}" @if(request()->is('cola*')) aria-current="page" @endif>Cola</a>
+                <a href="{{ route('dashboard') }}" class="app-nav-link {{ request()->routeIs('dashboard') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('dashboard')) aria-current="page" @endif>
+                    <svg class="nav-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                    Dashboard
+                </a>
+                <a href="{{ url('/cola') }}" class="app-nav-link {{ request()->is('cola*') ? 'app-nav-link-active' : '' }}" @if(request()->is('cola*')) aria-current="page" @endif>
+                    <svg class="nav-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+                    Cola
+                </a>
                 @if(($isStoreManager ?? false) || ($isAdmin ?? false))
-                    <a href="{{ route('impresoras.index') }}" class="app-nav-link {{ request()->routeIs('impresoras.*') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('impresoras.*')) aria-current="page" @endif>Impresoras</a>
+                    <a href="{{ route('impresoras.index') }}" class="app-nav-link {{ request()->routeIs('impresoras.*') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('impresoras.*')) aria-current="page" @endif>
+                        <svg class="nav-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>
+                        Impresoras
+                    </a>
                 @endif
                 @if($isAdmin ?? false)
-                    <a href="{{ route('reglas.index') }}" class="app-nav-link {{ request()->routeIs('reglas.*') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('reglas.*')) aria-current="page" @endif>Reglas</a>
-                    <a href="{{ route('tiendas.index') }}" class="app-nav-link {{ request()->routeIs('tiendas.*') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('tiendas.*')) aria-current="page" @endif>Tiendas</a>
-                    <a href="{{ route('usuarios.index') }}" class="app-nav-link {{ request()->routeIs('usuarios.*') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('usuarios.*')) aria-current="page" @endif>Usuarios</a>
-                    <a href="{{ route('ajustes.index') }}" class="app-nav-link {{ request()->routeIs('ajustes.*') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('ajustes.*')) aria-current="page" @endif>Ajustes</a>
+                    <a href="{{ route('reglas.index') }}" class="app-nav-link {{ request()->routeIs('reglas.*') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('reglas.*')) aria-current="page" @endif>
+                        <svg class="nav-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="12" y2="18"/><polyline points="15 15 18 18 21 15"/><line x1="18" y1="18" x2="18" y2="11"/></svg>
+                        Reglas
+                    </a>
+                    <a href="{{ route('tiendas.index') }}" class="app-nav-link {{ request()->routeIs('tiendas.*') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('tiendas.*')) aria-current="page" @endif>
+                        <svg class="nav-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                        Tiendas
+                    </a>
+                    <a href="{{ route('usuarios.index') }}" class="app-nav-link {{ request()->routeIs('usuarios.*') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('usuarios.*')) aria-current="page" @endif>
+                        <svg class="nav-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                        Usuarios
+                    </a>
+                    <a href="{{ route('ajustes.index') }}" class="app-nav-link {{ request()->routeIs('ajustes.*') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('ajustes.*')) aria-current="page" @endif>
+                        <svg class="nav-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                        Ajustes
+                    </a>
                 @endif
-                <a href="{{ url('/alertas') }}" class="app-nav-link {{ request()->is('alertas*') ? 'app-nav-link-active' : '' }}" @if(request()->is('alertas*')) aria-current="page" @endif>Alertas</a>
+                <a href="{{ url('/alertas') }}" class="app-nav-link {{ request()->is('alertas*') ? 'app-nav-link-active' : '' }}" @if(request()->is('alertas*')) aria-current="page" @endif>
+                    <svg class="nav-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                    Alertas
+                </a>
             </nav>
             <div class="app-sidebar-footer">
                 <button type="button" id="theme-toggle" class="btn btn-ghost theme-toggle" title="Cambiar tema" aria-label="Cambiar tema">

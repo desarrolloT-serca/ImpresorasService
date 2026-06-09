@@ -184,9 +184,17 @@
         : null;
 @endphp
 <nav class="dbx-pagination" aria-label="Paginacion de trabajos de cola">
-    <a class="btn btn-ghost {{ $prevUrl ? '' : 'is-disabled' }}" href="{{ $prevUrl ?? '#' }}" aria-disabled="{{ $prevUrl ? 'false' : 'true' }}">Anterior</a>
+    @if($prevUrl)
+        <a class="btn btn-ghost" href="{{ $prevUrl }}">Anterior</a>
+    @else
+        <span class="btn btn-ghost is-disabled" aria-disabled="true" tabindex="-1">Anterior</span>
+    @endif
     <span class="dbx-pagination-status">Pagina {{ $page ?? 1 }} de {{ $lastPage ?? 1 }}</span>
-    <a class="btn btn-ghost {{ $nextUrl ? '' : 'is-disabled' }}" href="{{ $nextUrl ?? '#' }}" aria-disabled="{{ $nextUrl ? 'false' : 'true' }}">Siguiente</a>
+    @if($nextUrl)
+        <a class="btn btn-ghost" href="{{ $nextUrl }}">Siguiente</a>
+    @else
+        <span class="btn btn-ghost is-disabled" aria-disabled="true" tabindex="-1">Siguiente</span>
+    @endif
 </nav>
 </x-ui.card>
 </div>

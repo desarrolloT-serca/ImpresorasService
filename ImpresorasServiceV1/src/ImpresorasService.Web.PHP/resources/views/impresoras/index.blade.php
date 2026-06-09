@@ -150,7 +150,7 @@
                             <td class="text-col dbx-printer-text-cell" title="{{ $host !== '' ? $host : 'Sin host configurado' }}">{{ $host !== '' ? $host : '-' }}</td>
                             <td class="status-col">
                                 <span class="badge status-chip {{ $isActive ? 'badge-success' : 'badge-danger' }}" aria-label="{{ $isActive ? 'Impresora activa' : 'Impresora inactiva' }}">
-                                    {{ $isActive ? 'Si' : 'No' }}
+                                    {{ $isActive ? 'Sí' : 'No' }}
                                 </span>
                             </td>
                             <td class="status-col">

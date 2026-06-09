@@ -107,7 +107,7 @@
                             <td class="text-col">{{ ($r['printer'] ?? null) ? ($r['printer']['printerName'] ?? $r['printer']['PrinterName'] ?? $r['printerId'] ?? $r['PrinterId']) : ($r['printerId'] ?? $r['PrinterId'] ?? '-') }}</td>
                             <td class="status-col">
                                 <span class="badge status-chip {{ $isActive ? 'badge-success' : 'badge-danger' }}" aria-label="{{ $isActive ? 'Regla activa' : 'Regla inactiva' }}">
-                                    {{ $isActive ? 'Si' : 'No' }}
+                                    {{ $isActive ? 'Sí' : 'No' }}
                                 </span>
                             </td>
                             <td class="actions-col">

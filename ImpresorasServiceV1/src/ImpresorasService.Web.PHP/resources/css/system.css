@@ -125,6 +125,9 @@ html.dark .app-shell .app-sidebar {
 }
 
 .app-nav-link {
+    display: flex;
+    align-items: center;
+    gap: 9px;
     min-height: 40px;
     border: 1px solid transparent;
     border-left: 4px solid transparent;
@@ -135,6 +138,17 @@ html.dark .app-shell .app-sidebar {
     letter-spacing: 0.025em;
     padding: 9px 10px;
     text-transform: uppercase;
+}
+
+.nav-icon {
+    flex-shrink: 0;
+    opacity: 0.75;
+    /* width/height, fill, stroke se definen en el atributo HTML para máxima compatibilidad */
+}
+
+.app-nav-link-active .nav-icon,
+.app-nav-link:hover .nav-icon {
+    opacity: 1;
 }
 
 .app-nav-link:hover {
@@ -232,6 +246,79 @@ html.dark .app-shell .app-sidebar {
 .muted-text,
 .form-hint {
     color: var(--ui-text-muted);
+}
+
+.form-hint {
+    margin-top: 4px;
+    font-size: 0.76rem;
+}
+
+.field-error {
+    margin-top: 4px;
+    color: var(--ui-danger);
+    font-size: 0.76rem;
+    font-weight: 700;
+}
+
+.dbx-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    font-size: 0.86rem;
+    font-weight: 700;
+    color: var(--ui-text);
+    user-select: none;
+}
+
+.dbx-toggle input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 36px;
+    height: 20px;
+    border: 1px solid var(--ui-border-strong);
+    border-radius: 10px;
+    background: var(--ui-surface-soft);
+    cursor: pointer;
+    position: relative;
+    flex-shrink: 0;
+    transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.dbx-toggle input[type="checkbox"]::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--ui-text-muted);
+    transition: transform 0.18s ease, background 0.18s ease;
+}
+
+.dbx-toggle input[type="checkbox"]:checked {
+    background: var(--ui-primary);
+    border-color: var(--ui-primary);
+}
+
+.dbx-toggle input[type="checkbox"]:checked::after {
+    transform: translateX(16px);
+    background: #ffffff;
+}
+
+.dbx-toggle input[type="checkbox"]:focus-visible {
+    outline: none;
+    box-shadow: var(--ui-focus);
+}
+
+html.dark .dbx-toggle input[type="checkbox"] {
+    background: var(--ui-surface-raised);
+    border-color: var(--ui-border-strong);
+}
+
+html.dark .dbx-toggle input[type="checkbox"]::after {
+    background: var(--ui-text-muted);
 }
 
 .btn {

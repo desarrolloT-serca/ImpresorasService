@@ -10,45 +10,6 @@
         'Segoe UI Symbol', 'Noto Color Emoji';
 }
 
-:root {
-    --ui-bg: #f3f5f9;
-    --ui-surface: #ffffff;
-    --ui-surface-soft: #f7f8fc;
-    --ui-text: #1e293b;
-    --ui-text-muted: #64748b;
-    --ui-border: #e2e8f0;
-    --ui-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
-    --ui-radius: 14px;
-    --ui-primary: #1a237e;
-    --ui-primary-strong: #111a5f;
-    --ui-primary-soft: #e8ebff;
-    --ui-success: #1b8f5f;
-    --ui-danger: #c62828;
-    --ui-warning: #c07a0a;
-}
-
-html.dark {
-    --ui-bg: #0f172a;
-    --ui-surface: #1b2435;
-    --ui-surface-soft: #121a2a;
-    --ui-text: #e2e8f0;
-    --ui-text-muted: #a5b4c9;
-    --ui-border: #2f3a4f;
-    --ui-shadow: 0 10px 30px rgba(2, 6, 23, 0.5);
-    --ui-primary: #6f7ee8;
-    --ui-primary-strong: #8794ef;
-    --ui-primary-soft: #26315e;
-    --ui-success: #34d399;
-    --ui-danger: #f87171;
-    --ui-warning: #f59e0b;
-}
-
-body {
-    font-family: 'Poppins', var(--font-sans), sans-serif;
-    background: var(--ui-bg);
-    color: var(--ui-text);
-}
-
 .app-shell {
     display: flex;
     min-height: 100vh;
@@ -853,62 +814,6 @@ textarea::placeholder {
     }
 }
 
-/* --- Sprint 3 visual system: compact, cohesive operational UI --- */
-:root {
-    --ui-bg: #eef2f5;
-    --ui-surface: #ffffff;
-    --ui-surface-soft: #f6f8fb;
-    --ui-surface-raised: #ffffff;
-    --ui-text: #172033;
-    --ui-text-muted: #667085;
-    --ui-border: #d8dee8;
-    --ui-border-strong: #c7d0dd;
-    --ui-shadow: 0 8px 22px rgba(21, 32, 51, 0.07);
-    --ui-shadow-soft: 0 1px 2px rgba(21, 32, 51, 0.06);
-    --ui-radius: 8px;
-    --ui-radius-sm: 6px;
-    --ui-primary: #0f766e;
-    --ui-primary-strong: #115e59;
-    --ui-primary-soft: #dff5f1;
-    --ui-accent: #2563eb;
-    --ui-accent-soft: #e8efff;
-    --ui-success: #16815d;
-    --ui-danger: #c2413b;
-    --ui-warning: #b7791f;
-    --ui-nav: #172033;
-    --ui-nav-strong: #111827;
-}
-
-html.dark {
-    --ui-bg: #101721;
-    --ui-surface: #182231;
-    --ui-surface-soft: #111a26;
-    --ui-surface-raised: #1d2939;
-    --ui-text: #edf2f7;
-    --ui-text-muted: #a8b3c4;
-    --ui-border: #2d3848;
-    --ui-border-strong: #3b4658;
-    --ui-shadow: 0 10px 28px rgba(0, 0, 0, 0.34);
-    --ui-shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.28);
-    --ui-primary: #2dd4bf;
-    --ui-primary-strong: #5eead4;
-    --ui-primary-soft: #143c3a;
-    --ui-accent: #60a5fa;
-    --ui-accent-soft: #182c4f;
-    --ui-success: #34d399;
-    --ui-danger: #fb7185;
-    --ui-warning: #fbbf24;
-    --ui-nav: #0b1220;
-    --ui-nav-strong: #070d18;
-}
-
-body {
-    background:
-        linear-gradient(180deg, color-mix(in srgb, var(--ui-accent-soft) 42%, var(--ui-bg)) 0%, var(--ui-bg) 34rem);
-    color: var(--ui-text);
-    letter-spacing: 0;
-}
-
 .app-sidebar {
     background: linear-gradient(180deg, var(--ui-nav) 0%, var(--ui-nav-strong) 100%);
     border-right: 1px solid color-mix(in srgb, #ffffff 9%, transparent);
@@ -1094,52 +999,6 @@ html.dark .app-sidebar {
 .store-card,
 .store-printers-list {
     box-shadow: var(--ui-shadow-soft);
-}
-
-/* --- Sprint 3 visible redesign pass --- */
-:root {
-    --ui-bg: #e9eef3;
-    --ui-surface: #ffffff;
-    --ui-surface-soft: #f2f6f9;
-    --ui-surface-raised: #ffffff;
-    --ui-text: #16202e;
-    --ui-text-muted: #607080;
-    --ui-border: #d3dce5;
-    --ui-border-strong: #b8c5d2;
-    --ui-shadow: 0 12px 28px rgba(21, 32, 46, 0.09);
-    --ui-shadow-soft: 0 2px 7px rgba(21, 32, 46, 0.06);
-    --ui-primary: #0f766e;
-    --ui-primary-strong: #0b5d58;
-    --ui-primary-soft: #d9f3ef;
-    --ui-accent: #2f6f9f;
-    --ui-accent-soft: #e2edf4;
-    --ui-nav: #ffffff;
-    --ui-nav-strong: #f5f8fb;
-}
-
-html.dark {
-    --ui-bg: #0f1722;
-    --ui-surface: #182433;
-    --ui-surface-soft: #111c29;
-    --ui-surface-raised: #1d2a3a;
-    --ui-text: #edf4f8;
-    --ui-text-muted: #a9b8c7;
-    --ui-border: #2b3a4c;
-    --ui-border-strong: #425166;
-    --ui-nav: #111b27;
-    --ui-nav-strong: #0c1420;
-}
-
-body {
-    background:
-        radial-gradient(circle at top left, color-mix(in srgb, var(--ui-primary-soft) 55%, transparent) 0, transparent 22rem),
-        linear-gradient(180deg, #f6f8fa 0%, var(--ui-bg) 17rem);
-}
-
-html.dark body {
-    background:
-        radial-gradient(circle at top left, color-mix(in srgb, var(--ui-primary-soft) 45%, transparent) 0, transparent 22rem),
-        linear-gradient(180deg, #111c29 0%, var(--ui-bg) 18rem);
 }
 
 .app-shell .app-sidebar {
