@@ -31,6 +31,11 @@ public static class RoleCatalog
 
     public static bool IsValidForPersistence(string? role)
     {
-        return AllowedRoles.Contains(Normalize(role), StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(role))
+            return false;
+
+        var trimmed = role.Trim();
+        return AllowedRoles.Contains(trimmed, StringComparer.OrdinalIgnoreCase)
+            || string.Equals(trimmed, LegacySupervisor, StringComparison.OrdinalIgnoreCase);
     }
 }

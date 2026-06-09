@@ -4,6 +4,7 @@ using ImpresorasService.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace ImpresorasService.Api.Controllers;
 
@@ -147,6 +148,21 @@ public class UsersController : ControllerBase
         if (user is null)
             return NotFound();
 
+        if (IsCurrentUser(user))
+            return Conflict(new { error = "No puedes eliminar tu propio usuario." });
+
+        if (RoleCatalog.Normalize(user.Role) == RoleCatalog.Admin)
+        {
+            var remainingRoles = await _dbContext.Users
+                .AsNoTracking()
+                .Where(x => x.UserId != id)
+                .Select(x => x.Role)
+                .ToListAsync(cancellationToken);
+            var hasRemainingAdmin = remainingRoles.Any(role => RoleCatalog.Normalize(role) == RoleCatalog.Admin);
+            if (!hasRemainingAdmin)
+                return Conflict(new { error = "No se puede eliminar el ultimo administrador." });
+        }
+
         _dbContext.Users.Remove(user);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -197,9 +213,33 @@ public class UsersController : ControllerBase
             var storeIdValue = storeId.GetValueOrDefault();
             if (storeIdValue <= 0)
                 return "La tienda seleccionada no existe o esta inactiva.";
+
+            var storeIsActive = (await _dbContext.Stores
+                .AsNoTracking()
+                .Where(x => x.StoreId == storeIdValue && x.IsActive)
+                .Select(x => x.StoreId)
+                .Take(1)
+                .ToListAsync(ct))
+                .Count > 0;
+            if (!storeIsActive)
+                return "La tienda seleccionada no existe o esta inactiva.";
         }
 
         return null;
+    }
+
+    private bool IsCurrentUser(User user)
+    {
+        var claimUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (int.TryParse(claimUserId, out var currentUserId) && currentUserId == user.UserId)
+            return true;
+
+        var claimLogin = User.FindFirstValue("Login")
+            ?? User.FindFirstValue(ClaimTypes.Name)
+            ?? User.Identity?.Name;
+
+        return !string.IsNullOrWhiteSpace(claimLogin)
+            && string.Equals(claimLogin.Trim(), user.Login, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool NeedsStore(string normalizedRole)

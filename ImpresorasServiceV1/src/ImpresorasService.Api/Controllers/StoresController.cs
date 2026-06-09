@@ -35,13 +35,33 @@ public class StoresController : ControllerBase
             {
                 x.StoreId,
                 x.Name,
-                x.IsActive,
-                UsersCount = _dbContext.Users.Count(u => u.StoreId == x.StoreId),
-                PrintersCount = _dbContext.Printers.Count(p => p.StoreId == x.StoreId)
+                x.IsActive
             })
             .ToListAsync(cancellationToken);
 
-        return Ok(stores);
+        var userCounts = await _dbContext.Users
+            .AsNoTracking()
+            .Where(x => x.StoreId.HasValue)
+            .GroupBy(x => x.StoreId!.Value)
+            .Select(x => new { StoreId = x.Key, Count = x.Count() })
+            .ToDictionaryAsync(x => x.StoreId, x => x.Count, cancellationToken);
+
+        var printerCounts = await _dbContext.Printers
+            .AsNoTracking()
+            .GroupBy(x => x.StoreId)
+            .Select(x => new { StoreId = x.Key, Count = x.Count() })
+            .ToDictionaryAsync(x => x.StoreId, x => x.Count, cancellationToken);
+
+        var result = stores.Select(x => new
+        {
+            x.StoreId,
+            x.Name,
+            x.IsActive,
+            UsersCount = userCounts.TryGetValue(x.StoreId, out var usersCount) ? usersCount : 0,
+            PrintersCount = printerCounts.TryGetValue(x.StoreId, out var printersCount) ? printersCount : 0
+        });
+
+        return Ok(result);
     }
 
     [HttpGet("{storeId:int}")]
@@ -203,6 +223,7 @@ public class StoresController : ControllerBase
             });
         }
 
+        await using var softDeleteTx = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
         var nowText = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss");
         var affectedPrinters = await _dbContext.Database.ExecuteSqlInterpolatedAsync(
             $"UPDATE \"printer_printer\" SET \"is_active\" = FALSE, \"updated_at_utc\" = {nowText} WHERE \"store_id\" = {storeId} AND \"is_active\" = TRUE",
@@ -210,6 +231,7 @@ public class StoresController : ControllerBase
         await _dbContext.Database.ExecuteSqlInterpolatedAsync(
             $"UPDATE \"printer_store\" SET \"is_active\" = FALSE, \"updated_at_utc\" = {nowText} WHERE \"store_id\" = {storeId}",
             cancellationToken);
+        await softDeleteTx.CommitAsync(cancellationToken);
 
         return Ok(new
         {

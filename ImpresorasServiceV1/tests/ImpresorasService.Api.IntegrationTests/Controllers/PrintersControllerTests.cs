@@ -1,6 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
 using ImpresorasService.Api.IntegrationTests;
+using ImpresorasService.Domain.Entities;
+using ImpresorasService.Infrastructure.Persistence;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace ImpresorasService.Api.IntegrationTests.Controllers;
@@ -123,6 +126,29 @@ public sealed class PrintersControllerTests : IntegrationTestBase
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
     }
 
+    [Fact]
+    public async Task Create_WithUnknownStore_Returns400()
+    {
+        var spool = $"\\\\srv\\q{Guid.NewGuid():N}"[..30];
+        var request = new { printerName = "P1", spoolQueue = spool, storeId = 99999, isActive = true };
+
+        var response = await Client.PostAsJsonAsync("/api/printers", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Create_WithInactiveStore_Returns400()
+    {
+        await SeedStoreAsync(97, isActive: false);
+        var spool = $"\\\\srv\\q{Guid.NewGuid():N}"[..30];
+        var request = new { printerName = "P1", spoolQueue = spool, storeId = 97, isActive = true };
+
+        var response = await Client.PostAsJsonAsync("/api/printers", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     #endregion
 
     #region PUT /api/printers/{id}
@@ -168,6 +194,19 @@ public sealed class PrintersControllerTests : IntegrationTestBase
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
     }
 
+    [Fact]
+    public async Task Update_WithUnknownStore_Returns400()
+    {
+        var q1 = $"\\\\srv\\q{Guid.NewGuid():N}"[..30];
+        var q2 = $"\\\\srv\\q{Guid.NewGuid():N}"[..30];
+        var created = await CreatePrinterAsync("P1", q1, 1);
+        var request = new { printerName = "P1", spoolQueue = q2, storeId = 99999, isActive = true };
+
+        var response = await Client.PutAsJsonAsync($"/api/printers/{created.PrinterId}", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     #endregion
 
     #region DELETE /api/printers/{id}
@@ -210,6 +249,31 @@ public sealed class PrintersControllerTests : IntegrationTestBase
         var printer = await response.Content.ReadFromJsonAsync<PrinterDto>();
         Assert.NotNull(printer);
         return printer;
+    }
+
+    private async Task SeedStoreAsync(int storeId, bool isActive)
+    {
+        using var scope = Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
+        var store = await db.Stores.FindAsync(storeId);
+        if (store is null)
+        {
+            db.Stores.Add(new Store
+            {
+                StoreId = storeId,
+                Name = $"Store {storeId}",
+                IsActive = isActive,
+                CreatedAtUtc = DateTimeOffset.UtcNow,
+                UpdatedAtUtc = DateTimeOffset.UtcNow
+            });
+        }
+        else
+        {
+            store.IsActive = isActive;
+            store.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        }
+
+        await db.SaveChangesAsync();
     }
 
     private sealed record PrinterDto(

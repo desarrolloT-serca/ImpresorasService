@@ -71,7 +71,7 @@ public class PrintersController : ControllerBase
     [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> Create([FromBody] CreatePrinterRequest request, CancellationToken cancellationToken)
     {
-        if (request.StoreId <= 0)
+        if (!await ActiveStoreExistsAsync(request.StoreId, cancellationToken))
             return BadRequest(new { error = "La tienda especificada no existe o esta inactiva." });
 
         var exists = (await _dbContext.Printers
@@ -115,7 +115,7 @@ public class PrintersController : ControllerBase
         if (printer is null)
             return NotFound();
 
-        if (request.StoreId <= 0)
+        if (!await ActiveStoreExistsAsync(request.StoreId, cancellationToken))
             return BadRequest(new { error = "La tienda especificada no existe o esta inactiva." });
 
         var duplicate = (await _dbContext.Printers
@@ -309,6 +309,20 @@ public class PrintersController : ControllerBase
     }
 
     private bool IsAdmin() => User.IsInRole("Admin");
+
+    private async Task<bool> ActiveStoreExistsAsync(int storeId, CancellationToken cancellationToken)
+    {
+        if (storeId <= 0)
+            return false;
+
+        return (await _dbContext.Stores
+            .AsNoTracking()
+            .Where(x => x.StoreId == storeId && x.IsActive)
+            .Select(x => x.StoreId)
+            .Take(1)
+            .ToListAsync(cancellationToken))
+            .Count > 0;
+    }
 
     private int? GetCurrentUserStoreId()
     {
