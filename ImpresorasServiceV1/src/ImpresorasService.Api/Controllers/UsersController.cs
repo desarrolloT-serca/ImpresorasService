@@ -80,12 +80,15 @@ public class UsersController : ControllerBase
         if (exists)
             return Conflict(new { error = "Ya existe un usuario con ese login." });
 
+        if (!RoleCatalog.TryNormalize(request.Role, out var role))
+            return BadRequest(new { error = "El rol no es valido." });
+
         var user = new User
         {
             Login = request.Login.Trim(),
             DisplayName = string.IsNullOrWhiteSpace(request.DisplayName) ? request.Login.Trim() : request.DisplayName.Trim(),
-            Role = RoleCatalog.Normalize(request.Role),
-            StoreId = NeedsStore(RoleCatalog.Normalize(request.Role)) ? request.StoreId : null,
+            Role = role,
+            StoreId = NeedsStore(role) ? request.StoreId : null,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password.Trim(), BCrypt.Net.BCrypt.GenerateSalt(10))
         };
 
@@ -109,16 +112,18 @@ public class UsersController : ControllerBase
         if (user is null)
             return NotFound();
 
-        var role = RoleCatalog.Normalize(request.Role);
         var validationError = await ValidateRequestAsync(
             request.Login,
             request.Password ?? "placeholder",
-            role,
+            request.Role,
             request.StoreId,
             cancellationToken,
             id);
         if (validationError is not null)
             return BadRequest(new { error = validationError });
+
+        if (!RoleCatalog.TryNormalize(request.Role, out var role))
+            return BadRequest(new { error = "El rol no es valido." });
 
         user.Login = request.Login.Trim();
         user.DisplayName = string.IsNullOrWhiteSpace(request.DisplayName) ? request.Login.Trim() : request.DisplayName.Trim();
@@ -182,10 +187,9 @@ public class UsersController : ControllerBase
         if (login.Trim().Length < 3)
             return "El login debe tener al menos 3 caracteres.";
 
-        if (!RoleCatalog.IsValidForPersistence(role))
+        if (!RoleCatalog.TryNormalize(role, out var normalizedRole))
             return "El rol no es valido.";
 
-        var normalizedRole = RoleCatalog.Normalize(role);
         if (NeedsStore(normalizedRole) && (!storeId.HasValue || storeId <= 0))
             return "Debe indicar una tienda para el rol seleccionado.";
 

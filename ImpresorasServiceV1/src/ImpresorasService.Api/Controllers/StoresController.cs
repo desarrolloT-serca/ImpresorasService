@@ -140,13 +140,12 @@ public class StoresController : ControllerBase
         [FromQuery] bool purgeHistory = false,
         CancellationToken cancellationToken = default)
     {
-        var storeExists = await _dbContext.Stores
+        var storeState = await _dbContext.Stores
             .AsNoTracking()
             .Where(x => x.StoreId == storeId)
-            .Select(x => x.StoreId)
-            .Take(1)
-            .ToListAsync(cancellationToken);
-        if (storeExists.Count == 0)
+            .Select(x => new { x.StoreId, x.IsActive })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (storeState is null)
             return NotFound();
 
         if (hardDelete)
@@ -220,6 +219,15 @@ public class StoresController : ControllerBase
                 message = purgeHistory
                     ? "Tienda eliminada definitivamente junto con su historico."
                     : "Tienda eliminada definitivamente."
+            });
+        }
+
+        if (!storeState.IsActive)
+        {
+            return Ok(new
+            {
+                message = "La tienda ya estaba desactivada.",
+                affectedPrinters = 0
             });
         }
 

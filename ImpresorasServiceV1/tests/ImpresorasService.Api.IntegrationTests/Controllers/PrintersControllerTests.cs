@@ -115,6 +115,68 @@ public sealed class PrintersControllerTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task Create_TrimsFieldsAndEmptyCapabilitiesBecomesNull()
+    {
+        var spool = $"\\\\srv\\q{Guid.NewGuid():N}"[..30];
+        var request = new
+        {
+            printerName = "  P1  ",
+            spoolQueue = $"  {spool}  ",
+            host = "  srv  ",
+            storeId = 1,
+            isActive = true,
+            capabilitiesJson = "   "
+        };
+
+        var response = await Client.PostAsJsonAsync("/api/printers", request);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var printer = await response.Content.ReadFromJsonAsync<PrinterDto>();
+        Assert.NotNull(printer);
+        Assert.Equal("P1", printer.PrinterName);
+        Assert.Equal(spool, printer.SpoolQueue);
+        Assert.Equal("srv", printer.Host);
+        Assert.Null(printer.CapabilitiesJson);
+    }
+
+    [Fact]
+    public async Task Create_WithBlankPrinterName_Returns400()
+    {
+        var request = new { printerName = "   ", spoolQueue = "\\\\srv\\q1", storeId = 1, isActive = true };
+
+        var response = await Client.PostAsJsonAsync("/api/printers", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Create_WithBlankSpoolQueue_Returns400()
+    {
+        var request = new { printerName = "P1", spoolQueue = "   ", storeId = 1, isActive = true };
+
+        var response = await Client.PostAsJsonAsync("/api/printers", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Create_WithInvalidCapabilitiesJson_Returns400()
+    {
+        var request = new
+        {
+            printerName = "P1",
+            spoolQueue = "\\\\srv\\q1",
+            storeId = 1,
+            isActive = true,
+            capabilitiesJson = "{invalid"
+        };
+
+        var response = await Client.PostAsJsonAsync("/api/printers", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Create_WithDuplicateStoreIdAndSpoolQueue_Returns409()
     {
         var spool = $"\\\\srv\\q{Guid.NewGuid():N}"[..30];
@@ -207,6 +269,18 @@ public sealed class PrintersControllerTests : IntegrationTestBase
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    [Fact]
+    public async Task Update_WithBlankPrinterName_Returns400()
+    {
+        var q1 = $"\\\\srv\\q{Guid.NewGuid():N}"[..30];
+        var created = await CreatePrinterAsync("P1", q1, 1);
+        var request = new { printerName = "   ", spoolQueue = q1, storeId = 1, isActive = true };
+
+        var response = await Client.PutAsJsonAsync($"/api/printers/{created.PrinterId}", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     #endregion
 
     #region DELETE /api/printers/{id}
@@ -280,6 +354,7 @@ public sealed class PrintersControllerTests : IntegrationTestBase
         int PrinterId,
         string PrinterName,
         string SpoolQueue,
+        string? Host,
         int StoreId,
         bool IsActive,
         string? CapabilitiesJson,

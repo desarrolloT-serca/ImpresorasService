@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net.Sockets;
 using System.Security.Claims;
+using System.Text.Json;
 using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
@@ -71,12 +72,23 @@ public class PrintersController : ControllerBase
     [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> Create([FromBody] CreatePrinterRequest request, CancellationToken cancellationToken)
     {
+        var (input, validationError) = NormalizePrinterInput(
+            request.PrinterName,
+            request.SpoolQueue,
+            request.Host,
+            request.CapabilitiesJson);
+        if (validationError is not null)
+            return BadRequest(new { error = validationError });
+
+        if (input is null)
+            return BadRequest(new { error = "La impresora no es valida." });
+
         if (!await ActiveStoreExistsAsync(request.StoreId, cancellationToken))
             return BadRequest(new { error = "La tienda especificada no existe o esta inactiva." });
 
         var exists = (await _dbContext.Printers
             .AsNoTracking()
-            .Where(x => x.StoreId == request.StoreId && x.SpoolQueue == request.SpoolQueue)
+            .Where(x => x.StoreId == request.StoreId && x.SpoolQueue == input.SpoolQueue)
             .Select(x => x.PrinterId)
             .Take(1)
             .ToListAsync(cancellationToken))
@@ -87,12 +99,12 @@ public class PrintersController : ControllerBase
 
         var printer = new Printer
         {
-            PrinterName = request.PrinterName,
-            SpoolQueue = request.SpoolQueue,
-            Host = request.Host,
+            PrinterName = input.PrinterName,
+            SpoolQueue = input.SpoolQueue,
+            Host = input.Host,
             StoreId = request.StoreId,
             IsActive = request.IsActive,
-            CapabilitiesJson = request.CapabilitiesJson,
+            CapabilitiesJson = input.CapabilitiesJson,
             CreatedAtUtc = DateTimeOffset.UtcNow,
             UpdatedAtUtc = DateTimeOffset.UtcNow
         };
@@ -115,12 +127,23 @@ public class PrintersController : ControllerBase
         if (printer is null)
             return NotFound();
 
+        var (input, validationError) = NormalizePrinterInput(
+            request.PrinterName,
+            request.SpoolQueue,
+            request.Host,
+            request.CapabilitiesJson);
+        if (validationError is not null)
+            return BadRequest(new { error = validationError });
+
+        if (input is null)
+            return BadRequest(new { error = "La impresora no es valida." });
+
         if (!await ActiveStoreExistsAsync(request.StoreId, cancellationToken))
             return BadRequest(new { error = "La tienda especificada no existe o esta inactiva." });
 
         var duplicate = (await _dbContext.Printers
             .AsNoTracking()
-            .Where(x => x.StoreId == request.StoreId && x.SpoolQueue == request.SpoolQueue && x.PrinterId != id)
+            .Where(x => x.StoreId == request.StoreId && x.SpoolQueue == input.SpoolQueue && x.PrinterId != id)
             .Select(x => x.PrinterId)
             .Take(1)
             .ToListAsync(cancellationToken))
@@ -129,12 +152,12 @@ public class PrintersController : ControllerBase
         if (duplicate)
             return Conflict(new { error = "Ya existe otra impresora con el mismo StoreId y SpoolQueue." });
 
-        printer.PrinterName = request.PrinterName;
-        printer.SpoolQueue = request.SpoolQueue;
-        printer.Host = request.Host;
+        printer.PrinterName = input.PrinterName;
+        printer.SpoolQueue = input.SpoolQueue;
+        printer.Host = input.Host;
         printer.StoreId = request.StoreId;
         printer.IsActive = request.IsActive;
-        printer.CapabilitiesJson = request.CapabilitiesJson;
+        printer.CapabilitiesJson = input.CapabilitiesJson;
         printer.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -324,11 +347,59 @@ public class PrintersController : ControllerBase
             .Count > 0;
     }
 
+    private static (NormalizedPrinterInput? Input, string? Error) NormalizePrinterInput(
+        string? printerName,
+        string? spoolQueue,
+        string? host,
+        string? capabilitiesJson)
+    {
+        var normalizedName = printerName?.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedName))
+            return (null, "El nombre de impresora es obligatorio.");
+        if (normalizedName.Length > 120)
+            return (null, "El nombre de impresora no puede superar 120 caracteres.");
+
+        var normalizedSpoolQueue = spoolQueue?.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedSpoolQueue))
+            return (null, "La cola de impresion es obligatoria.");
+        if (normalizedSpoolQueue.Length > 200)
+            return (null, "La cola de impresion no puede superar 200 caracteres.");
+
+        var normalizedHost = string.IsNullOrWhiteSpace(host) ? null : host.Trim();
+        if (normalizedHost?.Length > 255)
+            return (null, "El host no puede superar 255 caracteres.");
+
+        var normalizedCapabilitiesJson = string.IsNullOrWhiteSpace(capabilitiesJson) ? null : capabilitiesJson.Trim();
+        if (normalizedCapabilitiesJson is not null)
+        {
+            try
+            {
+                using var _ = JsonDocument.Parse(normalizedCapabilitiesJson);
+            }
+            catch (JsonException)
+            {
+                return (null, "CapabilitiesJson no contiene JSON valido.");
+            }
+        }
+
+        return (new NormalizedPrinterInput(
+            normalizedName,
+            normalizedSpoolQueue,
+            normalizedHost,
+            normalizedCapabilitiesJson), null);
+    }
+
     private int? GetCurrentUserStoreId()
     {
         var claimValue = User.FindFirstValue("StoreId");
         return int.TryParse(claimValue, out var storeId) ? storeId : null;
     }
+
+    private sealed record NormalizedPrinterInput(
+        string PrinterName,
+        string SpoolQueue,
+        string? Host,
+        string? CapabilitiesJson);
 }
 
 public record CreatePrinterRequest(

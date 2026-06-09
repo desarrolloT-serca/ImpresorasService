@@ -10,6 +10,9 @@
 *.runtimeconfig.json
 *.cache
 *.user
+*.suo
+*.nupkg
+TestResults/
 
 # NuGet / MSBuild local caches
 .nuget/

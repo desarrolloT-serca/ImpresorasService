@@ -73,6 +73,18 @@ public sealed class UsersControllerTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task Update_WithInvalidRole_Returns400()
+    {
+        await ResetUsersAsync();
+        await SeedUserAsync(2, "employee-a", RoleCatalog.Employee, storeId: 1);
+        var request = new { login = "employee-a", role = "root", storeId = 1, displayName = "Employee A" };
+
+        var response = await Client.PutAsJsonAsync("/api/users/2", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Delete_CurrentUser_Returns409()
     {
         await ResetUsersAsync();
