@@ -138,3 +138,17 @@ C:\Users\SERGIO GOMARIZ.IT\Documents\Dev\ImpresorasService\ImpresorasServiceV1\s
 C:\Users\SERGIO GOMARIZ.IT\Documents\Dev\ImpresorasService\ImpresorasServiceV1\src\ImpresorasService.Api\bin\Debug\net8.0\System.Data.Odbc.dll
 C:\Users\SERGIO GOMARIZ.IT\Documents\Dev\ImpresorasService\ImpresorasServiceV1\src\ImpresorasService.Api\bin\Debug\net8.0\runtimes\unix\lib\net8.0\System.Data.Odbc.dll
 C:\Users\SERGIO GOMARIZ.IT\Documents\Dev\ImpresorasService\ImpresorasServiceV1\src\ImpresorasService.Api\bin\Debug\net8.0\runtimes\win\lib\net8.0\System.Data.Odbc.dll
+C:\Temp\codex-impresoras-api\appsettings.Development.json
+C:\Temp\codex-impresoras-api\appsettings.json
+C:\Temp\codex-impresoras-api\ImpresorasService.Api.exe
+C:\Temp\codex-impresoras-api\ImpresorasService.Api.deps.json
+C:\Temp\codex-impresoras-api\ImpresorasService.Api.runtimeconfig.json
+C:\Temp\codex-impresoras-api\ImpresorasService.Api.dll
+C:\Temp\codex-impresoras-api\ImpresorasService.Api.pdb
+C:\Temp\codex-impresoras-tests\appsettings.Development.json
+C:\Temp\codex-impresoras-tests\appsettings.json
+C:\Temp\codex-impresoras-tests\ImpresorasService.Api.exe
+C:\Temp\codex-impresoras-tests\ImpresorasService.Api.deps.json
+C:\Temp\codex-impresoras-tests\ImpresorasService.Api.runtimeconfig.json
+C:\Temp\codex-impresoras-tests\ImpresorasService.Api.dll
+C:\Temp\codex-impresoras-tests\ImpresorasService.Api.pdb
