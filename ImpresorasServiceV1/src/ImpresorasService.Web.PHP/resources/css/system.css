@@ -2808,6 +2808,159 @@ html.dark .login-logo-frame {
     white-space: nowrap;
 }
 
+/* ── Dashboard visual upgrade ──────────────────────────────────────── */
+
+/* P6 — Acento superior en cards del panel dual */
+.dbx-dual-panels > .dbx-card {
+    position: relative;
+    overflow: hidden;
+}
+.dbx-dual-panels > .dbx-card::after {
+    content: "";
+    display: block;
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--ui-primary) 0%, color-mix(in srgb, var(--ui-primary) 45%, var(--ui-primary-soft)) 100%);
+    pointer-events: none;
+    z-index: 2;
+}
+
+/* H3 — Barras rediseñadas */
+.dbx-bar-row {
+    grid-template-columns: 120px minmax(0, 1fr) 56px !important;
+    gap: 6px 14px !important;
+    min-height: 34px;
+    padding: 5px 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 60%, transparent);
+}
+.dbx-bar-row:last-child { border-bottom: none; }
+
+.dbx-bar-track {
+    height: 14px !important;
+    border-radius: 3px !important;
+}
+.dbx-bar-fill {
+    border-radius: inherit;
+    transition: width 0.55s cubic-bezier(0.25, 1, 0.5, 1) !important;
+}
+.dbx-bar-value {
+    font-size: 17px !important;
+    font-weight: 900 !important;
+    letter-spacing: -0.03em;
+    text-align: right;
+}
+.dbx-bar-label {
+    font-size: 11px !important;
+    font-weight: 750 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+/* Puntos de color en etiquetas */
+.dbx-bar-row-info    .dbx-bar-label::before,
+.dbx-bar-row-success .dbx-bar-label::before,
+.dbx-bar-row-warning .dbx-bar-label::before,
+.dbx-bar-row-danger  .dbx-bar-label::before {
+    content: "";
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.dbx-bar-row-info    .dbx-bar-label::before { background: var(--ui-primary); }
+.dbx-bar-row-success .dbx-bar-label::before { background: var(--ui-success); }
+.dbx-bar-row-warning .dbx-bar-label::before { background: var(--ui-warning); }
+.dbx-bar-row-danger  .dbx-bar-label::before { background: var(--ui-danger); }
+
+/* Track con tinte semántico */
+.dbx-bar-row-info    .dbx-bar-track { background: color-mix(in srgb, var(--ui-primary) 14%, var(--ui-surface-soft)) !important; }
+.dbx-bar-row-success .dbx-bar-track { background: color-mix(in srgb, var(--ui-success) 14%, var(--ui-surface-soft)) !important; }
+.dbx-bar-row-warning .dbx-bar-track { background: color-mix(in srgb, var(--ui-warning) 14%, var(--ui-surface-soft)) !important; }
+.dbx-bar-row-danger  .dbx-bar-track { background: color-mix(in srgb, var(--ui-danger)  14%, var(--ui-surface-soft)) !important; }
+
+/* Valor en color semántico */
+.dbx-bar-row-info    .dbx-bar-value { color: var(--ui-primary) !important; }
+.dbx-bar-row-success .dbx-bar-value { color: var(--ui-success) !important; }
+.dbx-bar-row-warning .dbx-bar-value { color: var(--ui-warning) !important; }
+.dbx-bar-row-danger  .dbx-bar-value { color: var(--ui-danger)  !important; }
+
+/* P2 — Summary mini-grid */
+.dbx-summary-mini-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 10px;
+}
+.dbx-summary-mini {
+    padding: 12px 10px !important;
+    background: color-mix(in srgb, var(--ui-primary-soft) 28%, var(--ui-surface-soft)) !important;
+    border-color: color-mix(in srgb, var(--ui-primary) 16%, var(--ui-border)) !important;
+    display: flex !important;
+    flex-direction: column-reverse;
+    gap: 3px;
+}
+.dbx-summary-mini-label {
+    font-size: 9px !important;
+    letter-spacing: 0.06em;
+}
+.dbx-summary-mini-value {
+    font-size: 28px !important;
+    font-weight: 900 !important;
+    letter-spacing: -0.03em;
+    line-height: 1 !important;
+    color: var(--ui-primary) !important;
+}
+
+/* P3 — Tabla de alertas con semántica de fila */
+.dbx-table .dbx-alert-row-critical td {
+    background: color-mix(in srgb, var(--ui-danger) 5%, var(--ui-surface));
+}
+.dbx-table .dbx-alert-row-warning td {
+    background: color-mix(in srgb, var(--ui-warning) 5%, var(--ui-surface));
+}
+.dbx-table .dbx-alert-row-critical.dbx-alert-group-start td:first-child {
+    border-left: 3px solid var(--ui-danger);
+    padding-left: 9px;
+}
+.dbx-table .dbx-alert-row-warning.dbx-alert-group-start td:first-child {
+    border-left: 3px solid var(--ui-warning);
+    padding-left: 9px;
+}
+tr[data-alert-href]:hover td {
+    background: color-mix(in srgb, var(--ui-primary-soft) 35%, var(--ui-surface)) !important;
+    cursor: pointer;
+}
+html.dark .dbx-table .dbx-alert-row-critical td {
+    background: color-mix(in srgb, var(--ui-danger) 8%, var(--ui-surface));
+}
+html.dark .dbx-table .dbx-alert-row-warning td {
+    background: color-mix(in srgb, var(--ui-warning) 8%, var(--ui-surface));
+}
+
+/* P4 — Diagnostic cards con header de estado */
+.dbx-diagnostic-warning .dbx-diagnostic-head {
+    background: color-mix(in srgb, var(--ui-warning) 8%, var(--ui-surface));
+    border-bottom: 1px solid color-mix(in srgb, var(--ui-warning) 22%, var(--ui-border));
+}
+.dbx-diagnostic-critical .dbx-diagnostic-head {
+    background: color-mix(in srgb, var(--ui-danger) 8%, var(--ui-surface));
+    border-bottom: 1px solid color-mix(in srgb, var(--ui-danger) 22%, var(--ui-border));
+}
+
+/* P5 — Risk list rows con hover */
+.dbx-risk-list-row {
+    transition: box-shadow 0.15s ease, transform 0.12s ease !important;
+}
+.dbx-risk-list-row:hover {
+    box-shadow: 0 4px 14px color-mix(in srgb, var(--risk-row-accent) 18%, rgba(0,0,0,0.08)) !important;
+    transform: translateY(-1px);
+}
+
 .dbx-rule-active-field {
     display: flex;
     align-items: end;

@@ -142,7 +142,7 @@
                     </div>
                 @endif
                 <div class="dbx-bars">
-                    <div class="dbx-bar-row">
+                    <div class="dbx-bar-row dbx-bar-row-info">
                         <span class="dbx-bar-label">Recibidos</span>
                         <div class="dbx-bar-track"><div class="dbx-bar-fill info" style="width: {{ (int) round(($receivedVal / $base) * 100) }}%"></div></div>
                         <span class="dbx-bar-value">
@@ -150,7 +150,7 @@
                             <span class="dbx-bar-value-percent" style="display:none">{{ $receivedPct }}%</span>
                         </span>
                     </div>
-                    <div class="dbx-bar-row">
+                    <div class="dbx-bar-row dbx-bar-row-success">
                         <span class="dbx-bar-label">Impresos</span>
                         <div class="dbx-bar-track"><div class="dbx-bar-fill success" style="width: {{ (int) round(($printedVal / $base) * 100) }}%"></div></div>
                         <span class="dbx-bar-value">
@@ -158,7 +158,7 @@
                             <span class="dbx-bar-value-percent" style="display:none">{{ $printedPct }}%</span>
                         </span>
                     </div>
-                    <div class="dbx-bar-row">
+                    <div class="dbx-bar-row dbx-bar-row-warning">
                         <span class="dbx-bar-label">En cola</span>
                         <div class="dbx-bar-track"><div class="dbx-bar-fill warning" style="width: {{ (int) round(($queueVal / $base) * 100) }}%"></div></div>
                         <span class="dbx-bar-value">
@@ -166,7 +166,7 @@
                             <span class="dbx-bar-value-percent" style="display:none">{{ $queuePct }}%</span>
                         </span>
                     </div>
-                    <div class="dbx-bar-row">
+                    <div class="dbx-bar-row dbx-bar-row-danger">
                         <span class="dbx-bar-label">Fallidos</span>
                         <div class="dbx-bar-track"><div class="dbx-bar-fill danger" style="width: {{ (int) round(($failedVal / $base) * 100) }}%"></div></div>
                         <span class="dbx-bar-value">
@@ -174,7 +174,7 @@
                             <span class="dbx-bar-value-percent" style="display:none">{{ $failedPct }}%</span>
                         </span>
                     </div>
-                    <div class="dbx-bar-row">
+                    <div class="dbx-bar-row dbx-bar-row-danger">
                         <span class="dbx-bar-label">Sin reenviar</span>
                         <div class="dbx-bar-track"><div class="dbx-bar-fill danger" style="width: {{ (int) round(($failedNoRetryVal / $base) * 100) }}%"></div></div>
                         <span class="dbx-bar-value">
@@ -389,7 +389,7 @@
                                         }
                                     }
                                 @endphp
-                                <tr class="{{ $idx === 0 ? 'dbx-alert-group-start' : 'dbx-alert-group-cont' }}" @if($href) data-alert-href="{{ $href }}" @endif>
+                                <tr class="{{ $idx === 0 ? 'dbx-alert-group-start' : 'dbx-alert-group-cont' }} dbx-alert-row-{{ $status }}" @if($href) data-alert-href="{{ $href }}" @endif>
                                     @if($idx === 0)
                                         <td rowspan="{{ $rowspan }}">{{ $formatStoreLabel($groupStoreId, $group['storeName'] ?? 'Sin nombre') }}</td>
                                     @endif
