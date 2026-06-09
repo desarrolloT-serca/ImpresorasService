@@ -54,6 +54,7 @@ class ImpresorasController extends Controller
                 'printersCount' => 0,
                 'activePrintersCount' => 0,
                 'errorPrintersCount' => 0,
+                'warningPrintersCount' => 0,
                 'uncheckedPrintersCount' => 0,
                 'okPrintersCount' => 0,
                 'connectionErrorCount' => 0,
@@ -80,6 +81,7 @@ class ImpresorasController extends Controller
                     'printersCount' => 0,
                     'activePrintersCount' => 0,
                     'errorPrintersCount' => 0,
+                    'warningPrintersCount' => 0,
                     'uncheckedPrintersCount' => 0,
                     'okPrintersCount' => 0,
                     'connectionErrorCount' => 0,
@@ -90,17 +92,12 @@ class ImpresorasController extends Controller
             }
 
             $isActive = (bool) ($printer['isActive'] ?? $printer['IsActive'] ?? false);
-            $lastConnectionOk = $this->nullableBool($printer['lastConnectionOk'] ?? $printer['LastConnectionOk'] ?? null);
-            $lastConnectionError = trim((string) ($printer['lastConnectionError'] ?? $printer['LastConnectionError'] ?? ''));
-            $lastConnectionCheckAtUtc = trim((string) ($printer['lastConnectionCheckAtUtc'] ?? $printer['LastConnectionCheckAtUtc'] ?? ''));
-            $connectionFailuresStreak = (int) ($printer['connectionFailuresStreak'] ?? $printer['ConnectionFailuresStreak'] ?? 0);
-            $hasConnectionError = $isActive && (
-                $lastConnectionOk === false
-                || $connectionFailuresStreak > 0
-                || ($lastConnectionError !== '' && ! $this->isHostNotConfiguredError($lastConnectionError))
-            );
-            $isUnchecked = $isActive && $lastConnectionCheckAtUtc === '';
-            $isOk = $isActive && $lastConnectionOk === true;
+            $connectivitySeverity = $this->printerConnectivitySeverity($printer);
+            $connectivityStatus = $this->printerConnectivityStatus($printer);
+            $hasConnectionError = $isActive && $connectivitySeverity === 'critical';
+            $hasConnectionWarning = $isActive && $connectivitySeverity === 'warning';
+            $isUnchecked = $isActive && $connectivityStatus === 'unchecked';
+            $isOk = $isActive && $connectivitySeverity === 'healthy';
 
             $printersByStore[$groupKey]['printers'][] = $printer;
             $printersByStore[$groupKey]['printersCount']++;
@@ -110,6 +107,9 @@ class ImpresorasController extends Controller
             if ($hasConnectionError) {
                 $printersByStore[$groupKey]['errorPrintersCount']++;
                 $printersByStore[$groupKey]['connectionErrorCount']++;
+            }
+            if ($hasConnectionWarning) {
+                $printersByStore[$groupKey]['warningPrintersCount']++;
             }
             if ($isUnchecked) {
                 $printersByStore[$groupKey]['uncheckedPrintersCount']++;
@@ -123,6 +123,7 @@ class ImpresorasController extends Controller
             $storeGroup['visualStatus'] = $this->printerStoreVisualStatus($storeGroup);
             $storeGroup['visualStatusLabel'] = match ($storeGroup['visualStatus']) {
                 'error' => 'ERROR',
+                'empty' => 'SIN IMPRESORAS',
                 'ok' => 'OK',
                 default => 'WARNING',
             };
@@ -170,6 +171,53 @@ class ImpresorasController extends Controller
         return filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
     }
 
+    private function printerConnectivityStatus(array $printer): string
+    {
+        $status = strtolower(trim((string) ($printer['connectivityStatus'] ?? $printer['ConnectivityStatus'] ?? '')));
+        if (in_array($status, ['ok', 'no_host', 'unchecked', 'error', 'inactive'], true)) {
+            return $status;
+        }
+
+        $isActive = (bool) ($printer['isActive'] ?? $printer['IsActive'] ?? false);
+        $lastConnectionOk = $this->nullableBool($printer['lastConnectionOk'] ?? $printer['LastConnectionOk'] ?? null);
+        $lastConnectionError = trim((string) ($printer['lastConnectionError'] ?? $printer['LastConnectionError'] ?? ''));
+        $lastConnectionCheckAtUtc = trim((string) ($printer['lastConnectionCheckAtUtc'] ?? $printer['LastConnectionCheckAtUtc'] ?? ''));
+        $connectionFailuresStreak = (int) ($printer['connectionFailuresStreak'] ?? $printer['ConnectionFailuresStreak'] ?? 0);
+
+        if (! $isActive) {
+            return 'inactive';
+        }
+        if ($this->isHostNotConfiguredError($lastConnectionError)) {
+            return 'no_host';
+        }
+        if ($lastConnectionCheckAtUtc === '') {
+            return 'unchecked';
+        }
+        if ($lastConnectionOk === true) {
+            return 'ok';
+        }
+        if ($lastConnectionOk === false && ($connectionFailuresStreak > 0 || $lastConnectionError !== '')) {
+            return 'error';
+        }
+
+        return 'unchecked';
+    }
+
+    private function printerConnectivitySeverity(array $printer): string
+    {
+        $severity = strtolower(trim((string) ($printer['connectivitySeverity'] ?? $printer['ConnectivitySeverity'] ?? '')));
+        if (in_array($severity, ['healthy', 'warning', 'critical', 'neutral'], true)) {
+            return $severity;
+        }
+
+        return match ($this->printerConnectivityStatus($printer)) {
+            'ok' => 'healthy',
+            'error' => 'critical',
+            'inactive' => 'neutral',
+            default => 'warning',
+        };
+    }
+
     private function isHostNotConfiguredError(string $error): bool
     {
         $normalized = strtolower($error);
@@ -177,7 +225,8 @@ class ImpresorasController extends Controller
         return str_contains($normalized, 'sin host')
             || str_contains($normalized, 'host no configurado')
             || str_contains($normalized, 'host not configured')
-            || str_contains($normalized, 'hostname no configurado');
+            || str_contains($normalized, 'hostname no configurado')
+            || trim($normalized) === 'host_not_configured';
     }
 
     private function printerStoreVisualStatus(array $storeGroup): string
@@ -185,7 +234,7 @@ class ImpresorasController extends Controller
         $printersCount = (int) ($storeGroup['printersCount'] ?? 0);
         $activePrintersCount = (int) ($storeGroup['activePrintersCount'] ?? 0);
         $errorPrintersCount = (int) ($storeGroup['errorPrintersCount'] ?? 0);
-        $uncheckedPrintersCount = (int) ($storeGroup['uncheckedPrintersCount'] ?? 0);
+        $warningPrintersCount = (int) ($storeGroup['warningPrintersCount'] ?? $storeGroup['uncheckedPrintersCount'] ?? 0);
 
         if ($printersCount === 0) {
             return 'empty';
@@ -195,7 +244,7 @@ class ImpresorasController extends Controller
             return 'error';
         }
 
-        if ($activePrintersCount === 0 || $uncheckedPrintersCount > 0) {
+        if ($activePrintersCount === 0 || $warningPrintersCount > 0) {
             return 'warning';
         }
 
@@ -315,10 +364,15 @@ class ImpresorasController extends Controller
         }
     }
 
-    public function netconnection(int $impresora): JsonResponse
+    public function netconnection(Request $request, int $impresora): JsonResponse
     {
         try {
-            $result = $this->api->post("api/printers/{$impresora}/netconnection", []);
+            $path = "api/printers/{$impresora}/netconnection";
+            if ($request->boolean('persist')) {
+                $path .= '?persist=true';
+            }
+
+            $result = $this->api->post($path, []);
             return response()->json($result);
         } catch (\GuzzleHttp\Exception\RequestException $e) {
             $body = $e->getResponse() ? json_decode((string) $e->getResponse()->getBody(), true) : [];

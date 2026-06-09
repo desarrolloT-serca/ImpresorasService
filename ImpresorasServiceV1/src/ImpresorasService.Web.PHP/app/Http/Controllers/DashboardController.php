@@ -109,18 +109,17 @@ class DashboardController extends Controller
             }
 
             $storeStats[$storeId]['connectedPrinters']++;
-            $host = trim((string) ($printer['host'] ?? $printer['Host'] ?? ''));
-            $spool = (string) ($printer['spoolQueue'] ?? $printer['SpoolQueue'] ?? '');
-            $hostConfigured = $host !== '' || str_starts_with($spool, '\\\\');
-            if (!$hostConfigured) {
+            $connectivityStatus = $this->printerConnectivityStatus($printer);
+            $connectivitySeverity = $this->printerConnectivitySeverity($printer);
+            if ($connectivityStatus === 'no_host') {
                 $storeStats[$storeId]['printersMissingHost'] = ($storeStats[$storeId]['printersMissingHost'] ?? 0) + 1;
             }
 
             $streak = (int) ($printer['connectionFailuresStreak'] ?? $printer['ConnectionFailuresStreak'] ?? 0);
             $storeStats[$storeId]['printersConnMaxStreak'] = max((int) ($storeStats[$storeId]['printersConnMaxStreak'] ?? 0), $streak);
-            if ($streak >= $connCritMin) {
+            if ($connectivitySeverity === 'critical' || $streak >= $connCritMin) {
                 $storeStats[$storeId]['printersConnCritical'] = ($storeStats[$storeId]['printersConnCritical'] ?? 0) + 1;
-            } elseif ($streak >= $connWarnMin) {
+            } elseif (($connectivitySeverity === 'warning' && $connectivityStatus !== 'no_host') || $streak >= $connWarnMin) {
                 $storeStats[$storeId]['printersConnWarning'] = ($storeStats[$storeId]['printersConnWarning'] ?? 0) + 1;
             }
 
@@ -134,6 +133,10 @@ class DashboardController extends Controller
                 'lastConnectionTransport' => (string) ($printer['lastConnectionTransport'] ?? $printer['LastConnectionTransport'] ?? ''),
                 'lastConnectionError' => (string) ($printer['lastConnectionError'] ?? $printer['LastConnectionError'] ?? ''),
                 'connectionFailuresStreak' => (int) ($printer['connectionFailuresStreak'] ?? $printer['ConnectionFailuresStreak'] ?? 0),
+                'connectivityStatus' => $connectivityStatus,
+                'connectivityLabel' => (string) ($printer['connectivityLabel'] ?? $printer['ConnectivityLabel'] ?? $this->connectivityLabelFromStatus($connectivityStatus)),
+                'connectivitySeverity' => $connectivitySeverity,
+                'connectivityDetail' => (string) ($printer['connectivityDetail'] ?? $printer['ConnectivityDetail'] ?? $printer['lastConnectionError'] ?? $printer['LastConnectionError'] ?? ''),
                 'queueCurrent' => 0,
                 'failedWindow' => 0,
                 'totalWindow' => 0,
@@ -461,6 +464,88 @@ class DashboardController extends Controller
         };
     }
 
+    private function printerConnectivityStatus(array $printer): string
+    {
+        $status = strtolower(trim((string) ($printer['connectivityStatus'] ?? $printer['ConnectivityStatus'] ?? '')));
+        if (in_array($status, ['ok', 'no_host', 'unchecked', 'error', 'inactive'], true)) {
+            return $status;
+        }
+
+        $isActive = (bool) ($printer['isActive'] ?? $printer['IsActive'] ?? false);
+        $lastConnectionOk = $this->nullableBool($printer['lastConnectionOk'] ?? $printer['LastConnectionOk'] ?? null);
+        $lastConnectionError = trim((string) ($printer['lastConnectionError'] ?? $printer['LastConnectionError'] ?? ''));
+        $lastConnectionCheckAtUtc = trim((string) ($printer['lastConnectionCheckAtUtc'] ?? $printer['LastConnectionCheckAtUtc'] ?? ''));
+        $connectionFailuresStreak = (int) ($printer['connectionFailuresStreak'] ?? $printer['ConnectionFailuresStreak'] ?? 0);
+
+        if (! $isActive) {
+            return 'inactive';
+        }
+        if ($this->isHostNotConfiguredError($lastConnectionError)) {
+            return 'no_host';
+        }
+        if ($lastConnectionCheckAtUtc === '') {
+            return 'unchecked';
+        }
+        if ($lastConnectionOk === true) {
+            return 'ok';
+        }
+        if ($lastConnectionOk === false && ($connectionFailuresStreak > 0 || $lastConnectionError !== '')) {
+            return 'error';
+        }
+
+        return 'unchecked';
+    }
+
+    private function printerConnectivitySeverity(array $printer): string
+    {
+        $severity = strtolower(trim((string) ($printer['connectivitySeverity'] ?? $printer['ConnectivitySeverity'] ?? '')));
+        if (in_array($severity, ['healthy', 'warning', 'critical', 'neutral'], true)) {
+            return $severity;
+        }
+
+        return match ($this->printerConnectivityStatus($printer)) {
+            'ok' => 'healthy',
+            'error' => 'critical',
+            'inactive' => 'neutral',
+            default => 'warning',
+        };
+    }
+
+    private function connectivityLabelFromStatus(string $status): string
+    {
+        return match ($status) {
+            'ok' => 'OK',
+            'no_host' => 'Sin host',
+            'error' => 'Error',
+            'inactive' => 'Inactiva',
+            default => 'No comprobada',
+        };
+    }
+
+    private function nullableBool(mixed $value): ?bool
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        return filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+    }
+
+    private function isHostNotConfiguredError(string $error): bool
+    {
+        $normalized = strtolower($error);
+
+        return str_contains($normalized, 'sin host')
+            || str_contains($normalized, 'host no configurado')
+            || str_contains($normalized, 'host not configured')
+            || str_contains($normalized, 'hostname no configurado')
+            || trim($normalized) === 'host_not_configured';
+    }
+
     private function parseUtcTimestamp(mixed $value): int|false
     {
         $raw = trim((string) $value);
@@ -502,6 +587,9 @@ class DashboardController extends Controller
         $failedRule = $this->matchThresholdRule($rules['failed'] ?? [], $failedWithoutRetryCurrent);
         $missingHostRule = $this->matchThresholdRule($rules['missingHost'] ?? [], $printersMissingHost);
 
+        if ($printersConnCritical > 0) {
+            return ['critical', 'Impresora(s) sin conexion (conectividad)'];
+        }
         if ($connRule && $connRule['severity'] === 'critical') {
             $sev = (string) $connRule['severity'];
             $health = $toHealth($sev);
@@ -522,6 +610,9 @@ class DashboardController extends Controller
         }
         if ($connectedPrinters === 0) {
             return ['warning', 'Sin impresoras activas en la tienda'];
+        }
+        if ($printersConnWarning > 0) {
+            return ['warning', 'Impresora(s) pendientes de comprobacion (conectividad)'];
         }
         if ($connRule) {
             $sev = (string) $connRule['severity'];
@@ -864,18 +955,25 @@ class DashboardController extends Controller
             $failedNoRetry = (int) ($row['failedWithoutRetryCurrent'] ?? 0);
             $missingHost = (int) ($row['printersMissingHost'] ?? 0);
             $connMaxStreak = (int) ($row['printersConnMaxStreak'] ?? 0);
+            $connCritical = (int) ($row['printersConnCritical'] ?? 0);
+            $connWarning = (int) ($row['printersConnWarning'] ?? 0);
 
             $connRule = $this->matchThresholdRule($rules['conn'] ?? [], $connMaxStreak);
             $failedRule = $this->matchThresholdRule($rules['failed'] ?? [], $failedNoRetry);
             $queueRule = $this->matchThresholdRule($rules['queue'] ?? [], $queue);
             $missingHostRule = $this->matchThresholdRule($rules['missingHost'] ?? [], $missingHost);
 
-            if ($connRule) {
+            if ($connCritical > 0 || $connWarning > 0 || $connRule) {
+                $connAlertHealth = $connCritical > 0
+                    ? 'critical'
+                    : ($connRule ? $toHealth((string) $connRule['severity']) : 'warning');
                 $alerts[] = [
                     'storeId' => $storeId,
                     'storeName' => $storeName,
-                    'health' => $toHealth((string) $connRule['severity']),
-                    'healthReason' => 'Impresora(s) sin conexion (conectividad)',
+                    'health' => $connAlertHealth,
+                    'healthReason' => $connAlertHealth === 'critical'
+                        ? 'Impresora(s) sin conexion (conectividad)'
+                        : 'Impresora(s) pendientes de comprobacion (conectividad)',
                     'queuedCurrent' => $queue,
                     'failedWithoutRetryCurrent' => $failedNoRetry,
                 ];

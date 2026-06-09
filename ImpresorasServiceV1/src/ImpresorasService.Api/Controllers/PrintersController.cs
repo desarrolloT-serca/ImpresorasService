@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net.Sockets;
 using System.Security.Claims;
 using System.Text.Json;
+using ImpresorasService.Domain.Connectivity;
 using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
@@ -44,7 +45,7 @@ public class PrintersController : ControllerBase
             .ThenBy(x => x.PrinterName)
             .ToListAsync(cancellationToken);
 
-        return Ok(results);
+        return Ok(results.Select(ToPrinterDto));
     }
 
     /// <summary>
@@ -62,7 +63,7 @@ public class PrintersController : ControllerBase
         if (!IsAdmin() && printer.StoreId != GetCurrentUserStoreId())
             return Forbid();
 
-        return Ok(printer);
+        return Ok(ToPrinterDto(printer));
     }
 
     /// <summary>
@@ -112,7 +113,7 @@ public class PrintersController : ControllerBase
         _dbContext.Printers.Add(printer);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        return CreatedAtAction(nameof(GetById), new { id = printer.PrinterId }, printer);
+        return CreatedAtAction(nameof(GetById), new { id = printer.PrinterId }, ToPrinterDto(printer));
     }
 
     /// <summary>
@@ -162,7 +163,7 @@ public class PrintersController : ControllerBase
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        return Ok(printer);
+        return Ok(ToPrinterDto(printer));
     }
 
     /// <summary>
@@ -198,22 +199,27 @@ public class PrintersController : ControllerBase
     /// </summary>
     [HttpPost("{id:int}/ping")]
     public Task<IActionResult> Ping(int id, CancellationToken cancellationToken)
-        => CheckSpoolQueueConnectivityAsync(id, cancellationToken);
+        => CheckSpoolQueueConnectivityAsync(id, persist: false, cancellationToken);
 
     /// <summary>
     /// Comprueba conectividad al host extraído del SpoolQueue (UNC \\host\share) vía TCP/445 (SMB).
     /// Equivalente funcional a <see cref="Ping(int, CancellationToken)"/>, pero con nombre semántico.
     /// </summary>
     [HttpPost("{id:int}/netconnection")]
-    public Task<IActionResult> NetConnection(int id, CancellationToken cancellationToken)
-        => CheckSpoolQueueConnectivityAsync(id, cancellationToken);
+    public Task<IActionResult> NetConnection(
+        int id,
+        [FromQuery] bool persist,
+        CancellationToken cancellationToken)
+        => CheckSpoolQueueConnectivityAsync(id, persist, cancellationToken);
 
-    private async Task<IActionResult> CheckSpoolQueueConnectivityAsync(int id, CancellationToken cancellationToken)
+    private async Task<IActionResult> CheckSpoolQueueConnectivityAsync(
+        int id,
+        bool persist,
+        CancellationToken cancellationToken)
     {
         var isAdmin = IsAdmin();
 
         var printer = await _dbContext.Printers
-            .AsNoTracking()
             .FirstOrDefaultAsync(x => x.PrinterId == id, cancellationToken);
 
         if (printer is null)
@@ -226,13 +232,13 @@ public class PrintersController : ControllerBase
             : ExtractHostFromSpoolQueue(printer.SpoolQueue);
         if (string.IsNullOrEmpty(host))
         {
-            return Ok(new
-            {
-                reachable = false,
-                error = isAdmin
+            var result = ConnectivityProbeResult.NoHost(
+                isAdmin
                     ? "Host no configurado. Indica 'Host' en la impresora o usa 'SpoolQueue' en formato UNC (\\\\host\\share)."
-                    : "Configuracion de conectividad pendiente."
-            });
+                    : null);
+
+            await PersistConnectivityIfRequestedAsync(printer, result, persist, cancellationToken);
+            return Ok(ToConnectivityResponse(result, isAdmin));
         }
 
         try
@@ -245,6 +251,7 @@ public class PrintersController : ControllerBase
             // - 139: SMB legacy (NetBIOS/Session)
             var portsToTry = new[] { 515, 9100, 631, 445, 139 };
             const int timeoutMsPerPort = 1500;
+            string? lastErrorDetail = null;
 
             foreach (var port in portsToTry)
             {
@@ -262,31 +269,76 @@ public class PrintersController : ControllerBase
                     continue;
                 }
 
-                await connectTask;
-                return Ok(new
+                try
                 {
-                    reachable = true,
-                    latencyMs = (int)sw.ElapsedMilliseconds,
-                    transport = $"tcp/{port}"
-                });
+                    await connectTask;
+                    var result = ConnectivityProbeResult.Ok((int)sw.ElapsedMilliseconds, $"tcp/{port}");
+                    await PersistConnectivityIfRequestedAsync(printer, result, persist, cancellationToken);
+                    return Ok(ToConnectivityResponse(result, isAdmin));
+                }
+                catch (Exception ex)
+                {
+                    lastErrorDetail = ex.Message;
+                }
             }
 
-            return Ok(new
-            {
-                reachable = false,
-                error = isAdmin
+            var failedResult = ConnectivityProbeResult.Failed(
+                isAdmin
                     ? $"No se pudo conectar a {host} (puertos TCP: {string.Join(", ", portsToTry)})"
-                    : "Sin conexion con la impresora."
-            });
+                        + (string.IsNullOrWhiteSpace(lastErrorDetail) ? string.Empty : $". Ultimo error: {lastErrorDetail}")
+                    : null);
+            await PersistConnectivityIfRequestedAsync(printer, failedResult, persist, cancellationToken);
+            return Ok(ToConnectivityResponse(failedResult, isAdmin));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
-            return Ok(new
-            {
-                reachable = false,
-                error = isAdmin ? ex.Message : "Error de conectividad con la impresora."
-            });
+            var result = ConnectivityProbeResult.Failed(isAdmin ? ex.Message : null);
+            await PersistConnectivityIfRequestedAsync(printer, result, persist, cancellationToken);
+            return Ok(ToConnectivityResponse(result, isAdmin));
         }
+    }
+
+    private async Task PersistConnectivityIfRequestedAsync(
+        Printer printer,
+        ConnectivityProbeResult result,
+        bool persist,
+        CancellationToken cancellationToken)
+    {
+        if (!persist)
+            return;
+
+        PrinterConnectivityState.ApplyProbeResult(
+            printer,
+            result.Reachable,
+            result.Transport,
+            result.Error,
+            DateTimeOffset.UtcNow);
+
+        printer.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private static object ToConnectivityResponse(ConnectivityProbeResult result, bool isAdmin)
+    {
+        var label = !isAdmin && result.ConnectivityStatus == PrinterConnectivityState.StatusError
+            ? "Sin conexion"
+            : result.ConnectivityLabel;
+
+        return new
+        {
+            reachable = result.Reachable,
+            latencyMs = result.LatencyMs,
+            transport = result.Transport,
+            error = result.Error,
+            detail = isAdmin ? result.Detail : null,
+            connectivityStatus = result.ConnectivityStatus,
+            connectivityLabel = label,
+            connectivitySeverity = result.ConnectivitySeverity
+        };
     }
 
     private static string? ExtractHostFromMaybeUnc(string hostOrUnc)
@@ -393,6 +445,94 @@ public class PrintersController : ControllerBase
     {
         var claimValue = User.FindFirstValue("StoreId");
         return int.TryParse(claimValue, out var storeId) ? storeId : null;
+    }
+
+    private static PrinterDto ToPrinterDto(Printer printer)
+    {
+        var connectivity = PrinterConnectivityState.FromPrinter(printer);
+        return new PrinterDto(
+            printer.PrinterId,
+            printer.PrinterName,
+            printer.SpoolQueue,
+            printer.Host,
+            printer.StoreId,
+            printer.IsActive,
+            printer.CapabilitiesJson,
+            printer.CreatedAtUtc,
+            printer.UpdatedAtUtc,
+            printer.ConnectionFailuresStreak,
+            printer.LastConnectionOk,
+            printer.LastConnectionCheckAtUtc,
+            printer.LastConnectionTransport,
+            printer.LastConnectionError,
+            connectivity.ConnectivityStatus,
+            connectivity.ConnectivityLabel,
+            connectivity.ConnectivitySeverity,
+            connectivity.ConnectivityDetail);
+    }
+
+    private sealed record PrinterDto(
+        int PrinterId,
+        string PrinterName,
+        string SpoolQueue,
+        string? Host,
+        int StoreId,
+        bool IsActive,
+        string? CapabilitiesJson,
+        DateTimeOffset CreatedAtUtc,
+        DateTimeOffset UpdatedAtUtc,
+        int ConnectionFailuresStreak,
+        bool? LastConnectionOk,
+        DateTimeOffset? LastConnectionCheckAtUtc,
+        string? LastConnectionTransport,
+        string? LastConnectionError,
+        string ConnectivityStatus,
+        string ConnectivityLabel,
+        string ConnectivitySeverity,
+        string? ConnectivityDetail);
+
+    private sealed record ConnectivityProbeResult(
+        bool Reachable,
+        int? LatencyMs,
+        string? Transport,
+        string? Error,
+        string? Detail,
+        string ConnectivityStatus,
+        string ConnectivityLabel,
+        string ConnectivitySeverity)
+    {
+        public static ConnectivityProbeResult Ok(int latencyMs, string transport)
+            => new(
+                true,
+                latencyMs,
+                transport,
+                null,
+                null,
+                PrinterConnectivityState.StatusOk,
+                "OK",
+                PrinterConnectivityState.SeverityHealthy);
+
+        public static ConnectivityProbeResult NoHost(string? detail)
+            => new(
+                false,
+                null,
+                null,
+                PrinterConnectivityState.HostNotConfiguredError,
+                detail,
+                PrinterConnectivityState.StatusNoHost,
+                "Sin host",
+                PrinterConnectivityState.SeverityWarning);
+
+        public static ConnectivityProbeResult Failed(string? detail)
+            => new(
+                false,
+                null,
+                null,
+                PrinterConnectivityState.NoConnectionError,
+                detail,
+                PrinterConnectivityState.StatusError,
+                "Error",
+                PrinterConnectivityState.SeverityCritical);
     }
 
     private sealed record NormalizedPrinterInput(

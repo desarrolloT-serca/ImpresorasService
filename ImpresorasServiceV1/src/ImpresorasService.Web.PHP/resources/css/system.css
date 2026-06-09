@@ -428,7 +428,8 @@ input:hover {
 
 .badge-neutral,
 .dbx-pill.neutral,
-.dbx-pill.info {
+.dbx-pill.info,
+.dbx-printer-state.muted {
     border-color: color-mix(in srgb, var(--ui-primary) 24%, var(--ui-border));
     background: color-mix(in srgb, var(--ui-primary-soft) 65%, var(--ui-surface));
     color: var(--ui-primary);
@@ -443,7 +444,8 @@ input:hover {
 }
 
 .badge-warning,
-.dbx-pill.warning {
+.dbx-pill.warning,
+.dbx-printer-state.warn {
     border-color: color-mix(in srgb, var(--ui-warning) 48%, var(--ui-border));
     background: color-mix(in srgb, var(--ui-warning) 13%, var(--ui-surface));
     color: var(--ui-warning);
@@ -869,7 +871,8 @@ html.dark .local-hero::before {
 }
 
 .dbx-pill.warning,
-.badge-warning {
+.badge-warning,
+.dbx-printer-state.warn {
     border-color: #e7c98e;
     background: #fff8e9;
     color: #8a5200;
@@ -881,6 +884,12 @@ html.dark .local-hero::before {
     border-color: #f0a8b2;
     background: #fff2f4;
     color: var(--ui-danger);
+}
+
+.dbx-printer-state.muted {
+    border-color: var(--ui-border);
+    background: var(--ui-surface-soft);
+    color: var(--ui-text-muted);
 }
 
 html.dark .app-topbar .badge-neutral,

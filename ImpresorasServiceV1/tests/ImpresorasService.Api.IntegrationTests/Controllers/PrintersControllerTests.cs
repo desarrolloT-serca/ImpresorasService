@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using ImpresorasService.Api.IntegrationTests;
+using ImpresorasService.Domain.Connectivity;
 using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure.Persistence;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,6 +17,8 @@ public sealed class PrintersControllerTests : IntegrationTestBase
     public PrintersControllerTests(ApiWebApplicationFactory factory) : base(factory)
     {
     }
+
+    private const int ConnectivityTestStoreId = 91;
 
     #region GET /api/printers
 
@@ -91,6 +94,158 @@ public sealed class PrintersControllerTests : IntegrationTestBase
         var response = await Client.GetAsync("/api/printers/99999");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetAll_ReturnsCalculatedConnectivityFields()
+    {
+        await SeedStoreAsync(ConnectivityTestStoreId, isActive: true);
+        var uncheckedPrinter = await CreatePrinterAsync("P-Unchecked", $"\\\\srv\\q{Guid.NewGuid():N}"[..30], ConnectivityTestStoreId);
+        var noHostPrinter = await CreatePrinterAsync("P-NoHost", $"\\\\srv\\q{Guid.NewGuid():N}"[..30], ConnectivityTestStoreId);
+        var okPrinter = await CreatePrinterAsync("P-Ok", $"\\\\srv\\q{Guid.NewGuid():N}"[..30], ConnectivityTestStoreId);
+        var errorPrinter = await CreatePrinterAsync("P-Error", $"\\\\srv\\q{Guid.NewGuid():N}"[..30], ConnectivityTestStoreId);
+        var inactivePrinter = await CreatePrinterAsync("P-Inactive", $"\\\\srv\\q{Guid.NewGuid():N}"[..30], ConnectivityTestStoreId, isActive: false);
+
+        await UpdatePrinterAsync(noHostPrinter.PrinterId, printer =>
+        {
+            printer.LastConnectionError = PrinterConnectivityState.HostNotConfiguredError;
+        });
+        await UpdatePrinterAsync(okPrinter.PrinterId, printer =>
+        {
+            printer.LastConnectionOk = true;
+            printer.LastConnectionCheckAtUtc = DateTimeOffset.UtcNow;
+            printer.LastConnectionTransport = "tcp/9100";
+            printer.ConnectionFailuresStreak = 0;
+        });
+        await UpdatePrinterAsync(errorPrinter.PrinterId, printer =>
+        {
+            printer.LastConnectionOk = false;
+            printer.LastConnectionCheckAtUtc = DateTimeOffset.UtcNow;
+            printer.LastConnectionError = PrinterConnectivityState.NoConnectionError;
+            printer.ConnectionFailuresStreak = 2;
+        });
+
+        var response = await Client.GetAsync($"/api/printers?storeId={ConnectivityTestStoreId}");
+
+        response.EnsureSuccessStatusCode();
+        var printers = await response.Content.ReadFromJsonAsync<List<PrinterDto>>();
+        Assert.NotNull(printers);
+        var byId = printers.ToDictionary(x => x.PrinterId);
+
+        Assert.Equal("unchecked", byId[uncheckedPrinter.PrinterId].ConnectivityStatus);
+        Assert.Equal("No comprobada", byId[uncheckedPrinter.PrinterId].ConnectivityLabel);
+        Assert.Equal("warning", byId[uncheckedPrinter.PrinterId].ConnectivitySeverity);
+
+        Assert.Equal("no_host", byId[noHostPrinter.PrinterId].ConnectivityStatus);
+        Assert.Equal("Sin host", byId[noHostPrinter.PrinterId].ConnectivityLabel);
+        Assert.Equal("warning", byId[noHostPrinter.PrinterId].ConnectivitySeverity);
+
+        Assert.Equal("ok", byId[okPrinter.PrinterId].ConnectivityStatus);
+        Assert.Equal("OK", byId[okPrinter.PrinterId].ConnectivityLabel);
+        Assert.Equal("healthy", byId[okPrinter.PrinterId].ConnectivitySeverity);
+
+        Assert.Equal("error", byId[errorPrinter.PrinterId].ConnectivityStatus);
+        Assert.Equal("Error", byId[errorPrinter.PrinterId].ConnectivityLabel);
+        Assert.Equal("critical", byId[errorPrinter.PrinterId].ConnectivitySeverity);
+
+        Assert.Equal("inactive", byId[inactivePrinter.PrinterId].ConnectivityStatus);
+        Assert.Equal("Inactiva", byId[inactivePrinter.PrinterId].ConnectivityLabel);
+        Assert.Equal("neutral", byId[inactivePrinter.PrinterId].ConnectivitySeverity);
+    }
+
+    #endregion
+
+    #region POST /api/printers/{id}/netconnection
+
+    [Fact]
+    public async Task NetConnection_WhenPersistFalse_DoesNotUpdateConnectivityTelemetry()
+    {
+        await SeedStoreAsync(ConnectivityTestStoreId, isActive: true);
+        var created = await CreatePrinterAsync("P-NoPersist", $"LocalQueue-{Guid.NewGuid():N}", ConnectivityTestStoreId);
+
+        var response = await Client.PostAsJsonAsync($"/api/printers/{created.PrinterId}/netconnection", new { });
+
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<NetConnectionDto>();
+        Assert.NotNull(result);
+        Assert.False(result.Reachable);
+        Assert.Equal("no_host", result.ConnectivityStatus);
+
+        var persisted = await FindPrinterAsync(created.PrinterId);
+        Assert.NotNull(persisted);
+        Assert.Null(persisted.LastConnectionCheckAtUtc);
+        Assert.Null(persisted.LastConnectionOk);
+        Assert.Equal(0, persisted.ConnectionFailuresStreak);
+    }
+
+    [Fact]
+    public async Task NetConnection_WhenPersistTrueAndHostMissing_StoresNoHostWithoutIncreasingStreak()
+    {
+        await SeedStoreAsync(ConnectivityTestStoreId, isActive: true);
+        var created = await CreatePrinterAsync("P-PersistNoHost", $"LocalQueue-{Guid.NewGuid():N}", ConnectivityTestStoreId);
+
+        var response = await Client.PostAsJsonAsync($"/api/printers/{created.PrinterId}/netconnection?persist=true", new { });
+
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<NetConnectionDto>();
+        Assert.NotNull(result);
+        Assert.Equal("no_host", result.ConnectivityStatus);
+        Assert.Equal(PrinterConnectivityState.HostNotConfiguredError, result.Error);
+
+        var persisted = await FindPrinterAsync(created.PrinterId);
+        Assert.NotNull(persisted);
+        Assert.False(persisted.LastConnectionOk);
+        Assert.NotNull(persisted.LastConnectionCheckAtUtc);
+        Assert.Equal(0, persisted.ConnectionFailuresStreak);
+        Assert.Equal(PrinterConnectivityState.HostNotConfiguredError, persisted.LastConnectionError);
+    }
+
+    [Fact]
+    public async Task NetConnection_WhenPersistTrueAndConnectionFails_IncrementsStreakAndStoresCompactError()
+    {
+        await SeedStoreAsync(ConnectivityTestStoreId, isActive: true);
+        var created = await CreatePrinterAsync(
+            "P-PersistError",
+            $"\\\\srv\\q{Guid.NewGuid():N}"[..30],
+            ConnectivityTestStoreId,
+            host: "256.256.256.256");
+        await UpdatePrinterAsync(created.PrinterId, printer => printer.ConnectionFailuresStreak = 2);
+
+        var response = await Client.PostAsJsonAsync($"/api/printers/{created.PrinterId}/netconnection?persist=true", new { });
+
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<NetConnectionDto>();
+        Assert.NotNull(result);
+        Assert.Equal("error", result.ConnectivityStatus);
+        Assert.Equal(PrinterConnectivityState.NoConnectionError, result.Error);
+
+        var persisted = await FindPrinterAsync(created.PrinterId);
+        Assert.NotNull(persisted);
+        Assert.False(persisted.LastConnectionOk);
+        Assert.NotNull(persisted.LastConnectionCheckAtUtc);
+        Assert.Equal(3, persisted.ConnectionFailuresStreak);
+        Assert.Equal(PrinterConnectivityState.NoConnectionError, persisted.LastConnectionError);
+    }
+
+    [Fact]
+    public void ApplyProbeResult_WhenReachable_ResetsConnectivityTelemetry()
+    {
+        var checkedAt = DateTimeOffset.UtcNow;
+        var printer = new Printer
+        {
+            IsActive = true,
+            ConnectionFailuresStreak = 8,
+            LastConnectionOk = false,
+            LastConnectionError = PrinterConnectivityState.NoConnectionError
+        };
+
+        PrinterConnectivityState.ApplyProbeResult(printer, true, "tcp/9100", null, checkedAt);
+
+        Assert.True(printer.LastConnectionOk);
+        Assert.Equal(0, printer.ConnectionFailuresStreak);
+        Assert.Equal(checkedAt, printer.LastConnectionCheckAtUtc);
+        Assert.Equal("tcp/9100", printer.LastConnectionTransport);
+        Assert.Null(printer.LastConnectionError);
     }
 
     #endregion
@@ -315,14 +470,32 @@ public sealed class PrintersControllerTests : IntegrationTestBase
         string name,
         string spoolQueue,
         int storeId,
-        bool isActive = true)
+        bool isActive = true,
+        string? host = null)
     {
-        var request = new { printerName = name, spoolQueue, storeId, isActive };
+        var request = new { printerName = name, spoolQueue, host, storeId, isActive };
         var response = await Client.PostAsJsonAsync("/api/printers", request);
         response.EnsureSuccessStatusCode();
         var printer = await response.Content.ReadFromJsonAsync<PrinterDto>();
         Assert.NotNull(printer);
         return printer;
+    }
+
+    private async Task UpdatePrinterAsync(int printerId, Action<Printer> update)
+    {
+        using var scope = Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
+        var printer = await db.Printers.FindAsync(printerId);
+        Assert.NotNull(printer);
+        update(printer);
+        await db.SaveChangesAsync();
+    }
+
+    private async Task<Printer?> FindPrinterAsync(int printerId)
+    {
+        using var scope = Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
+        return await db.Printers.FindAsync(printerId);
     }
 
     private async Task SeedStoreAsync(int storeId, bool isActive)
@@ -359,7 +532,26 @@ public sealed class PrintersControllerTests : IntegrationTestBase
         bool IsActive,
         string? CapabilitiesJson,
         DateTimeOffset CreatedAtUtc,
-        DateTimeOffset UpdatedAtUtc);
+        DateTimeOffset UpdatedAtUtc,
+        int ConnectionFailuresStreak,
+        bool? LastConnectionOk,
+        DateTimeOffset? LastConnectionCheckAtUtc,
+        string? LastConnectionTransport,
+        string? LastConnectionError,
+        string ConnectivityStatus,
+        string ConnectivityLabel,
+        string ConnectivitySeverity,
+        string? ConnectivityDetail);
+
+    private sealed record NetConnectionDto(
+        bool Reachable,
+        int? LatencyMs,
+        string? Transport,
+        string? Error,
+        string? Detail,
+        string ConnectivityStatus,
+        string ConnectivityLabel,
+        string ConnectivitySeverity);
 
     #endregion
 }

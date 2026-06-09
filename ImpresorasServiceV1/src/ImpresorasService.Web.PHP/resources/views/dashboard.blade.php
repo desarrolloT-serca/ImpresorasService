@@ -31,6 +31,87 @@
     $alertsVisibleRows = 10;
     $stores = is_array($stores ?? null) ? $stores : [];
     $formatStoreLabel = static fn ($storeId, $storeName = null): string => \App\Helpers\StoreFormat::label($storeId, $storeName);
+    $printerConnectivityStatus = static function (array $printer): string {
+        $status = strtolower(trim((string)($printer['connectivityStatus'] ?? $printer['ConnectivityStatus'] ?? '')));
+        if (in_array($status, ['ok', 'no_host', 'unchecked', 'error', 'inactive'], true)) {
+            return $status;
+        }
+
+        $connOk = $printer['lastConnectionOk'] ?? null;
+        $connError = strtolower(trim((string)($printer['lastConnectionError'] ?? '')));
+        $connCheckAt = trim((string)($printer['lastConnectionCheckAtUtc'] ?? ''));
+        $connStreak = (int)($printer['connectionFailuresStreak'] ?? 0);
+        if (str_contains($connError, 'host_not_configured')
+            || str_contains($connError, 'sin host')
+            || str_contains($connError, 'host no configurado')
+            || str_contains($connError, 'host not configured')) {
+            return 'no_host';
+        }
+        if ($connCheckAt === '') {
+            return 'unchecked';
+        }
+        if ($connOk === true) {
+            return 'ok';
+        }
+        if ($connOk === false && ($connStreak > 0 || $connError !== '')) {
+            return 'error';
+        }
+        return 'unchecked';
+    };
+    $printerConnectivitySeverity = static function (array $printer) use ($printerConnectivityStatus): string {
+        $severity = strtolower(trim((string)($printer['connectivitySeverity'] ?? $printer['ConnectivitySeverity'] ?? '')));
+        if (in_array($severity, ['healthy', 'warning', 'critical', 'neutral'], true)) {
+            return $severity;
+        }
+        return match ($printerConnectivityStatus($printer)) {
+            'ok' => 'healthy',
+            'error' => 'critical',
+            'inactive' => 'neutral',
+            default => 'warning',
+        };
+    };
+    $printerConnectivityLabel = static function (array $printer) use ($printerConnectivityStatus, $isAdminUser): string {
+        $status = $printerConnectivityStatus($printer);
+        if ($status === 'error' && !$isAdminUser) {
+            return 'Sin conexion';
+        }
+
+        $label = trim((string)($printer['connectivityLabel'] ?? $printer['ConnectivityLabel'] ?? ''));
+        if ($label !== '') {
+            return $label;
+        }
+
+        return match ($status) {
+            'ok' => 'OK',
+            'no_host' => 'Sin host',
+            'error' => 'Error',
+            'inactive' => 'Inactiva',
+            default => 'No comprobada',
+        };
+    };
+    $printerConnectivityClass = static function (array $printer) use ($printerConnectivitySeverity): string {
+        return match ($printerConnectivitySeverity($printer)) {
+            'healthy' => 'ok',
+            'warning' => 'warn',
+            'neutral' => 'muted',
+            default => 'off',
+        };
+    };
+    $printerConnectivityTitle = static function (array $printer): string {
+        $detail = trim((string)($printer['connectivityDetail'] ?? $printer['ConnectivityDetail'] ?? ''));
+        $error = trim((string)($printer['lastConnectionError'] ?? ''));
+        $transport = trim((string)($printer['lastConnectionTransport'] ?? ''));
+        $checkedAt = trim((string)($printer['lastConnectionCheckAtUtc'] ?? ''));
+        $parts = [];
+        if ($detail !== '') {
+            $parts[] = 'Detalle: ' . $detail;
+        } elseif ($error !== '') {
+            $parts[] = 'Error: ' . $error;
+        }
+        $parts[] = 'Ultimo chequeo: ' . ($checkedAt !== '' ? $checkedAt : 'N/D');
+        $parts[] = 'Transporte: ' . ($transport !== '' ? $transport : '-');
+        return implode(' | ', $parts);
+    };
 
     $windowLabel = match($window) {
         '7d' => 'Ultimos 7 dias',
@@ -535,7 +616,7 @@
                         $hasConnectivityIssue = false;
 
                         foreach ($printerRows as $printerForReason) {
-                            if (($printerForReason['lastConnectionOk'] ?? null) !== true) {
+                            if (in_array($printerConnectivitySeverity($printerForReason), ['warning', 'critical'], true)) {
                                 $hasConnectivityIssue = true;
                                 break;
                             }
@@ -568,9 +649,14 @@
                         $queueUrl = url('/cola') . ($storeId !== null ? ('?storeId=' . urlencode((string)$storeId)) : '');
                         $printersUrl = url('/impresoras') . ($storeId !== null ? ('?storeId=' . urlencode((string)$storeId)) : '');
                         $sortedPrinterRows = $printerRows;
-                        usort($sortedPrinterRows, static function ($left, $right) {
-                            $leftIssue = (($left['lastConnectionOk'] ?? null) !== true ? 100 : 0) + ((int)($left['queueCurrent'] ?? 0) > 0 ? 10 : 0) + (int)($left['queueCurrent'] ?? 0);
-                            $rightIssue = (($right['lastConnectionOk'] ?? null) !== true ? 100 : 0) + ((int)($right['queueCurrent'] ?? 0) > 0 ? 10 : 0) + (int)($right['queueCurrent'] ?? 0);
+                        usort($sortedPrinterRows, static function ($left, $right) use ($printerConnectivitySeverity) {
+                            $severityWeight = static fn (array $printer): int => match ($printerConnectivitySeverity($printer)) {
+                                'critical' => 100,
+                                'warning' => 50,
+                                default => 0,
+                            };
+                            $leftIssue = $severityWeight($left) + ((int)($left['queueCurrent'] ?? 0) > 0 ? 10 : 0) + (int)($left['queueCurrent'] ?? 0);
+                            $rightIssue = $severityWeight($right) + ((int)($right['queueCurrent'] ?? 0) > 0 ? 10 : 0) + (int)($right['queueCurrent'] ?? 0);
                             return $rightIssue <=> $leftIssue;
                         });
                         $visiblePrinterRows = array_slice($healthClass === 'healthy' ? $printerRows : $sortedPrinterRows, 0, 3);
@@ -608,27 +694,14 @@
                                     <div class="dbx-printer-row dbx-diagnostic-printer-row">
                                         <span title="{{ $printer['spoolQueue'] ?? '-' }}">{{ $printer['printerName'] ?? 'Impresora' }}</span>
                                         @php
-                                            $connOk = $printer['lastConnectionOk'] ?? null;
-                                            $connError = strtoupper((string)($printer['lastConnectionError'] ?? ''));
-                                            $connTransport = (string)($printer['lastConnectionTransport'] ?? '');
-                                            $connCheckAt = (string)($printer['lastConnectionCheckAtUtc'] ?? '');
-                                            $connStreak = (int)($printer['connectionFailuresStreak'] ?? 0);
                                             $printerQueue = (int)($printer['queueCurrent'] ?? 0);
                                             $showPrinterQueue = count($printerRows) > 1 && $printerQueue > 0;
-                                            $connClass = $connOk === true ? 'ok' : 'off';
-                                            if ($connOk === true) {
-                                                $connText = 'OK';
-                                            } elseif ($connError === 'HOST_NOT_CONFIGURED') {
-                                                $connText = 'Sin host';
-                                            } elseif ($connCheckAt === '') {
-                                                $connText = 'No comprobada';
-                                            } else {
-                                                $connText = 'Sin conexi&oacute;n';
-                                            }
-                                            $connTitle = 'Error: ' . ((string)($printer['lastConnectionError'] ?? '-') ?: '-') . ' | Ultimo chequeo: ' . ($connCheckAt !== '' ? $connCheckAt : 'N/D') . ' | Transporte: ' . ($connTransport !== '' ? $connTransport : '-') . ' | Racha: ' . $connStreak;
+                                            $connClass = $printerConnectivityClass($printer);
+                                            $connText = $printerConnectivityLabel($printer);
+                                            $connTitle = $printerConnectivityTitle($printer);
                                         @endphp
                                         <span class="dbx-printer-state {{ $connClass }}" title="{{ $connTitle }}">
-                                            {!! $connText !!}
+                                            {{ $connText }}
                                         </span>
                                         <span class="dbx-printer-queue-slot">
                                             @if($showPrinterQueue)
@@ -705,21 +778,11 @@
                                 <div class="dbx-printer-row">
                                     <span title="{{ $printer['spoolQueue'] ?? '-' }}">{{ $printer['printerName'] ?? 'Impresora' }}</span>
                                     @php
-                                        $connOk = $printer['lastConnectionOk'] ?? null;
-                                        $connError = strtoupper((string)($printer['lastConnectionError'] ?? ''));
-                                        $connTransport = (string)($printer['lastConnectionTransport'] ?? '');
-                                        $connCheckAt = (string)($printer['lastConnectionCheckAtUtc'] ?? '');
-                                        $connStreak = (int)($printer['connectionFailuresStreak'] ?? 0);
-                                        $connClass = $connOk === true ? 'ok' : 'off';
-                                        if ($connOk === true) {
-                                            $connText = 'OK';
-                                        } elseif ($connError === 'HOST_NOT_CONFIGURED' || $connCheckAt === '') {
-                                            $connText = 'Igual';
-                                        } else {
-                                            $connText = 'Sin conexion';
-                                        }
+                                        $connClass = $printerConnectivityClass($printer);
+                                        $connText = $printerConnectivityLabel($printer);
+                                        $connTitle = $printerConnectivityTitle($printer);
                                     @endphp
-                                    <span class="dbx-printer-state {{ $connClass }}" title="&Uacute;ltimo chequeo: {{ $connCheckAt !== '' ? $connCheckAt : 'N/D' }}">
+                                    <span class="dbx-printer-state {{ $connClass }}" title="{{ $connTitle }}">
                                         {{ $connText }}
                                     </span>
                                     <span>{{ $printer['queueCurrent'] ?? 0 }}</span>

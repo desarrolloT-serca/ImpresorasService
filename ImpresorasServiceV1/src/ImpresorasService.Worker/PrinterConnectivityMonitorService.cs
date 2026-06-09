@@ -1,7 +1,9 @@
-using System.Diagnostics;
 using System.Net.Sockets;
+using ImpresorasService.Domain.Connectivity;
+using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -12,24 +14,26 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<PrinterConnectivityMonitorService> _logger;
-
-    // Ajustable: frecuencia de chequeo.
-    private static readonly TimeSpan Interval = TimeSpan.FromSeconds(30);
-
-    // Puertos comunes de impresión / compartición.
-    private static readonly int[] PortsToTry = [515, 9100, 631, 445, 139];
+    private readonly PrinterConnectivityOptions _options;
 
     public PrinterConnectivityMonitorService(
         IServiceScopeFactory scopeFactory,
-        ILogger<PrinterConnectivityMonitorService> logger)
+        ILogger<PrinterConnectivityMonitorService> logger,
+        IConfiguration configuration)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _options = PrinterConnectivityOptions.FromConfiguration(configuration);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Pequeño delay inicial para dejar que el host arranque.
+        if (!_options.Enabled)
+        {
+            _logger.LogInformation("Monitor de conectividad de impresoras desactivado por configuracion.");
+            return;
+        }
+
         await Task.Delay(TimeSpan.FromSeconds(3), stoppingToken);
 
         while (!stoppingToken.IsCancellationRequested)
@@ -47,7 +51,7 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
                 _logger.LogWarning(ex, "Fallo en monitor de conectividad de impresoras.");
             }
 
-            await Task.Delay(Interval, stoppingToken);
+            await Task.Delay(_options.Interval, stoppingToken);
         }
     }
 
@@ -59,65 +63,19 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
         var printers = await db.Printers
             .AsNoTracking()
             .Where(p => p.IsActive)
-            .Select(p => new
-            {
+            .Select(p => new PrinterConnectivityCandidate(
                 p.PrinterId,
                 p.SpoolQueue,
                 p.Host,
-                p.ConnectionFailuresStreak
-            })
+                p.ConnectionFailuresStreak))
             .ToListAsync(ct);
 
-        if (printers.Count == 0) return;
+        if (printers.Count == 0)
+            return;
 
-        var updates = new List<ConnectivityUpdate>(printers.Count);
-
-        foreach (var p in printers)
-        {
-            ct.ThrowIfCancellationRequested();
-
-            var host = !string.IsNullOrWhiteSpace(p.Host)
-                ? ExtractHostFromMaybeUnc(p.Host!)
-                : ExtractHostFromSpoolQueue(p.SpoolQueue);
-
-            var now = DateTimeOffset.UtcNow;
-
-            // Host no configurado: warning en dashboard, pero no incrementamos streak de "caída".
-            if (string.IsNullOrWhiteSpace(host))
-            {
-                updates.Add(new ConnectivityUpdate(
-                    p.PrinterId,
-                    LastOk: false,
-                    FailuresStreak: 0,
-                    CheckedAtUtc: now,
-                    Transport: null,
-                    Error: "HOST_NOT_CONFIGURED"));
-                continue;
-            }
-
-            var result = await TryConnectAnyPortAsync(host!, ct);
-            if (result.Ok)
-            {
-                updates.Add(new ConnectivityUpdate(
-                    p.PrinterId,
-                    LastOk: true,
-                    FailuresStreak: 0,
-                    CheckedAtUtc: now,
-                    Transport: result.Transport,
-                    Error: null));
-            }
-            else
-            {
-                var nextStreak = Math.Clamp(p.ConnectionFailuresStreak + 1, 0, 999);
-                updates.Add(new ConnectivityUpdate(
-                    p.PrinterId,
-                    LastOk: false,
-                    FailuresStreak: nextStreak,
-                    CheckedAtUtc: now,
-                    Transport: null,
-                    Error: result.Error ?? "NO_CONNECTION"));
-            }
-        }
+        var updates = _options.MaxParallelChecks <= 1
+            ? await BuildUpdatesSequentiallyAsync(printers, ct)
+            : await BuildUpdatesInParallelAsync(printers, ct);
 
         foreach (var update in updates)
             ApplyConnectivityUpdate(db, update);
@@ -125,11 +83,83 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
         await db.SaveChangesAsync(ct);
     }
 
+    private async Task<List<ConnectivityUpdate>> BuildUpdatesSequentiallyAsync(
+        IReadOnlyCollection<PrinterConnectivityCandidate> printers,
+        CancellationToken ct)
+    {
+        var updates = new List<ConnectivityUpdate>(printers.Count);
+        foreach (var printer in printers)
+        {
+            ct.ThrowIfCancellationRequested();
+            updates.Add(await BuildUpdateAsync(printer, ct));
+        }
+
+        return updates;
+    }
+
+    private async Task<List<ConnectivityUpdate>> BuildUpdatesInParallelAsync(
+        IReadOnlyCollection<PrinterConnectivityCandidate> printers,
+        CancellationToken ct)
+    {
+        using var semaphore = new SemaphoreSlim(_options.MaxParallelChecks);
+        var tasks = printers.Select(async printer =>
+        {
+            await semaphore.WaitAsync(ct);
+            try
+            {
+                return await BuildUpdateAsync(printer, ct);
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+        });
+
+        return (await Task.WhenAll(tasks)).ToList();
+    }
+
+    private async Task<ConnectivityUpdate> BuildUpdateAsync(
+        PrinterConnectivityCandidate candidate,
+        CancellationToken ct)
+    {
+        var printer = new Printer
+        {
+            PrinterId = candidate.PrinterId,
+            ConnectionFailuresStreak = candidate.ConnectionFailuresStreak
+        };
+
+        var host = !string.IsNullOrWhiteSpace(candidate.Host)
+            ? ExtractHostFromMaybeUnc(candidate.Host!)
+            : ExtractHostFromSpoolQueue(candidate.SpoolQueue);
+
+        if (string.IsNullOrWhiteSpace(host))
+        {
+            PrinterConnectivityState.ApplyProbeResult(
+                printer,
+                reachable: false,
+                transport: null,
+                error: PrinterConnectivityState.HostNotConfiguredError,
+                checkedAtUtc: DateTimeOffset.UtcNow);
+
+            return ToUpdate(printer);
+        }
+
+        var result = await TryConnectAnyPortAsync(host!, ct);
+        PrinterConnectivityState.ApplyProbeResult(
+            printer,
+            result.Ok,
+            result.Transport,
+            result.Error,
+            DateTimeOffset.UtcNow);
+
+        return ToUpdate(printer);
+    }
+
     private static void ApplyConnectivityUpdate(
         ImpresorasDbContext db,
         ConnectivityUpdate update)
     {
-        var entity = new ImpresorasService.Domain.Entities.Printer
+        var entity = new Printer
         {
             PrinterId = update.PrinterId
         };
@@ -148,24 +178,25 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
         db.Entry(entity).Property(x => x.LastConnectionError).IsModified = true;
     }
 
-    private sealed record ConnectivityUpdate(
-        int PrinterId,
-        bool LastOk,
-        int FailuresStreak,
-        DateTimeOffset CheckedAtUtc,
-        string? Transport,
-        string? Error);
+    private static ConnectivityUpdate ToUpdate(Printer printer)
+        => new(
+            printer.PrinterId,
+            printer.LastConnectionOk == true,
+            printer.ConnectionFailuresStreak,
+            printer.LastConnectionCheckAtUtc ?? DateTimeOffset.UtcNow,
+            printer.LastConnectionTransport,
+            printer.LastConnectionError);
 
-    private static async Task<(bool Ok, string? Transport, string? Error)> TryConnectAnyPortAsync(string host, CancellationToken ct)
+    private async Task<(bool Ok, string? Transport, string? Error)> TryConnectAnyPortAsync(
+        string host,
+        CancellationToken ct)
     {
-        foreach (var port in PortsToTry)
+        foreach (var port in _options.Ports)
         {
-            var sw = Stopwatch.StartNew();
             using var tcp = new TcpClient();
-
-            const int timeoutMs = 1500;
             var connectTask = tcp.ConnectAsync(host, port);
-            var completed = await Task.WhenAny(connectTask, Task.Delay(timeoutMs, ct));
+            var completed = await Task.WhenAny(connectTask, Task.Delay(_options.TimeoutMsPerPort, ct));
+            ct.ThrowIfCancellationRequested();
 
             if (!ReferenceEquals(completed, connectTask))
             {
@@ -180,15 +211,13 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
                 await connectTask;
                 return (true, $"tcp/{port}", null);
             }
-            catch (Exception ex)
+            catch
             {
                 // Intentar siguiente puerto.
-                _ = sw; // mantiene simetría por si luego se usa.
-                _ = ex;
             }
         }
 
-        return (false, null, $"No se pudo conectar a {host} (puertos TCP: {string.Join(", ", PortsToTry)})");
+        return (false, null, PrinterConnectivityState.NoConnectionError);
     }
 
     private static string? ExtractHostFromMaybeUnc(string hostOrUnc)
@@ -200,20 +229,77 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
             var parts = trimmed.Split('\\', StringSplitOptions.RemoveEmptyEntries);
             return parts.Length >= 1 ? parts[0].Trim() : null;
         }
+
         if (trimmed.Contains('\\'))
         {
             var parts = trimmed.Split('\\', StringSplitOptions.RemoveEmptyEntries);
             return parts.Length >= 1 ? parts[0].Trim() : null;
         }
+
         return trimmed;
     }
 
     private static string? ExtractHostFromSpoolQueue(string spoolQueue)
     {
-        if (string.IsNullOrWhiteSpace(spoolQueue)) return null;
-        if (spoolQueue.Length < 2 || spoolQueue[0] != '\\' || spoolQueue[1] != '\\') return null;
+        if (string.IsNullOrWhiteSpace(spoolQueue))
+            return null;
+        if (spoolQueue.Length < 2 || spoolQueue[0] != '\\' || spoolQueue[1] != '\\')
+            return null;
+
         var parts = spoolQueue.TrimStart('\\').Split('\\', StringSplitOptions.RemoveEmptyEntries);
         return parts.Length >= 1 ? parts[0].Trim() : null;
     }
-}
 
+    private sealed record PrinterConnectivityCandidate(
+        int PrinterId,
+        string SpoolQueue,
+        string? Host,
+        int ConnectionFailuresStreak);
+
+    private sealed record ConnectivityUpdate(
+        int PrinterId,
+        bool LastOk,
+        int FailuresStreak,
+        DateTimeOffset CheckedAtUtc,
+        string? Transport,
+        string? Error);
+
+    private sealed class PrinterConnectivityOptions
+    {
+        private static readonly int[] DefaultPorts = [515, 9100, 631, 445, 139];
+
+        public bool Enabled { get; private init; } = true;
+        public int IntervalSeconds { get; private init; } = 30;
+        public int TimeoutMsPerPort { get; private init; } = 1500;
+        public int MaxParallelChecks { get; private init; } = 1;
+        public int[] Ports { get; private init; } = DefaultPorts;
+        public TimeSpan Interval => TimeSpan.FromSeconds(Math.Max(1, IntervalSeconds));
+
+        public static PrinterConnectivityOptions FromConfiguration(IConfiguration configuration)
+        {
+            var section = configuration.GetSection("PrinterConnectivity");
+            return new PrinterConnectivityOptions
+            {
+                Enabled = ReadBool(section["Enabled"], true),
+                IntervalSeconds = Math.Max(1, ReadInt(section["IntervalSeconds"], 30)),
+                TimeoutMsPerPort = Math.Max(100, ReadInt(section["TimeoutMsPerPort"], 1500)),
+                MaxParallelChecks = Math.Max(1, ReadInt(section["MaxParallelChecks"], 1)),
+                Ports = ReadPorts(section) is { Length: > 0 } ports ? ports : DefaultPorts
+            };
+        }
+
+        private static bool ReadBool(string? value, bool fallback)
+            => bool.TryParse(value, out var parsed) ? parsed : fallback;
+
+        private static int ReadInt(string? value, int fallback)
+            => int.TryParse(value, out var parsed) ? parsed : fallback;
+
+        private static int[] ReadPorts(IConfigurationSection section)
+            => section.GetSection("Ports")
+                .GetChildren()
+                .Select(item => ReadInt(item.Value, 0))
+                .Where(port => port > 0 && port <= 65535)
+                .Distinct()
+                .ToArray();
+    }
+}

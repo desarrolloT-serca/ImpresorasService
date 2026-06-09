@@ -40,7 +40,7 @@
                         $printersCount = (int) ($storeGroup['printersCount'] ?? 0);
                         $activePrintersCount = (int) ($storeGroup['activePrintersCount'] ?? 0);
                         $errorPrintersCount = (int) ($storeGroup['errorPrintersCount'] ?? $storeGroup['connectionErrorCount'] ?? 0);
-                        $uncheckedPrintersCount = (int) ($storeGroup['uncheckedPrintersCount'] ?? 0);
+                        $warningPrintersCount = (int) ($storeGroup['warningPrintersCount'] ?? $storeGroup['uncheckedPrintersCount'] ?? 0);
                         $visualStatus = (string) ($storeGroup['visualStatus'] ?? 'empty');
                         $visualStatusLabel = (string) ($storeGroup['visualStatusLabel'] ?? 'WARNING');
                         $printerWord = $printersCount === 1 ? 'impresora' : 'impresoras';
@@ -54,7 +54,7 @@
                         <span class="dbx-routing-store-meta">
                             @if($printersCount === 0)
                                 0 impresoras &middot; Sin configurar
-                            @elseif($errorPrintersCount === 0 && $uncheckedPrintersCount === 0 && $activePrintersCount > 0)
+                            @elseif($errorPrintersCount === 0 && $warningPrintersCount === 0 && $activePrintersCount > 0)
                                 {{ $printersCount }} {{ $printerWord }} &middot; OK
                             @else
                                 {{ $printersCount }} {{ $printerWord }} &middot; {{ $activePrintersCount }} activas
@@ -62,8 +62,8 @@
                         </span>
                         @if($errorPrintersCount > 0)
                             <span class="dbx-routing-store-meta is-danger">{{ $errorPrintersCount }} con error</span>
-                        @elseif($uncheckedPrintersCount > 0)
-                            <span class="dbx-routing-store-meta is-warning">{{ $uncheckedPrintersCount }} sin comprobar</span>
+                        @elseif($warningPrintersCount > 0)
+                            <span class="dbx-routing-store-meta is-warning">{{ $warningPrintersCount }} pendientes</span>
                         @endif
                     </a>
                 @endforeach
@@ -116,32 +116,71 @@
                             $host = trim((string) ($p['host'] ?? $p['Host'] ?? ''));
                             $isActive = (bool) ($p['isActive'] ?? $p['IsActive'] ?? false);
                             $editUrl = $id ? route('impresoras.edit', ['impresora' => $id, 'storeId' => $selectedStoreId]) : '#';
+                            $connectivityStatus = strtolower(trim((string) ($p['connectivityStatus'] ?? $p['ConnectivityStatus'] ?? '')));
+                            $connectivitySeverity = strtolower(trim((string) ($p['connectivitySeverity'] ?? $p['ConnectivitySeverity'] ?? '')));
+                            $connectionLabel = trim((string) ($p['connectivityLabel'] ?? $p['ConnectivityLabel'] ?? ''));
+                            $connectionTitle = trim((string) ($p['connectivityDetail'] ?? $p['ConnectivityDetail'] ?? ''));
+                            $lastConnectionError = trim((string) ($p['lastConnectionError'] ?? $p['LastConnectionError'] ?? ''));
                             $lastConnectionOkRaw = $p['lastConnectionOk'] ?? $p['LastConnectionOk'] ?? null;
                             $lastConnectionOk = ($lastConnectionOkRaw === null || $lastConnectionOkRaw === '')
                                 ? null
                                 : (is_bool($lastConnectionOkRaw) ? $lastConnectionOkRaw : filter_var($lastConnectionOkRaw, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE));
-                            $lastConnectionError = trim((string) ($p['lastConnectionError'] ?? $p['LastConnectionError'] ?? ''));
                             $lastConnectionCheckAtUtc = trim((string) ($p['lastConnectionCheckAtUtc'] ?? $p['LastConnectionCheckAtUtc'] ?? ''));
-                            $normalizedError = strtolower($lastConnectionError);
+                            $lastConnectionTransport = trim((string) ($p['lastConnectionTransport'] ?? $p['LastConnectionTransport'] ?? ''));
+                            $normalizedError = strtolower($connectionTitle !== '' ? $connectionTitle : $lastConnectionError);
                             $isHostNotConfigured = str_contains($normalizedError, 'sin host')
                                 || str_contains($normalizedError, 'host no configurado')
                                 || str_contains($normalizedError, 'host not configured')
-                                || str_contains($normalizedError, 'hostname no configurado');
+                                || str_contains($normalizedError, 'hostname no configurado')
+                                || trim($normalizedError) === 'host_not_configured';
+                            if ($connectivityStatus === 'error' && !($isAdmin ?? false)) {
+                                $connectionLabel = html_entity_decode('Sin conexi&oacute;n', ENT_QUOTES, 'UTF-8');
+                            }
+                            if ($connectionLabel === '') {
+                                $connectionLabel = match ($connectivityStatus) {
+                                    'ok' => 'OK',
+                                    'no_host' => 'Sin host',
+                                    'inactive' => 'Inactiva',
+                                    'error' => ($isAdmin ?? false) ? 'Error' : html_entity_decode('Sin conexi&oacute;n', ENT_QUOTES, 'UTF-8'),
+                                    default => 'No comprobada',
+                                };
+                            }
+                            if ($connectivitySeverity === '') {
+                                if ($isHostNotConfigured) {
+                                    $connectivitySeverity = 'warning';
+                                } elseif ($lastConnectionCheckAtUtc === '') {
+                                    $connectivitySeverity = 'warning';
+                                } elseif ($lastConnectionOk === true) {
+                                    $connectivitySeverity = 'healthy';
+                                } elseif ($lastConnectionOk === false || $lastConnectionError !== '') {
+                                    $connectivitySeverity = 'critical';
+                                } else {
+                                    $connectivitySeverity = 'warning';
+                                }
+                            }
+                            if ($connectivityStatus === '' && $isHostNotConfigured) {
+                                $connectivityStatus = 'no_host';
+                            }
+                            if ($connectionTitle === '') {
+                                $connectionTitle = $lastConnectionError;
+                            }
+                            if ($connectionTitle === '' && $lastConnectionCheckAtUtc !== '') {
+                                $connectionTitle = 'Ultimo chequeo: ' . $lastConnectionCheckAtUtc;
+                            }
+                            $connectionClass = match ($connectivitySeverity) {
+                                'healthy' => 'badge-success',
+                                'critical' => 'badge-danger',
+                                'neutral' => 'badge-neutral',
+                                default => 'badge-warning',
+                            };
                             if ($isHostNotConfigured) {
                                 $connectionLabel = 'Sin host';
-                                $connectionClass = 'badge-warning';
-                            } elseif ($lastConnectionCheckAtUtc === '') {
-                                $connectionLabel = 'No comprobada';
-                                $connectionClass = 'badge-neutral';
-                            } elseif ($lastConnectionOk === true) {
-                                $connectionLabel = 'OK';
-                                $connectionClass = 'badge-success';
-                            } elseif ($lastConnectionOk === false || $lastConnectionError !== '') {
-                                $connectionLabel = ($isAdmin ?? false) ? 'Error' : html_entity_decode('Sin conexi&oacute;n', ENT_QUOTES, 'UTF-8');
-                                $connectionClass = 'badge-danger';
-                            } else {
-                                $connectionLabel = 'No comprobada';
-                                $connectionClass = 'badge-neutral';
+                            }
+                            $initialPort = '-';
+                            if ($lastConnectionTransport !== '' && preg_match('/\/(\d+)$/', $lastConnectionTransport, $matches)) {
+                                $initialPort = $matches[1];
+                            } elseif ($lastConnectionTransport !== '') {
+                                $initialPort = $lastConnectionTransport;
                             }
                         @endphp
                         <tr data-printer-id="{{ $id ?? '' }}">
@@ -154,10 +193,10 @@
                                 </span>
                             </td>
                             <td class="status-col">
-                                <span class="ping-status badge {{ $connectionClass }}" data-id="{{ $id ?? '' }}" title="{{ $lastConnectionError }}">{{ $connectionLabel }}</span>
+                                <span class="ping-status badge {{ $connectionClass }}" data-id="{{ $id ?? '' }}" title="{{ $connectionTitle }}">{{ $connectionLabel }}</span>
                             </td>
                             <td class="status-col">
-                                <span class="ping-port badge badge-neutral" data-id="{{ $id ?? '' }}">-</span>
+                                <span class="ping-port badge badge-neutral" data-id="{{ $id ?? '' }}">{{ $initialPort }}</span>
                             </td>
                             <td class="actions-col">
                                 @if(($isAdmin ?? false) && $id)
@@ -192,19 +231,47 @@
     const isAdmin = {{ ($isAdmin ?? false) ? 'true' : 'false' }};
 
     function classifyConnectionState(data) {
+        const status = String(data?.connectivityStatus || '').toLowerCase();
+        if (status) return status;
         if (!data || !data.reachable) return 'error';
         return 'ok';
+    }
+
+    function connectionSeverity(data) {
+        const severity = String(data?.connectivitySeverity || '').toLowerCase();
+        if (severity) return severity;
+        const state = classifyConnectionState(data);
+        if (state === 'ok') return 'healthy';
+        if (state === 'inactive') return 'neutral';
+        if (state === 'no_host' || state === 'unchecked') return 'warning';
+        return 'critical';
     }
 
     function userFriendlyStatusText(data) {
         const state = classifyConnectionState(data);
 
+        if (state === 'error' && !isAdmin) {
+            return 'Sin conexi\u00f3n';
+        }
+
+        if (data?.connectivityLabel) {
+            return String(data.connectivityLabel);
+        }
+
         if (state === 'ok') {
             return 'OK';
         }
 
-        if (isHostNotConfigured(data)) {
+        if (state === 'no_host' || isHostNotConfigured(data)) {
             return 'Sin host';
+        }
+
+        if (state === 'unchecked') {
+            return 'No comprobada';
+        }
+
+        if (state === 'inactive') {
+            return 'Inactiva';
         }
 
         if (isAdmin) {
@@ -215,15 +282,17 @@
     }
 
     function isHostNotConfigured(data) {
-        const error = String(data?.error || data?.message || '').toLowerCase();
+        const error = String(data?.error || data?.detail || data?.message || '').toLowerCase();
         return error.includes('sin host')
             || error.includes('host no configurado')
             || error.includes('host not configured')
-            || error.includes('hostname no configurado');
+            || error.includes('hostname no configurado')
+            || error.trim() === 'host_not_configured';
     }
 
     function technicalStatusTitle(data) {
         if (!data) return '';
+        if (data.detail) return data.detail;
         if (data.error) return data.error;
         if (data.message) return data.message;
         if (data.transport) return data.transport;
@@ -232,9 +301,17 @@
     }
 
     function applyConnectionBadgeClass(statusEl, data) {
-        const state = classifyConnectionState(data);
-        if (state === 'ok') {
+        const severity = connectionSeverity(data);
+        if (severity === 'healthy') {
             statusEl.className = 'ping-status badge badge-success';
+            return;
+        }
+        if (severity === 'warning') {
+            statusEl.className = 'ping-status badge badge-warning';
+            return;
+        }
+        if (severity === 'neutral') {
+            statusEl.className = 'ping-status badge badge-neutral';
             return;
         }
         statusEl.className = 'ping-status badge badge-danger';
@@ -247,7 +324,7 @@
         if (statusEl) statusEl.textContent = '...';
         if (portEl) portEl.textContent = '...';
 
-        fetch('{{ url("/impresoras") }}/' + id + '/netconnection', {
+        fetch('{{ url("/impresoras") }}/' + id + '/netconnection?persist=true', {
             method: 'POST',
             headers: {
                 'Accept': 'application/json',
