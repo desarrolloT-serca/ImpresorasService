@@ -3691,3 +3691,757 @@ html.dark .btn-outline {
     min-height: 36px;
     padding-inline: 12px;
 }
+
+/* =====================================================================
+   LIQUID GLASS BUTTON SYSTEM
+   Final reusable layer for buttons, button-like tabs, and topbar controls.
+   ===================================================================== */
+
+:root {
+    --btn-radius: 7px;
+    --btn-radius-sm: 6px;
+    --btn-glass-shadow: 0 3px 10px rgba(27, 47, 130, 0.10);
+    --btn-glass-shadow-hover: 0 7px 18px rgba(27, 47, 130, 0.16);
+    --btn-glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.58);
+}
+
+.btn,
+.dbx-tab,
+.dashboard-tab,
+.dbx-store-view-tab {
+    --btn-bg-a: color-mix(in srgb, var(--ui-surface) 78%, transparent);
+    --btn-bg-b: color-mix(in srgb, var(--ui-surface-soft) 92%, transparent);
+    --btn-border: color-mix(in srgb, var(--ui-primary) 22%, var(--ui-border));
+    --btn-fg: var(--ui-text);
+    --btn-hover-bg-a: color-mix(in srgb, var(--ui-surface) 86%, var(--ui-primary-soft));
+    --btn-hover-bg-b: color-mix(in srgb, var(--ui-primary-soft) 62%, var(--ui-surface));
+    --btn-hover-border: color-mix(in srgb, var(--ui-primary) 42%, var(--ui-border-strong));
+    --btn-hover-fg: var(--ui-primary-strong);
+    position: relative;
+    isolation: isolate;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 32px;
+    padding: 6px 12px;
+    border: 1px solid var(--btn-border);
+    border-radius: var(--btn-radius);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0) 42%),
+        linear-gradient(135deg, var(--btn-bg-a), var(--btn-bg-b));
+    color: var(--btn-fg);
+    box-shadow: var(--btn-glass-highlight), var(--btn-glass-shadow);
+    -webkit-backdrop-filter: blur(10px) saturate(1.15);
+    backdrop-filter: blur(10px) saturate(1.15);
+    font-family: inherit;
+    font-size: 0.76rem;
+    font-weight: 850;
+    letter-spacing: 0.018em;
+    line-height: 1.15;
+    text-align: center;
+    text-decoration: none;
+    text-transform: uppercase;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    vertical-align: middle;
+    transform: translateY(0);
+    transition:
+        background 0.18s ease,
+        border-color 0.18s ease,
+        color 0.18s ease,
+        box-shadow 0.18s ease,
+        transform 0.14s ease,
+        opacity 0.18s ease;
+}
+
+.btn::before,
+.dbx-tab::before,
+.dashboard-tab::before,
+.dbx-store-view-tab::before {
+    content: "";
+    position: absolute;
+    inset: 1px 1px auto;
+    height: 42%;
+    border-radius: calc(var(--btn-radius) - 2px);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0));
+    pointer-events: none;
+    z-index: -1;
+}
+
+.btn:hover,
+.dbx-tab:hover,
+.dashboard-tab:hover,
+.dbx-store-view-tab:hover {
+    border-color: var(--btn-hover-border);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0) 44%),
+        linear-gradient(135deg, var(--btn-hover-bg-a), var(--btn-hover-bg-b));
+    color: var(--btn-hover-fg);
+    box-shadow: var(--btn-glass-highlight), var(--btn-glass-shadow-hover);
+    transform: translateY(-1px);
+}
+
+.btn:active,
+.dbx-tab:active,
+.dashboard-tab:active,
+.dbx-store-view-tab:active {
+    box-shadow: inset 0 2px 5px rgba(12, 24, 62, 0.16), 0 1px 4px rgba(27, 47, 130, 0.08);
+    transform: translateY(0);
+}
+
+.btn:focus-visible,
+.dbx-tab:focus-visible,
+.dashboard-tab:focus-visible,
+.dbx-store-view-tab:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--ui-primary) 64%, #ffffff);
+    outline-offset: 2px;
+    box-shadow: var(--ui-focus), var(--btn-glass-shadow-hover) !important;
+}
+
+.btn:disabled,
+.btn[disabled],
+.btn.is-disabled,
+.dbx-tab.is-disabled,
+.dashboard-tab.is-disabled,
+.dbx-store-view-tab.is-disabled {
+    opacity: 0.54;
+    cursor: not-allowed;
+    pointer-events: none;
+    transform: none !important;
+    box-shadow: var(--btn-glass-highlight) !important;
+}
+
+.btn-primary,
+.dbx-tab.is-active,
+.dashboard-tab-active,
+.dbx-store-view-tab.is-active {
+    --btn-bg-a: color-mix(in srgb, var(--ui-primary) 84%, #ffffff);
+    --btn-bg-b: var(--ui-primary);
+    --btn-border: color-mix(in srgb, var(--ui-primary) 82%, #000000);
+    --btn-fg: #ffffff;
+    --btn-hover-bg-a: color-mix(in srgb, var(--ui-primary) 92%, #ffffff);
+    --btn-hover-bg-b: var(--ui-primary-strong);
+    --btn-hover-border: var(--ui-primary-strong);
+    --btn-hover-fg: #ffffff;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.28),
+        0 4px 12px color-mix(in srgb, var(--ui-primary) 28%, transparent);
+}
+
+.btn-secondary {
+    --btn-bg-a: color-mix(in srgb, #ffffff 88%, var(--ui-primary-soft));
+    --btn-bg-b: color-mix(in srgb, var(--ui-surface-soft) 88%, var(--ui-primary-soft));
+    --btn-border: var(--ui-border-strong);
+    --btn-fg: var(--ui-text);
+    --btn-hover-bg-a: #ffffff;
+    --btn-hover-bg-b: color-mix(in srgb, var(--ui-primary-soft) 58%, var(--ui-surface));
+}
+
+.btn-ghost,
+.btn-outline {
+    --btn-bg-a: color-mix(in srgb, var(--ui-surface) 54%, transparent);
+    --btn-bg-b: color-mix(in srgb, var(--ui-surface-soft) 48%, transparent);
+    --btn-border: color-mix(in srgb, var(--ui-primary) 28%, var(--ui-border));
+    --btn-fg: var(--ui-primary);
+    --btn-hover-bg-a: color-mix(in srgb, var(--ui-primary-soft) 70%, var(--ui-surface));
+    --btn-hover-bg-b: color-mix(in srgb, var(--ui-primary-soft) 48%, transparent);
+}
+
+.btn-danger {
+    --btn-bg-a: color-mix(in srgb, var(--ui-danger) 9%, #ffffff);
+    --btn-bg-b: color-mix(in srgb, var(--ui-danger) 6%, var(--ui-surface));
+    --btn-border: color-mix(in srgb, var(--ui-danger) 48%, var(--ui-border));
+    --btn-fg: var(--ui-danger);
+    --btn-hover-bg-a: color-mix(in srgb, var(--ui-danger) 86%, #ffffff);
+    --btn-hover-bg-b: var(--ui-danger);
+    --btn-hover-border: var(--ui-danger);
+    --btn-hover-fg: #ffffff;
+}
+
+.btn-warning {
+    --btn-bg-a: color-mix(in srgb, var(--ui-warning) 11%, #ffffff);
+    --btn-bg-b: color-mix(in srgb, var(--ui-warning) 7%, var(--ui-surface));
+    --btn-border: color-mix(in srgb, var(--ui-warning) 52%, var(--ui-border));
+    --btn-fg: color-mix(in srgb, var(--ui-warning) 88%, #000000);
+    --btn-hover-bg-a: color-mix(in srgb, var(--ui-warning) 84%, #ffffff);
+    --btn-hover-bg-b: var(--ui-warning);
+    --btn-hover-border: var(--ui-warning);
+    --btn-hover-fg: color-mix(in srgb, var(--ui-warning) 12%, #000000);
+}
+
+.btn-success {
+    --btn-bg-a: color-mix(in srgb, var(--ui-success) 10%, #ffffff);
+    --btn-bg-b: color-mix(in srgb, var(--ui-success) 7%, var(--ui-surface));
+    --btn-border: color-mix(in srgb, var(--ui-success) 48%, var(--ui-border));
+    --btn-fg: var(--ui-success);
+    --btn-hover-bg-a: color-mix(in srgb, var(--ui-success) 84%, #ffffff);
+    --btn-hover-bg-b: var(--ui-success);
+    --btn-hover-border: var(--ui-success);
+    --btn-hover-fg: #ffffff;
+}
+
+.btn-sm,
+.btn-action,
+.action-buttons .btn,
+.dbx-table td .btn,
+.table td .btn {
+    min-height: 28px;
+    padding: 4px 9px;
+    border-radius: var(--btn-radius-sm);
+    font-size: 0.69rem;
+    gap: 4px;
+}
+
+.btn-md {
+    min-height: 32px;
+    padding: 6px 12px;
+    font-size: 0.76rem;
+}
+
+.btn-icon {
+    width: 32px;
+    min-width: 32px;
+    min-height: 32px;
+    padding: 0;
+    gap: 0;
+}
+
+.btn-sm.btn-icon {
+    width: 28px;
+    min-width: 28px;
+    min-height: 28px;
+}
+
+.dbx-diagnostic-actions .btn,
+.dbx-queue-topbar .dbx-bulk-toolbar .btn,
+.dbx-queue-topbar .dbx-form-actions .btn,
+.form-actions .btn,
+.dbx-form-actions .btn {
+    min-height: 30px;
+    padding: 5px 11px;
+}
+
+.app-topbar-actions .btn,
+.app-topbar-actions .select,
+.app-context-badge {
+    min-height: 34px;
+    border-radius: var(--btn-radius);
+}
+
+.app-topbar-actions .select {
+    border: 1px solid color-mix(in srgb, var(--ui-primary) 22%, var(--ui-border));
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0) 42%),
+        linear-gradient(135deg, color-mix(in srgb, var(--ui-surface) 86%, transparent), color-mix(in srgb, var(--ui-surface-soft) 92%, transparent));
+    box-shadow: var(--btn-glass-highlight), 0 2px 8px rgba(27, 47, 130, 0.08);
+    -webkit-backdrop-filter: blur(10px) saturate(1.1);
+    backdrop-filter: blur(10px) saturate(1.1);
+}
+
+.app-topbar-actions .select:focus {
+    outline: 2px solid color-mix(in srgb, var(--ui-primary) 64%, #ffffff);
+    outline-offset: 2px;
+    box-shadow: var(--ui-focus), 0 4px 12px rgba(27, 47, 130, 0.12);
+}
+
+.app-context-badge {
+    border-color: color-mix(in srgb, var(--ui-primary) 26%, var(--ui-border));
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0) 44%),
+        linear-gradient(135deg, color-mix(in srgb, var(--ui-primary-soft) 64%, var(--ui-surface)), color-mix(in srgb, var(--ui-surface) 92%, transparent));
+    box-shadow: var(--btn-glass-highlight), 0 2px 8px rgba(27, 47, 130, 0.08);
+    color: var(--ui-primary-strong);
+}
+
+.theme-toggle,
+.sidebar-toggle,
+.sidebar-compact-btn,
+.threshold-add,
+.threshold-remove {
+    min-width: 32px;
+}
+
+html.dark .btn,
+html.dark .dbx-tab,
+html.dark .dashboard-tab,
+html.dark .dbx-store-view-tab {
+    --btn-bg-a: color-mix(in srgb, var(--ui-surface-raised) 76%, transparent);
+    --btn-bg-b: color-mix(in srgb, var(--ui-surface) 88%, transparent);
+    --btn-border: color-mix(in srgb, var(--ui-primary) 24%, var(--ui-border));
+    --btn-fg: var(--ui-text);
+    --btn-hover-bg-a: color-mix(in srgb, var(--ui-surface-raised) 82%, var(--ui-primary-soft));
+    --btn-hover-bg-b: color-mix(in srgb, var(--ui-surface) 78%, var(--ui-primary-soft));
+    --btn-hover-border: color-mix(in srgb, var(--ui-primary) 44%, var(--ui-border-strong));
+    --btn-hover-fg: var(--ui-primary-strong);
+    --btn-glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    box-shadow: var(--btn-glass-highlight), 0 3px 12px rgba(0, 0, 0, 0.24);
+}
+
+html.dark .btn-primary,
+html.dark .dbx-tab.is-active,
+html.dark .dashboard-tab-active,
+html.dark .dbx-store-view-tab.is-active {
+    --btn-bg-a: color-mix(in srgb, var(--ui-primary) 78%, #ffffff);
+    --btn-bg-b: color-mix(in srgb, var(--ui-primary) 86%, #000000);
+    --btn-border: color-mix(in srgb, var(--ui-primary) 60%, var(--ui-border));
+    --btn-fg: #ffffff;
+    --btn-hover-bg-a: color-mix(in srgb, var(--ui-primary) 86%, #ffffff);
+    --btn-hover-bg-b: color-mix(in srgb, var(--ui-primary) 78%, #000000);
+    --btn-hover-fg: #ffffff;
+}
+
+html.dark .btn-danger {
+    --btn-bg-a: color-mix(in srgb, var(--ui-danger) 16%, var(--ui-surface-raised));
+    --btn-bg-b: color-mix(in srgb, var(--ui-danger) 10%, var(--ui-surface));
+}
+
+html.dark .btn-warning {
+    --btn-bg-a: color-mix(in srgb, var(--ui-warning) 16%, var(--ui-surface-raised));
+    --btn-bg-b: color-mix(in srgb, var(--ui-warning) 10%, var(--ui-surface));
+}
+
+html.dark .btn-success {
+    --btn-bg-a: color-mix(in srgb, var(--ui-success) 16%, var(--ui-surface-raised));
+    --btn-bg-b: color-mix(in srgb, var(--ui-success) 10%, var(--ui-surface));
+}
+
+html.dark .app-topbar-actions .select,
+html.dark .app-context-badge {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0) 44%),
+        linear-gradient(135deg, color-mix(in srgb, var(--ui-surface-raised) 88%, transparent), color-mix(in srgb, var(--ui-surface) 86%, transparent));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 3px 12px rgba(0, 0, 0, 0.24);
+}
+
+/* =====================================================================
+   LIQUID GLASS BUTTON SYSTEM - final override
+   Centraliza el tratamiento visual de botones y controles accionables.
+   ===================================================================== */
+
+.btn {
+    --btn-accent: var(--ui-primary);
+    --btn-accent-strong: var(--ui-primary-strong);
+    --btn-text: var(--ui-primary-strong);
+    --btn-hover-text: var(--btn-text);
+    --btn-bg-a: rgba(255, 255, 255, 0.82);
+    --btn-bg-b: rgba(244, 248, 255, 0.62);
+    --btn-border: color-mix(in srgb, var(--btn-accent) 36%, rgba(255, 255, 255, 0.9));
+    --btn-shadow: color-mix(in srgb, var(--btn-accent) 18%, transparent);
+    --btn-glow: color-mix(in srgb, var(--btn-accent) 12%, transparent);
+    align-items: center;
+    -webkit-backdrop-filter: blur(10px) saturate(1.08);
+    backdrop-filter: blur(10px) saturate(1.08);
+    background: linear-gradient(180deg, var(--btn-bg-a) 0%, var(--btn-bg-b) 100%);
+    border: 1px solid var(--btn-border);
+    border-radius: 7px;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.72),
+        0 1px 2px rgba(15, 23, 42, 0.08),
+        0 8px 18px var(--btn-shadow);
+    color: var(--btn-text);
+    cursor: pointer;
+    display: inline-flex;
+    font-family: inherit;
+    font-size: 0.74rem;
+    font-weight: 850;
+    gap: 0.38rem;
+    justify-content: center;
+    letter-spacing: 0.018em;
+    line-height: 1.05;
+    min-height: 32px;
+    overflow: hidden;
+    padding: 6px 12px;
+    position: relative;
+    text-align: center;
+    text-decoration: none;
+    text-transform: uppercase;
+    transition:
+        transform 160ms ease,
+        box-shadow 160ms ease,
+        border-color 160ms ease,
+        background 160ms ease,
+        color 160ms ease,
+        filter 160ms ease;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.btn::before {
+    background:
+        radial-gradient(circle at 24% 0%, rgba(255, 255, 255, 0.68), transparent 42%),
+        linear-gradient(110deg, rgba(255, 255, 255, 0.22), transparent 34%, rgba(255, 255, 255, 0.16) 70%, transparent);
+    border-radius: inherit;
+    content: "";
+    inset: 0;
+    opacity: 0.58;
+    pointer-events: none;
+    position: absolute;
+    transition: opacity 160ms ease;
+    z-index: 0;
+}
+
+.btn > * {
+    position: relative;
+    z-index: 1;
+}
+
+.btn:hover:not(:disabled):not(.is-disabled) {
+    border-color: color-mix(in srgb, var(--btn-accent) 58%, rgba(255, 255, 255, 0.86));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.82),
+        0 2px 4px rgba(15, 23, 42, 0.1),
+        0 11px 24px var(--btn-glow);
+    color: var(--btn-hover-text);
+    filter: saturate(1.04) brightness(1.015);
+    transform: translateY(-1px);
+}
+
+.btn:hover:not(:disabled):not(.is-disabled)::before {
+    opacity: 0.78;
+}
+
+.btn:active:not(:disabled):not(.is-disabled) {
+    box-shadow:
+        inset 0 1px 3px rgba(15, 23, 42, 0.13),
+        0 1px 3px rgba(15, 23, 42, 0.08);
+    filter: brightness(0.99);
+    transform: translateY(0);
+}
+
+.btn:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--btn-accent) 72%, #ffffff);
+    outline-offset: 2px;
+    box-shadow:
+        0 0 0 4px color-mix(in srgb, var(--btn-accent) 20%, transparent),
+        inset 0 1px 0 rgba(255, 255, 255, 0.8),
+        0 10px 22px var(--btn-glow);
+}
+
+.btn:disabled,
+.btn.is-disabled,
+.btn[aria-disabled="true"] {
+    cursor: not-allowed;
+    filter: grayscale(0.12);
+    opacity: 0.55;
+    transform: none;
+}
+
+.btn-primary {
+    --btn-accent: var(--ui-primary);
+    --btn-accent-strong: var(--ui-primary-strong);
+    --btn-text: #ffffff;
+    --btn-hover-text: #ffffff;
+    --btn-bg-a: color-mix(in srgb, var(--ui-primary) 92%, #ffffff);
+    --btn-bg-b: color-mix(in srgb, var(--ui-primary-strong) 90%, #000000);
+    --btn-border: color-mix(in srgb, var(--ui-primary) 72%, #ffffff);
+    --btn-shadow: rgba(29, 55, 148, 0.22);
+    --btn-glow: rgba(29, 55, 148, 0.28);
+}
+
+.btn-secondary,
+.btn-outline {
+    --btn-accent: var(--ui-primary);
+    --btn-text: var(--ui-primary-strong);
+    --btn-bg-a: rgba(255, 255, 255, 0.88);
+    --btn-bg-b: rgba(247, 250, 255, 0.72);
+    --btn-border: rgba(32, 55, 141, 0.34);
+    --btn-shadow: rgba(24, 47, 122, 0.08);
+    --btn-glow: rgba(24, 47, 122, 0.14);
+}
+
+.btn-ghost {
+    --btn-accent: var(--ui-primary);
+    --btn-text: var(--ui-primary-strong);
+    --btn-bg-a: rgba(255, 255, 255, 0.52);
+    --btn-bg-b: rgba(245, 248, 255, 0.36);
+    --btn-border: rgba(32, 55, 141, 0.22);
+    --btn-shadow: rgba(24, 47, 122, 0.04);
+    --btn-glow: rgba(24, 47, 122, 0.1);
+}
+
+.btn-danger {
+    --btn-accent: var(--ui-danger);
+    --btn-accent-strong: #b91025;
+    --btn-text: #b91025;
+    --btn-bg-a: rgba(255, 255, 255, 0.88);
+    --btn-bg-b: rgba(255, 241, 244, 0.7);
+    --btn-border: color-mix(in srgb, var(--ui-danger) 58%, #ffffff);
+    --btn-shadow: rgba(239, 29, 50, 0.1);
+    --btn-glow: rgba(239, 29, 50, 0.18);
+}
+
+.btn-danger:hover:not(:disabled):not(.is-disabled) {
+    --btn-hover-text: #ffffff;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--ui-danger) 88%, #ffffff), #b91025);
+}
+
+.btn-warning {
+    --btn-accent: var(--ui-warning);
+    --btn-accent-strong: #9a5f00;
+    --btn-text: #7a4700;
+    --btn-bg-a: rgba(255, 255, 255, 0.9);
+    --btn-bg-b: rgba(255, 247, 226, 0.74);
+    --btn-border: rgba(211, 126, 0, 0.46);
+    --btn-shadow: rgba(211, 126, 0, 0.1);
+    --btn-glow: rgba(211, 126, 0, 0.18);
+}
+
+.btn-success {
+    --btn-accent: var(--ui-success);
+    --btn-accent-strong: #047857;
+    --btn-text: #056044;
+    --btn-bg-a: rgba(255, 255, 255, 0.9);
+    --btn-bg-b: rgba(232, 251, 244, 0.74);
+    --btn-border: rgba(10, 181, 129, 0.44);
+    --btn-shadow: rgba(10, 181, 129, 0.1);
+    --btn-glow: rgba(10, 181, 129, 0.18);
+}
+
+.btn-md {
+    font-size: 0.76rem;
+    min-height: 34px;
+    padding: 7px 13px;
+}
+
+.btn-sm,
+.btn-action,
+.action-buttons .btn,
+.dbx-table td .btn,
+.table td .btn {
+    border-radius: 6px;
+    font-size: 0.69rem;
+    min-height: 28px;
+    padding: 5px 9px;
+}
+
+.btn-icon {
+    aspect-ratio: 1 / 1;
+    min-height: 32px;
+    min-width: 32px;
+    padding: 0;
+}
+
+.btn-icon.btn-sm {
+    min-height: 28px;
+    min-width: 28px;
+}
+
+.btn-action {
+    min-width: 0;
+}
+
+.dbx-diagnostic-actions .btn {
+    min-height: 29px;
+    padding: 5px 10px;
+}
+
+.app-topbar-actions .btn,
+.app-topbar-actions .select,
+.app-context-badge {
+    border-radius: 7px;
+    min-height: 34px;
+}
+
+.app-topbar-actions .btn {
+    padding-inline: 12px;
+}
+
+.app-topbar-actions .btn-danger {
+    min-width: 112px;
+}
+
+.app-context-badge {
+    align-items: center;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(247, 250, 255, 0.66));
+    border: 1px solid rgba(32, 55, 141, 0.28);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.7),
+        0 6px 16px rgba(24, 47, 122, 0.06);
+    color: var(--ui-primary-strong);
+    display: inline-flex;
+    font-size: 0.72rem;
+    font-weight: 850;
+    letter-spacing: 0.018em;
+    padding-inline: 12px;
+    text-transform: uppercase;
+}
+
+.app-topbar-actions .select {
+    -webkit-backdrop-filter: blur(10px) saturate(1.06);
+    backdrop-filter: blur(10px) saturate(1.06);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(247, 250, 255, 0.72));
+    border: 1px solid rgba(32, 55, 141, 0.28);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.72),
+        0 6px 16px rgba(24, 47, 122, 0.06);
+    color: var(--text);
+    min-width: 150px;
+    padding-block: 0;
+}
+
+.dbx-tabs,
+.dbx-store-view-tabs {
+    align-items: center;
+    display: flex;
+    gap: 0.42rem;
+}
+
+.dbx-tab,
+.dashboard-tab,
+.dbx-store-view-tab {
+    align-items: center;
+    -webkit-backdrop-filter: blur(10px) saturate(1.08);
+    backdrop-filter: blur(10px) saturate(1.08);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(247, 250, 255, 0.68));
+    border: 1px solid rgba(32, 55, 141, 0.28);
+    border-radius: 7px;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.72),
+        0 6px 16px rgba(24, 47, 122, 0.06);
+    color: var(--ui-primary-strong);
+    display: inline-flex;
+    font-size: 0.76rem;
+    font-weight: 850;
+    justify-content: center;
+    letter-spacing: 0.012em;
+    min-height: 34px;
+    padding: 7px 13px;
+    position: relative;
+    text-decoration: none;
+    text-transform: uppercase;
+    transition:
+        transform 160ms ease,
+        border-color 160ms ease,
+        box-shadow 160ms ease,
+        background 160ms ease;
+    white-space: nowrap;
+}
+
+.dbx-tab:hover,
+.dashboard-tab:hover,
+.dbx-store-view-tab:hover {
+    border-color: rgba(32, 55, 141, 0.44);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.82),
+        0 10px 22px rgba(24, 47, 122, 0.12);
+    transform: translateY(-1px);
+}
+
+.dbx-tab.is-active,
+.dashboard-tab-active,
+.dbx-store-view-tab.is-active {
+    background: linear-gradient(180deg, color-mix(in srgb, var(--ui-primary) 90%, #ffffff), var(--ui-primary-strong));
+    border-color: color-mix(in srgb, var(--ui-primary) 72%, #ffffff);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.28),
+        0 10px 22px rgba(29, 55, 148, 0.2);
+    color: #ffffff;
+}
+
+.theme-toggle,
+.sidebar-toggle,
+.sidebar-compact-btn,
+.threshold-add,
+.threshold-remove {
+    -webkit-backdrop-filter: blur(10px) saturate(1.08);
+    backdrop-filter: blur(10px) saturate(1.08);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(247, 250, 255, 0.68));
+    border: 1px solid rgba(32, 55, 141, 0.28);
+    border-radius: 7px;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.72),
+        0 6px 16px rgba(24, 47, 122, 0.06);
+}
+
+.theme-toggle:hover,
+.sidebar-toggle:hover,
+.sidebar-compact-btn:hover,
+.threshold-add:hover,
+.threshold-remove:hover {
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.82),
+        0 10px 22px rgba(24, 47, 122, 0.12);
+    transform: translateY(-1px);
+}
+
+html.dark .btn {
+    --btn-bg-a: rgba(30, 41, 59, 0.78);
+    --btn-bg-b: rgba(15, 23, 42, 0.7);
+    --btn-border: color-mix(in srgb, var(--btn-accent) 34%, rgba(148, 163, 184, 0.42));
+    --btn-shadow: rgba(0, 0, 0, 0.24);
+    --btn-glow: color-mix(in srgb, var(--btn-accent) 18%, transparent);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.1),
+        0 1px 2px rgba(0, 0, 0, 0.28),
+        0 10px 22px var(--btn-shadow);
+}
+
+html.dark .btn-secondary,
+html.dark .btn-outline,
+html.dark .btn-ghost {
+    --btn-text: #dbeafe;
+}
+
+html.dark .btn-danger {
+    --btn-text: #fecdd3;
+}
+
+html.dark .btn-warning {
+    --btn-text: #fde68a;
+}
+
+html.dark .btn-success {
+    --btn-text: #bbf7d0;
+}
+
+html.dark .app-context-badge,
+html.dark .app-topbar-actions .select,
+html.dark .dbx-tab,
+html.dark .dashboard-tab,
+html.dark .dbx-store-view-tab,
+html.dark .theme-toggle,
+html.dark .sidebar-toggle,
+html.dark .sidebar-compact-btn,
+html.dark .threshold-add,
+html.dark .threshold-remove {
+    background: linear-gradient(180deg, rgba(30, 41, 59, 0.78), rgba(15, 23, 42, 0.7));
+    border-color: rgba(148, 163, 184, 0.34);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.1),
+        0 8px 20px rgba(0, 0, 0, 0.18);
+    color: #dbeafe;
+}
+
+html.dark .dbx-tab.is-active,
+html.dark .dashboard-tab-active,
+html.dark .dbx-store-view-tab.is-active {
+    color: #ffffff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .btn,
+    .dbx-tab,
+    .dashboard-tab,
+    .dbx-store-view-tab,
+    .theme-toggle,
+    .sidebar-toggle,
+    .sidebar-compact-btn,
+    .threshold-add,
+    .threshold-remove {
+        transition: none;
+    }
+
+    .btn:hover:not(:disabled):not(.is-disabled),
+    .dbx-tab:hover,
+    .dashboard-tab:hover,
+    .dbx-store-view-tab:hover,
+    .theme-toggle:hover,
+    .sidebar-toggle:hover,
+    .sidebar-compact-btn:hover,
+    .threshold-add:hover,
+    .threshold-remove:hover {
+        transform: none;
+    }
+}
