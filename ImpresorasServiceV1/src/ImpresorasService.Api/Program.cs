@@ -1,155 +1,211 @@
+using System.Data.Odbc;
+using System.Globalization;
+using System.Text.RegularExpressions;
+using System.Text;
+using ImpresorasService.Api.Security;
 using ImpresorasService.Application;
 using ImpresorasService.Infrastructure;
 using ImpresorasService.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
+var appCultureName = builder.Configuration["Globalization:Culture"] ?? "es-ES";
+var appCulture = CultureInfo.GetCultureInfo(appCultureName);
+CultureInfo.DefaultThreadCurrentCulture = appCulture;
+CultureInfo.DefaultThreadCurrentUICulture = appCulture;
 
-static async Task EnsurePrintersTableExistsAsync(ImpresorasDbContext db)
+static bool IsUnsafeJwtSecret(string? value)
 {
-    if (!db.Database.IsSqlite()) return;
-    var conn = db.Database.GetDbConnection();
-    await conn.OpenAsync();
-    await using var cmd = conn.CreateCommand();
-    cmd.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='Printers'";
-    var count = Convert.ToInt32(await cmd.ExecuteScalarAsync());
-    if (count == 0)
-    {
-        cmd.CommandText = @"
-            CREATE TABLE Printers (
-                PrinterId INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-                PrinterName TEXT NOT NULL,
-                SpoolQueue TEXT NOT NULL,
-                StoreId INTEGER NOT NULL,
-                IsActive INTEGER NOT NULL DEFAULT 1,
-                CapabilitiesJson TEXT NULL,
-                CreatedAtUtc TEXT NOT NULL,
-                UpdatedAtUtc TEXT NOT NULL
-            );
-            CREATE UNIQUE INDEX IX_Printers_StoreId_SpoolQueue ON Printers(StoreId, SpoolQueue);";
-        await cmd.ExecuteNonQueryAsync();
-    }
+    if (string.IsNullOrWhiteSpace(value))
+        return true;
+
+    var normalized = value.Trim();
+    if (normalized.Length < 32)
+        return true;
+
+    return string.Equals(normalized, "ImpresorasService-V1-SecretKey-Min32Chars!!", StringComparison.Ordinal)
+        || string.Equals(normalized, "ChangeMe123", StringComparison.Ordinal)
+        || string.Equals(normalized, "changeme", StringComparison.OrdinalIgnoreCase);
 }
 
-static async Task EnsureRoutingRulesTableExistsAsync(ImpresorasDbContext db)
+static async Task NormalizeLegacyUserRolesAsync(ImpresorasDbContext db)
 {
-    if (!db.Database.IsSqlite()) return;
-    var conn = db.Database.GetDbConnection();
-    await conn.OpenAsync();
-    await using var cmd = conn.CreateCommand();
-    cmd.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='RoutingRules'";
-    var count = Convert.ToInt32(await cmd.ExecuteScalarAsync());
-    if (count == 0)
-    {
-        cmd.CommandText = @"
-            CREATE TABLE RoutingRules (
-                RuleId INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-                Priority INTEGER NOT NULL,
-                StoreId INTEGER NULL,
-                DocumentType TEXT NULL,
-                Channel TEXT NULL,
-                PrinterId INTEGER NOT NULL,
-                IsActive INTEGER NOT NULL DEFAULT 1,
-                ValidFromUtc TEXT NOT NULL,
-                ValidToUtc TEXT NULL,
-                CreatedBy TEXT NOT NULL,
-                CreatedAtUtc TEXT NOT NULL,
-                UpdatedAtUtc TEXT NOT NULL,
-                FOREIGN KEY (PrinterId) REFERENCES Printers(PrinterId)
-            );
-            CREATE INDEX IX_RoutingRules_Resolve ON RoutingRules(IsActive, Priority, StoreId, DocumentType, Channel);";
-        await cmd.ExecuteNonQueryAsync();
-    }
-}
+    var users = await db.Users.ToListAsync();
+    var changed = false;
 
-static async Task EnsureUsersTableExistsAsync(ImpresorasDbContext db)
-{
-    if (!db.Database.IsSqlite()) return;
-    var conn = db.Database.GetDbConnection();
-    await conn.OpenAsync();
-    await using var cmd = conn.CreateCommand();
-    cmd.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='Users'";
-    var count = Convert.ToInt32(await cmd.ExecuteScalarAsync());
-    if (count == 0)
+    foreach (var user in users)
     {
-        cmd.CommandText = @"
-            CREATE TABLE Users (
-                UserId INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-                Login TEXT NOT NULL,
-                PasswordHash TEXT NOT NULL,
-                Role TEXT NOT NULL DEFAULT 'Supervisor',
-                StoreId INTEGER NULL,
-                DisplayName TEXT NULL
-            );
-            CREATE UNIQUE INDEX IX_Users_Login ON Users(Login);";
-        await cmd.ExecuteNonQueryAsync();
+        var normalized = RoleCatalog.Normalize(user.Role);
+        if (!string.Equals(user.Role, normalized, StringComparison.Ordinal))
+        {
+            user.Role = normalized;
+            changed = true;
+        }
     }
+
+    if (changed)
+        await db.SaveChangesAsync();
 }
 
 static async Task SeedDefaultUsersAsync(ImpresorasDbContext db)
 {
-    if (!await db.Users.AnyAsync(u => u.Login == "admin"))
+    var adminExists = await db.Users
+        .Where(u => u.Login == "admin")
+        .Select(u => u.UserId)
+        .Take(1)
+        .CountAsync() > 0;
+    if (!adminExists)
     {
         var hash = BCrypt.Net.BCrypt.HashPassword("admin123", BCrypt.Net.BCrypt.GenerateSalt(10));
         db.Users.Add(new ImpresorasService.Domain.Entities.User
         {
             Login = "admin",
             PasswordHash = hash,
-            Role = "Admin",
+            Role = RoleCatalog.Admin,
             StoreId = null,
             DisplayName = "Administrador"
         });
     }
-    if (!await db.Users.AnyAsync(u => u.Login == "supervisor"))
+    var supervisorExists = await db.Users
+        .Where(u => u.Login == "supervisor")
+        .Select(u => u.UserId)
+        .Take(1)
+        .CountAsync() > 0;
+    if (!supervisorExists)
     {
         var hash = BCrypt.Net.BCrypt.HashPassword("sup123", BCrypt.Net.BCrypt.GenerateSalt(10));
         db.Users.Add(new ImpresorasService.Domain.Entities.User
         {
             Login = "supervisor",
             PasswordHash = hash,
-            Role = "Supervisor",
+            Role = RoleCatalog.StoreManager,
             StoreId = 1,
-            DisplayName = "Supervisor Tienda 1"
+            DisplayName = "Jefe de tienda 1"
         });
     }
     await db.SaveChangesAsync();
 }
 
-static async Task EnsurePrintJobPrinterIdColumnAsync(ImpresorasDbContext db)
-{
-    if (!db.Database.IsSqlite()) return;
-    var conn = db.Database.GetDbConnection();
-    if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync();
-    await using var cmd = conn.CreateCommand();
-    cmd.CommandText = "SELECT COUNT(*) FROM pragma_table_info('PrintJobs') WHERE name='PrinterId'";
-    var count = Convert.ToInt32(await cmd.ExecuteScalarAsync());
-    if (count == 0)
-    {
-        cmd.CommandText = "ALTER TABLE PrintJobs ADD COLUMN PrinterId INTEGER NULL";
-        await cmd.ExecuteNonQueryAsync();
-    }
-}
-
 // Add services to the container.
+
+builder.Services.AddCors(options =>
+{
+    var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
+    options.AddDefaultPolicy(policy =>
+    {
+        if (allowedOrigins.Length > 0)
+        {
+            policy.WithOrigins(allowedOrigins)
+                .AllowAnyMethod()
+                .AllowAnyHeader();
+            return;
+        }
+
+        if (builder.Environment.IsDevelopment())
+        {
+            policy.SetIsOriginAllowed(origin =>
+                Uri.TryCreate(origin, UriKind.Absolute, out var uri)
+                && (uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+                    || uri.Host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase)))
+                .AllowAnyMethod()
+                .AllowAnyHeader();
+            return;
+        }
+
+        throw new InvalidOperationException("Cors:AllowedOrigins debe configurarse fuera de Development.");
+    });
+});
+
+var jwtSecret = builder.Configuration["Jwt:Secret"];
+if (IsUnsafeJwtSecret(jwtSecret))
+    throw new InvalidOperationException("Jwt:Secret es obligatorio, debe estar definido por entorno y no puede usar valores inseguros/default.");
+var jwtSecretValue = jwtSecret!.Trim();
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecretValue)),
+            ValidateIssuer = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"] ?? "ImpresorasService",
+            ValidateAudience = true,
+            ValidAudience = builder.Configuration["Jwt:Audience"] ?? "ImpresorasService",
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.Zero
+        };
+    });
+
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("AdminOnly", policy => policy.RequireRole(RoleCatalog.Admin));
+    options.AddPolicy("StoreManagerOrAdmin", policy => policy.RequireRole(RoleCatalog.Admin, RoleCatalog.StoreManager));
+    options.AddPolicy("EmployeeOrAbove", policy => policy.RequireRole(RoleCatalog.Admin, RoleCatalog.StoreManager, RoleCatalog.Employee));
+    options.AddPolicy(
+        "SupervisorOrAdmin",
+        policy => policy.RequireRole(RoleCatalog.Admin, RoleCatalog.StoreManager, RoleCatalog.LegacySupervisor));
+});
 
 builder.Services.AddControllers();
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    var securityScheme = new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Description = "JWT Authorization header. Ejemplo: Bearer {token}",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        Reference = new OpenApiReference
+        {
+            Type = ReferenceType.SecurityScheme,
+            Id = "Bearer"
+        }
+    };
+
+    options.AddSecurityDefinition("Bearer", securityScheme);
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        { securityScheme, Array.Empty<string>() }
+    });
+});
 
 var app = builder.Build();
 
 await using (var scope = app.Services.CreateAsyncScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
-    dbContext.Database.EnsureCreated();
-    await EnsurePrintersTableExistsAsync(dbContext);
-    await EnsureRoutingRulesTableExistsAsync(dbContext);
-    await EnsureUsersTableExistsAsync(dbContext);
-    await EnsurePrintJobPrinterIdColumnAsync(dbContext);
-    await SeedDefaultUsersAsync(dbContext);
+    var applyMigrations = app.Configuration.GetValue<bool>("Database:ApplyMigrations");
+    if (app.Environment.IsEnvironment("Testing"))
+    {
+        await dbContext.Database.EnsureCreatedAsync();
+    }
+    else if (applyMigrations)
+    {
+        await dbContext.Database.MigrateAsync();
+    }
+    await NormalizeLegacyUserRolesAsync(dbContext);
+
+    var seedDefaultUsers = app.Configuration.GetValue<bool>("Bootstrap:SeedDefaultUsers");
+    if (seedDefaultUsers)
+    {
+        if (!app.Environment.IsDevelopment() && !app.Environment.IsEnvironment("Testing"))
+        {
+            throw new InvalidOperationException(
+                "Bootstrap:SeedDefaultUsers solo está permitido en Development o Testing.");
+        }
+
+        await SeedDefaultUsersAsync(dbContext);
+    }
 }
 
 // Configure the HTTP request pipeline.
@@ -161,14 +217,165 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+app.UseCors();
+
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+app.MapPost("/bootstrap/first-admin", async (
+    BootstrapAdminRequest request,
+    ImpresorasDbContext db,
+    IWebHostEnvironment env,
+    IConfiguration configuration,
+    CancellationToken cancellationToken) =>
+{
+    if (!env.IsDevelopment())
+        return Results.NotFound();
+
+    var enabled = configuration.GetValue<bool>("Bootstrap:EnableFirstAdminEndpoint");
+    if (!enabled)
+        return Results.NotFound();
+
+    if (string.IsNullOrWhiteSpace(request.Login) || string.IsNullOrWhiteSpace(request.Password))
+        return Results.BadRequest(new { error = "Login y password son obligatorios." });
+
+    var login = request.Login.Trim();
+    var password = request.Password.Trim();
+    if (login.Length < 3)
+        return Results.BadRequest(new { error = "El login debe tener al menos 3 caracteres." });
+    if (password.Length < 6)
+        return Results.BadRequest(new { error = "La password debe tener al menos 6 caracteres." });
+
+    // Workaround para SAP EF provider: AnyAsync puede fallar con "Sequence contains no elements"
+    // en ciertos modelos, por eso usamos un Count acotado a 1 fila.
+    var anyUsers = await db.Users
+        .Select(u => u.UserId)
+        .Take(1)
+        .CountAsync(cancellationToken) > 0;
+    if (anyUsers)
+        return Results.Conflict(new { error = "Ya existen usuarios. Este endpoint solo sirve para bootstrap inicial." });
+
+    var user = new ImpresorasService.Domain.Entities.User
+    {
+        Login = login,
+        DisplayName = string.IsNullOrWhiteSpace(request.DisplayName) ? "Administrador" : request.DisplayName.Trim(),
+        Role = RoleCatalog.Admin,
+        StoreId = null,
+        PasswordHash = BCrypt.Net.BCrypt.HashPassword(password, BCrypt.Net.BCrypt.GenerateSalt(10))
+    };
+
+    db.Users.Add(user);
+    await db.SaveChangesAsync(cancellationToken);
+
+    return Results.Ok(new
+    {
+        ok = true,
+        message = "Usuario administrador inicial creado. Ya puedes pedir token en /api/auth/token.",
+        user = new { user.UserId, user.Login, user.DisplayName, user.Role }
+    });
+});
+
+app.MapGet("/diagnostics", async (ImpresorasDbContext db) =>
+{
+    var conn = db.Database.GetDbConnection();
+    var provider = db.Database.ProviderName ?? "unknown";
+    var serverNode = conn.ConnectionString?.Split(';')
+        .Select(s => s.Trim())
+        .FirstOrDefault(s => s.StartsWith("ServerNode=", StringComparison.OrdinalIgnoreCase))
+        ?.Substring("ServerNode=".Length).Trim() ?? "?";
+    var database = conn.ConnectionString?.Split(';')
+        .Select(s => s.Trim())
+        .FirstOrDefault(s => s.StartsWith("Database=", StringComparison.OrdinalIgnoreCase))
+        ?.Substring("Database=".Length).Trim() ?? "?";
+    var sourceCount = await db.SourcePrintJobs.CountAsync();
+    var printCount = await db.PrintJobs.CountAsync();
+    var pendingSource = await db.SourcePrintJobs.CountAsync(x => !x.IsProcessed);
+    return Results.Ok(new
+    {
+        provider,
+        serverNode,
+        database,
+        sourcePrintJobsTotal = sourceCount,
+        sourcePrintJobsPending = pendingSource,
+        printJobsTotal = printCount
+    });
+}).RequireAuthorization("AdminOnly");
+
+app.MapGet("/diagnostics/hana", async (IConfiguration configuration, CancellationToken cancellationToken) =>
+{
+    static string NormalizeIdentifier(string value, string fallback)
+    {
+        var candidate = string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+        return Regex.IsMatch(candidate, "^[A-Za-z0-9_]+$") ? candidate : fallback;
+    }
+
+    var connectionString = configuration["SapHana:ConnectionString"];
+    if (string.IsNullOrWhiteSpace(connectionString))
+        return Results.BadRequest(new { ok = false, error = "SapHana:ConnectionString no está configurado." });
+
+    var schema = NormalizeIdentifier(configuration["SapHana:Schema"] ?? "ZTEST_VICENTE_2", "ZTEST_VICENTE_2");
+    var table = NormalizeIdentifier(configuration["SapHana:Table"] ?? "printer_source_print_job", "printer_source_print_job");
+
+    try
+    {
+        await using var connection = new OdbcConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        await using var pingCmd = connection.CreateCommand();
+        pingCmd.CommandText = "SELECT CURRENT_UTCTIMESTAMP FROM DUMMY";
+        var serverUtc = await pingCmd.ExecuteScalarAsync(cancellationToken);
+
+        await using var columnsCmd = connection.CreateCommand();
+        columnsCmd.CommandText = @"
+SELECT COLUMN_NAME, DATA_TYPE_NAME, LENGTH, SCALE, IS_NULLABLE
+FROM SYS.TABLE_COLUMNS
+WHERE SCHEMA_NAME = ? AND TABLE_NAME = ?
+ORDER BY POSITION";
+        columnsCmd.Parameters.Add(new OdbcParameter { Value = schema });
+        columnsCmd.Parameters.Add(new OdbcParameter { Value = table });
+
+        var columns = new List<object>();
+        await using (var reader = await columnsCmd.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                columns.Add(new
+                {
+                    name = reader["COLUMN_NAME"]?.ToString(),
+                    type = reader["DATA_TYPE_NAME"]?.ToString(),
+                    length = reader["LENGTH"] == DBNull.Value ? null : reader["LENGTH"],
+                    scale = reader["SCALE"] == DBNull.Value ? null : reader["SCALE"],
+                    nullable = reader["IS_NULLABLE"]?.ToString()
+                });
+            }
+        }
+
+        return Results.Ok(new
+        {
+            ok = true,
+            schema,
+            table,
+            serverUtc,
+            columnCount = columns.Count,
+            columns
+        });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem(
+            title: "Fallo al conectar con HANA por ODBC",
+            detail: ex.Message,
+            statusCode: StatusCodes.Status502BadGateway);
+    }
+}).RequireAuthorization("AdminOnly");
 
 // Redirigir raíz a Swagger para que el navegador muestre algo
 app.MapGet("/", () => Results.Redirect("/swagger"));
 
 app.Run();
+
+public record BootstrapAdminRequest(string Login, string Password, string? DisplayName = null);
 
 public partial class Program { }

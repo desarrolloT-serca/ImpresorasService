@@ -1,0 +1,94 @@
+<?php
+
+namespace App\Services;
+
+use GuzzleHttp\Client;
+use GuzzleHttp\Exception\RequestException;
+use Illuminate\Support\Facades\Session;
+
+class ApiClient
+{
+    /** @var array<string, array> */
+    private array $requestGetCache = [];
+
+    public function __construct(
+        private readonly Client $client,
+        private readonly string $baseUrl
+    ) {}
+
+    public static function fromConfig(): self
+    {
+        $baseUrl = rtrim(config('impresoras.api_url'), '/');
+        $client = new Client([
+            'base_uri' => $baseUrl . '/',
+            'timeout' => 30,
+            'headers' => [
+                'Accept' => 'application/json',
+                'Content-Type' => 'application/json',
+            ],
+        ]);
+        return new self($client, $baseUrl);
+    }
+
+    public function get(string $path): array
+    {
+        $normalizedPath = ltrim($path, '/');
+        $token = Session::get('impresoras_token');
+        $cacheKey = sha1(($token ? 'auth:' . $token : 'guest') . '|' . $normalizedPath);
+
+        if (array_key_exists($cacheKey, $this->requestGetCache)) {
+            return $this->requestGetCache[$cacheKey];
+        }
+
+        return $this->requestGetCache[$cacheKey] = $this->request('GET', $normalizedPath);
+    }
+
+    public function post(string $path, array $body = []): array
+    {
+        return $this->request('POST', $path, $body);
+    }
+
+    public function put(string $path, array $body = []): array
+    {
+        return $this->request('PUT', $path, $body);
+    }
+
+    public function delete(string $path): array
+    {
+        return $this->request('DELETE', $path);
+    }
+
+    private function request(string $method, string $path, array $body = []): array
+    {
+        $normalizedPath = ltrim($path, '/');
+        $options = [];
+        if (!empty($body)) {
+            $options['json'] = $body;
+        }
+
+        $token = Session::get('impresoras_token');
+        if ($token) {
+            $options['headers'] = [
+                'Authorization' => 'Bearer ' . $token,
+            ];
+        }
+
+        try {
+            $response = $this->client->request($method, $normalizedPath, $options);
+            $content = (string) $response->getBody();
+            return json_decode($content, true) ?? [];
+        } catch (RequestException $e) {
+            $isUnauthorized = $e->getResponse()?->getStatusCode() === 401;
+            $isAuthEndpoint = str_starts_with(strtolower($normalizedPath), 'api/auth/');
+            $isAuthenticatedRequest = !empty($token);
+
+            if ($isUnauthorized && $isAuthenticatedRequest && ! $isAuthEndpoint) {
+                Session::forget(['impresoras_token', 'impresoras_user', 'selected_store_id']);
+                throw new \Illuminate\Http\Exceptions\HttpResponseException(
+                    redirect()->route('login')->with('error', 'Sesión expirada. Inicia sesión de nuevo.')
+                );
+            }
+            throw $e;
+        }
+    }
+}

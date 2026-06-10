@@ -1,0 +1,56 @@
+# Build outputs
+**/bin/
+**/obj/
+**/_build_out/
+**/.tmp-build/
+*.dll
+*.exe
+*.pdb
+*.deps.json
+*.runtimeconfig.json
+*.cache
+*.user
+*.suo
+*.nupkg
+TestResults/
+
+# NuGet / MSBuild local caches
+.nuget/
+**/.nuget/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# Local databases (SQLite historico / desarrollo)
+*.db
+*.db-shm
+*.db-wal
+impresoras-*.db
+impresoras-*.db-shm
+impresoras-*.db-wal
+
+# IDE
+.vs/
+.idea/
+
+# Logs and temp files
+*.log
+*.tmp
+
+# Laravel / PHP (frontend oficial)
+src/ImpresorasService.Web.PHP/vendor/
+src/ImpresorasService.Web.PHP/node_modules/
+src/ImpresorasService.Web.PHP/.env
+src/ImpresorasService.Web.PHP/.env.*
+!src/ImpresorasService.Web.PHP/.env.example
+src/ImpresorasService.Web.PHP/storage/logs/
+src/ImpresorasService.Web.PHP/bootstrap/cache/
+src/ImpresorasService.Web.PHP/public/build/
+src/ImpresorasService.Web.PHP/public/hot/
+src/ImpresorasService.Web.PHP/.phpunit.result.cache
+
+# Demo templates (KeenThemes - no forman parte del producto)
+templates/
+
+# Local IDE settings
+.cursor/

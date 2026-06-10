@@ -1,0 +1,98 @@
+name: Repository Cleanliness Check
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  check-cleanliness:
+    name: Verify no binaries or generated files are tracked
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for compiled binaries (DLL/EXE/PDB)
+        run: |
+          BINARIES=$(git ls-files | grep -E '\.(dll|exe|pdb)$' | grep -v '\.nuget/' || true)
+          if [ -n "$BINARIES" ]; then
+            echo "::error::Binaries found in git index:"
+            echo "$BINARIES"
+            exit 1
+          fi
+          echo "OK: No compiled binaries tracked"
+
+      - name: Check for local databases (SQLite)
+        run: |
+          DATABASES=$(git ls-files | grep -E '\.(db|sqlite|db-shm|db-wal)$' || true)
+          if [ -n "$DATABASES" ]; then
+            echo "::error::Database files found in git index:"
+            echo "$DATABASES"
+            exit 1
+          fi
+          echo "OK: No database files tracked"
+
+      - name: Check for .env files with secrets
+        run: |
+          ENV_FILES=$(git ls-files | grep -E '(^|/)\.env$' || true)
+          if [ -n "$ENV_FILES" ]; then
+            echo "::error::.env files found in git index (may contain secrets):"
+            echo "$ENV_FILES"
+            exit 1
+          fi
+          echo "OK: No .env files tracked"
+
+      - name: Check for NuGet package cache
+        run: |
+          NUGET=$(git ls-files | grep -E '/\.nuget/packages/' | head -1 || true)
+          if [ -n "$NUGET" ]; then
+            COUNT=$(git ls-files | grep -E '/\.nuget/packages/' | wc -l)
+            echo "::error::NuGet package cache tracked ($COUNT files). Run: git rm -r --cached .nuget/"
+            exit 1
+          fi
+          echo "OK: No NuGet package cache tracked"
+
+      - name: Check for build output directories
+        run: |
+          BUILD=$(git ls-files | grep -E '/(bin|obj)/' | head -1 || true)
+          if [ -n "$BUILD" ]; then
+            echo "::error::Build output directories (bin/obj) found in git index"
+            git ls-files | grep -E '/(bin|obj)/' | head -10
+            exit 1
+          fi
+          echo "OK: No bin/obj directories tracked"
+
+      - name: Check for demo templates directory
+        run: |
+          TEMPLATES=$(git ls-files | grep -E '^[^/]+/templates/' | head -1 || true)
+          if [ -n "$TEMPLATES" ]; then
+            COUNT=$(git ls-files | grep -E '^[^/]+/templates/' | wc -l)
+            echo "::error::Demo templates/ directory tracked ($COUNT files). Run: git rm -r --cached templates/"
+            exit 1
+          fi
+          echo "OK: No demo templates tracked"
+
+      - name: Check for log files
+        run: |
+          LOGS=$(git ls-files | grep -E '\.log$' || true)
+          if [ -n "$LOGS" ]; then
+            echo "::error::Log files found in git index:"
+            echo "$LOGS"
+            exit 1
+          fi
+          echo "OK: No log files tracked"
+
+      - name: Check for PHPUnit cache
+        run: |
+          CACHE=$(git ls-files | grep '\.phpunit\.result\.cache' || true)
+          if [ -n "$CACHE" ]; then
+            echo "::error::PHPUnit result cache tracked: $CACHE"
+            exit 1
+          fi
+          echo "OK: No PHPUnit cache tracked"
+
+      - name: Summary
+        run: echo "All cleanliness checks passed."

@@ -3,6 +3,7 @@ using ImpresorasService.Domain;
 using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.Sqlite;
@@ -26,9 +27,20 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
     {
         builder.UseEnvironment("Testing");
         builder.UseSetting("TestInstanceId", Interlocked.Increment(ref _instanceId).ToString());
+        builder.UseSetting("Jwt:Secret", "integration-tests-secret-32-chars-minimum!!");
+        builder.UseSetting("ConnectionStrings:PrintQueue", "ServerNode=localhost;UID=test;PWD=test;Current Schema=TEST");
+        builder.UseSetting("Database:Provider", "Hana");
+        builder.UseSetting("Source:Mode", "SapHana");
 
         builder.ConfigureTestServices(services =>
         {
+            services.AddAuthentication(options =>
+            {
+                options.DefaultAuthenticateScheme = TestAuthHandler.SchemeName;
+                options.DefaultChallengeScheme = TestAuthHandler.SchemeName;
+            }).AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(
+                TestAuthHandler.SchemeName, _ => { });
+
             var descriptor = services.SingleOrDefault(
                 d => d.ServiceType == typeof(DbContextOptions<ImpresorasDbContext>));
             if (descriptor != null) services.Remove(descriptor);
@@ -51,7 +63,43 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
         var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
         db.Database.EnsureCreated();
 
+        // Decisión técnica: en los tests se asume que existe una tienda activa (storeId=1 o storeId=2).
+        // Como los controladores validan la existencia/actividad de la tienda al crear Printers/Reglas,
+        // sembramos Stores mínimos al arrancar el host de tests.
+        SeedStoresAsync(db).GetAwaiter().GetResult();
+
         return host;
+    }
+
+    private static async Task SeedStoresAsync(ImpresorasDbContext db)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        if (!await db.Stores.AnyAsync(s => s.StoreId == 1))
+        {
+            db.Stores.Add(new Store
+            {
+                StoreId = 1,
+                Name = "Store 1",
+                IsActive = true,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            });
+        }
+
+        if (!await db.Stores.AnyAsync(s => s.StoreId == 2))
+        {
+            db.Stores.Add(new Store
+            {
+                StoreId = 2,
+                Name = "Store 2",
+                IsActive = true,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            });
+        }
+
+        await db.SaveChangesAsync();
     }
 
     /// <summary>
@@ -61,11 +109,11 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
     {
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
-        await db.Database.ExecuteSqlRawAsync("DELETE FROM PrintJobEvents");
-        await db.Database.ExecuteSqlRawAsync("DELETE FROM PrintJobs");
-        await db.Database.ExecuteSqlRawAsync("DELETE FROM SourcePrintJobs");
-        await db.Database.ExecuteSqlRawAsync("DELETE FROM RoutingRules");
-        await db.Database.ExecuteSqlRawAsync("DELETE FROM Printers");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM printer_print_job_event");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM printer_print_job");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM printer_source_print_job");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM printer_routing_rule");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM printer_printer");
     }
 
     /// <summary>

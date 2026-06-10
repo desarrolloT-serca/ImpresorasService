@@ -1,11 +1,13 @@
 using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace ImpresorasService.Api.Controllers;
 
 [ApiController]
+[Authorize(Policy = "AdminOnly")]
 [Route("api/[controller]")]
 public class RoutingRulesController : ControllerBase
 {
@@ -69,8 +71,21 @@ public class RoutingRulesController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateRoutingRuleRequest request, CancellationToken cancellationToken)
     {
+        if (request.StoreId.HasValue)
+        {
+            var storeIsActive = await _dbContext.Stores
+                .Where(x => x.StoreId == request.StoreId.Value)
+                .Select(x => (bool?)x.IsActive)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (storeIsActive != true)
+                return BadRequest(new { error = "La tienda especificada no existe o esta inactiva." });
+        }
+
         var printerExists = await _dbContext.Printers
-            .AnyAsync(x => x.PrinterId == request.PrinterId, cancellationToken);
+            .Where(x => x.PrinterId == request.PrinterId)
+            .Select(x => x.PrinterId)
+            .Take(1)
+            .CountAsync(cancellationToken) > 0;
 
         if (!printerExists)
             return BadRequest(new { error = "La impresora especificada no existe." });
@@ -107,8 +122,21 @@ public class RoutingRulesController : ControllerBase
         if (rule is null)
             return NotFound();
 
+        if (request.StoreId.HasValue)
+        {
+            var storeIsActive = await _dbContext.Stores
+                .Where(x => x.StoreId == request.StoreId.Value)
+                .Select(x => (bool?)x.IsActive)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (storeIsActive != true)
+                return BadRequest(new { error = "La tienda especificada no existe o esta inactiva." });
+        }
+
         var printerExists = await _dbContext.Printers
-            .AnyAsync(x => x.PrinterId == request.PrinterId, cancellationToken);
+            .Where(x => x.PrinterId == request.PrinterId)
+            .Select(x => x.PrinterId)
+            .Take(1)
+            .CountAsync(cancellationToken) > 0;
 
         if (!printerExists)
             return BadRequest(new { error = "La impresora especificada no existe." });

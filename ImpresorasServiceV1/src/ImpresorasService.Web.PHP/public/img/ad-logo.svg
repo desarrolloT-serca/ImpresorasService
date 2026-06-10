@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 72" role="img" aria-labelledby="title">
+  <title id="title">AD</title>
+  <rect width="180" height="72" fill="#1B2F82"/>
+  <path d="M180 0v72h-54L162 36 126 0h54z" fill="#ED1B2F"/>
+  <path d="M40.8 52h-12l18.7-32h12.9L79 52H66.4l-3.1-5.9H43.8L40.8 52zm7.2-14h11.1l-5.5-10.5L48 38zM84.2 20h22.6c12.1 0 21.1 6.5 21.1 16s-9 16-21.1 16H84.2V20zm11.6 9.1v13.8h10.2c6.2 0 10-2.5 10-6.9s-3.8-6.9-10-6.9H95.8z" fill="#FFFFFF"/>
+</svg>

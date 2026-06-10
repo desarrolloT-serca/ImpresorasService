@@ -1,11 +1,13 @@
 using ImpresorasService.Infrastructure;
 using ImpresorasService.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace ImpresorasService.Api.Controllers;
 
 [ApiController]
+[Authorize(Policy = "AdminOnly")]
 [Route("api/[controller]")]
 public class SourcePrintJobsController : ControllerBase
 {
@@ -28,15 +30,17 @@ public class SourcePrintJobsController : ControllerBase
 
         bool existsInSource = await _dbContext.SourcePrintJobs
             .AsNoTracking()
-            .AnyAsync(
-                x => x.SourceSystem == sourceSystem && x.ExternalJobId == externalJobId,
-                cancellationToken);
+            .Where(x => x.SourceSystem == sourceSystem && x.ExternalJobId == externalJobId)
+            .Select(x => x.Id)
+            .Take(1)
+            .CountAsync(cancellationToken) > 0;
 
         bool existsInQueue = await _dbContext.PrintJobs
             .AsNoTracking()
-            .AnyAsync(
-                x => x.SourceSystem == sourceSystem && x.ExternalJobId == externalJobId,
-                cancellationToken);
+            .Where(x => x.SourceSystem == sourceSystem && x.ExternalJobId == externalJobId)
+            .Select(x => x.JobId)
+            .Take(1)
+            .CountAsync(cancellationToken) > 0;
 
         if (existsInSource || existsInQueue)
         {

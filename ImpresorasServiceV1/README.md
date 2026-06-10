@@ -1,77 +1,88 @@
 # ImpresorasServiceV1
 
-Base de implementacion para la Fase 1 de V1:
-- ingesta por polling
-- idempotencia por `SourceSystem + ExternalJobId`
-- cola interna en SQLite local (sin servidor externo)
+Plataforma de cola de impresión centrada en **SAP HANA**: ingesta por polling con claim/ack, cola interna, enrutado y ejecución con reintentos.
 
-## Estructura
+## Arquitectura (4 bloques + tests)
 
-- `src/ImpresorasService.Domain`: entidades y estados del dominio.
-- `src/ImpresorasService.Application`: contratos y servicio de ingesta.
-- `src/ImpresorasService.Infrastructure`: EF Core, repositorios y adaptadores de origen (`SqlTest`/`SapHana`).
-- `src/ImpresorasService.Worker`: worker de polling para ingestar lotes.
-- `src/ImpresorasService.Api`: API de monitorizacion basica (`/health`, `/api/printjobs`).
-- `src/ImpresorasService.Web`: panel Blazor base (preparado para iterar).
+| Componente | Ruta | Rol |
+|------------|------|-----|
+| Frontend oficial | `src/ImpresorasService.Web.PHP` | UI Laravel (consume la API) |
+| API | `src/ImpresorasService.Api` | REST + JWT |
+| Worker | `src/ImpresorasService.Worker` | Ingesta, impresión, watchdog, monitorización |
+| Core | `src/ImpresorasService.Core` | Dominio, aplicación e infraestructura |
+| Tests | `tests/ImpresorasService.Api.IntegrationTests` | Integración (SQLite en memoria solo en tests) |
 
-## Configuracion minima
+Estado Git del frontend: ver `docs/FRONTEND-WEB-PHP-GIT.md` (gitlink/submódulo no formalizado).
 
-En `appsettings.json` de Worker/API:
-- `Database:Provider` (`Sqlite` por defecto)
-- `ConnectionStrings:PrintQueue`
-- `Ingestion:PollIntervalSeconds`, `Ingestion:BatchSize`
-- `Source:Mode` (`SqlTest` o `SapHana`)
+## Configuración mínima oficial (HANA)
 
-Con `Sqlite`, la BD se crea automaticamente al iniciar API/Worker (`EnsureCreated`).
+En `appsettings.json` de API y Worker (secretos por entorno / variables):
 
-## Comandos
+```json
+{
+  "Database": { "Provider": "Hana", "ApplyMigrations": false },
+  "ConnectionStrings": { "PrintQueue": "<HANA EF>" },
+  "Source": { "Mode": "SapHana" },
+  "SapHana": {
+    "ConnectionString": "<HANA ODBC para diagnóstico opcional>",
+    "Schema": "<schema>",
+    "Table": "printer_source_print_job",
+    "SourceSystem": "SAP-HANA",
+    "LeaseSeconds": 90
+  },
+  "Jwt": { "Secret": "<mínimo 32 caracteres>" },
+  "PrintExecution": { "UseRealSpooler": false }
+}
+```
 
-Ejecutar desde el directorio `ImpresorasServiceV1`:
+Variables de entorno equivalentes: `Database__Provider`, `ConnectionStrings__PrintQueue`, `Source__Mode`, `SapHana__ConnectionString`, `Jwt__Secret`, etc.
+
+**No usar en producción:** `Sqlite`, `SqlTest`, `SqlServer`, `SapPostgres` (histórico; ver `docs/archive/` y `Infrastructure/Legacy/`).
+
+El esquema HANA se gestiona con DDL externo (`scripts/sql/`). `Database:ApplyMigrations` debe permanecer en `false`. Las migraciones EF en el repo son referencia histórica SQLite (ver `Infrastructure/Persistence/Migrations/README.md`).
+
+## Arranque
 
 ```powershell
 cd ImpresorasServiceV1
 dotnet restore
 dotnet build -c Debug
-dotnet run --project "src/ImpresorasService.Api"
-dotnet run --project "src/ImpresorasService.Worker"
+
+# Configurar secretos HANA (ejemplo)
+$env:Database__Provider = "Hana"
+$env:ConnectionStrings__PrintQueue = "ServerNode=...;UID=...;PWD=...;Current Schema=..."
+$env:Source__Mode = "SapHana"
+$env:SapHana__ConnectionString = "Driver={HDBODBC};ServerNode=...;UID=...;PWD=..."
+$env:SapHana__Schema = "ZTEST_VICENTE_2"
+$env:Jwt__Secret = "REEMPLAZAR_CON_SECRETO_LARGO_MIN_32"
+$env:Bootstrap__SeedDefaultUsers = "false"
+
+dotnet run --project src/ImpresorasService.Api
+dotnet run --project src/ImpresorasService.Worker
 ```
 
-O con rutas absolutas desde la raíz del repo:
+UI Laravel (otra terminal; ver `docs/FRONTEND-WEB-PHP-GIT.md` si el gitlink no está inicializado):
 
 ```powershell
-dotnet run --project "ImpresorasServiceV1/src/ImpresorasService.Api"
-dotnet run --project "ImpresorasServiceV1/src/ImpresorasService.Worker"
+cd src/ImpresorasService.Web.PHP
+composer install
+npm install
+php artisan serve
 ```
 
-## Prueba local rapida (sin SSMS)
+Verificación HANA: `.\scripts\verificar-hana.ps1`
 
-1. Arranca API y Worker.
-2. Abre Swagger de la API y usa `POST /api/sourceprintjobs/test` para crear un trabajo de origen.
-3. Espera un ciclo de polling (5s) y consulta `GET /api/printjobs`.
+## Pruebas
 
-## Prueba de impresion real
-
-1. Arranca **API** y **Worker** (en dos terminales).
-2. En una tercera terminal, desde la carpeta `ImpresorasServiceV1`:
-   ```powershell
-   .\scripts\probar-impresion.ps1
-   ```
-3. El script crea un trabajo, lo enruta y el Worker lo envia a la impresora.
-
-**Requisitos previos:** Impresora creada; regla de enrutado; `UseRealSpooler: true` en Worker; SumatraPDF instalado.
-
-Para verificar si funciono:
 ```powershell
-.\scripts\verificar-estado.ps1   # Muestra estado de todos los trabajos
-```
-Estados: `SpoolAccepted` = exito (PDF enviado al spooler); `ErrorFinal` = fallo; `Routed` = aun esperando que el Worker lo procese.
-
-Para crear la regla de enrutado (si falta):
-```powershell
-.\scripts\crear-regla-enrutado.ps1        # Lista impresoras
-.\scripts\crear-regla-enrutado.ps1 1      # Crea regla para printerId=1
+dotnet test tests/ImpresorasService.Api.IntegrationTests
 ```
 
-## Siguiente paso recomendado
+Scripts operativos: `scripts/probar-impresion.ps1`, `scripts/verificar-estado.ps1`
 
-Implementar EF Migrations para controlar versionado de esquema entre entornos.
+## Documentación
+
+- Resumen: `docs/RESUMEN-PROYECTO.md`
+- Histórico (SQLite/Postgres/SqlTest): `docs/archive/`
+- Despliegue PHP: `docs/DESPLIEGUE-PHP.md`
+- Smoke UI: `docs/SMOKE-TESTS-PHP.md`
