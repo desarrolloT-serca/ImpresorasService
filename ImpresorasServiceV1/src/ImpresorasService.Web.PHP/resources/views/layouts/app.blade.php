@@ -9,6 +9,7 @@
     @yield('page_styles')
     @vite('resources/css/dbx.css')
     @vite('resources/css/system.css')
+    <script>if(localStorage.getItem('sidebar-compact')==='true'){document.documentElement.classList.add('sc-init');}</script>
 </head>
 <body class="min-h-screen">
     <div class="app-shell">
@@ -226,6 +227,7 @@
             function initSidebarCollapse() {
                 const compact = localStorage.getItem('sidebar-compact') === 'true';
                 if (compact) document.body.classList.add('sidebar-compact');
+                document.documentElement.classList.remove('sc-init');
 
                 const btn = document.getElementById('sidebar-compact-toggle');
                 if (!btn) return;

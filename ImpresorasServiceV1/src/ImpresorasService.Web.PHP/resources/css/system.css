@@ -3169,11 +3169,17 @@ body.sidebar-compact .app-logo {
     height: 36px !important;
 }
 
-/* Compact mode: center nav links, remove left-border indicator */
+/* Compact mode: reduce sidebar horizontal padding so logo/icons center properly */
+body.sidebar-compact .app-shell .app-sidebar {
+    padding-left: 6px !important;
+    padding-right: 6px !important;
+}
+
+/* Compact mode: normalize border to 1px all sides (removes 4px left-border bias) */
 body.sidebar-compact .app-nav-link {
     justify-content: center !important;
     padding: 9px !important;
-    border-left-color: transparent !important;
+    border: 1px solid transparent !important;
     overflow: visible;
 }
 
@@ -3185,20 +3191,59 @@ body.sidebar-compact .app-nav-link-active::before {
     display: none !important;
 }
 
-/* Compact mode: show tooltip on hover */
-body.sidebar-compact .nav-tooltip {
-    display: block;
+/* Compact mode: tooltip only on hover — display:none prevents layout overflow/scrollbar */
+@keyframes nav-tooltip-in {
+    from { opacity: 0; transform: translateY(-50%) translateX(-6px); }
+    to   { opacity: 1; transform: translateY(-50%); }
 }
 
 body.sidebar-compact .app-nav-link:hover .nav-tooltip,
 body.sidebar-compact .app-nav-link:focus-visible .nav-tooltip {
+    display: block;
     opacity: 1;
+    transform: translateY(-50%);
+    animation: nav-tooltip-in 0.15s ease;
 }
 
 /* Compact mode: stack footer buttons vertically */
 body.sidebar-compact .app-sidebar-footer {
     flex-direction: column;
     align-items: center;
+    justify-content: center;
+}
+
+/* ---- Preload state: set compact instantly on page load (no flash, no animation) ---- */
+/* html.sc-init is added by the <head> inline script before first paint.              */
+/* initSidebarCollapse() removes it after applying body.sidebar-compact.               */
+
+@media (min-width: 1025px) {
+    html.sc-init .app-shell .app-sidebar {
+        width: 72px !important;
+        padding-left: 6px !important;
+        padding-right: 6px !important;
+        transition: none !important;
+    }
+
+    html.sc-init .app-shell .app-content {
+        margin-left: 72px !important;
+        transition: none !important;
+    }
+
+    html.sc-init .app-nav-link {
+        justify-content: center !important;
+        padding: 9px !important;
+        border: 1px solid transparent !important;
+    }
+}
+
+html.sc-init .nav-label,
+html.sc-init .app-brand > span {
+    max-width: 0 !important;
+    opacity: 0 !important;
+    transition: none !important;
+}
+
+html.sc-init .app-brand {
     justify-content: center;
 }
 
@@ -3234,6 +3279,7 @@ body.sidebar-compact .app-sidebar-footer {
     body.sidebar-compact .app-nav-link {
         justify-content: flex-start !important;
         padding: 9px 10px !important;
+        border: 1px solid transparent !important;
         border-left: 4px solid transparent !important;
         overflow: hidden;
     }
