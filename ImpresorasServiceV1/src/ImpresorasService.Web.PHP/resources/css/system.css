@@ -3035,3 +3035,216 @@ html.dark .dbx-table .dbx-alert-row-warning td {
         padding: 32px 30px;
     }
 }
+
+/* ===== Collapsible sidebar ===== */
+
+/* Footer gap for the new compact-toggle button */
+.app-sidebar-footer {
+    gap: 8px;
+}
+
+/* Brand title: transitionable overflow for compact collapse */
+.app-brand > span {
+    overflow: hidden;
+    white-space: nowrap;
+    max-width: 200px;
+    opacity: 1;
+    transition: max-width 0.22s ease, opacity 0.16s ease;
+}
+
+/* Nav label: collapses horizontally with smooth transition */
+.nav-label {
+    overflow: hidden;
+    white-space: nowrap;
+    max-width: 200px;
+    opacity: 1;
+    flex-shrink: 1;
+    min-width: 0;
+    transition: max-width 0.22s ease, opacity 0.16s ease;
+}
+
+/* Tooltip: shown only in compact mode on hover */
+.nav-tooltip {
+    display: none;
+    position: absolute;
+    left: calc(100% + 10px);
+    top: 50%;
+    transform: translateY(-50%);
+    background: var(--ui-primary);
+    color: #ffffff;
+    border-radius: var(--ui-radius-sm);
+    padding: 5px 10px;
+    font-size: 0.72rem;
+    font-weight: 850;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.14s ease;
+    box-shadow: 0 4px 14px rgba(27, 47, 130, 0.3);
+}
+
+.nav-tooltip::before {
+    content: "";
+    position: absolute;
+    right: 100%;
+    top: 50%;
+    transform: translateY(-50%);
+    border: 5px solid transparent;
+    border-right-color: var(--ui-primary);
+}
+
+html.dark .nav-tooltip {
+    background: var(--ui-primary-strong);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+html.dark .nav-tooltip::before {
+    border-right-color: var(--ui-primary-strong);
+}
+
+/* Compact sidebar toggle button */
+.sidebar-compact-btn {
+    width: 40px;
+    height: 40px;
+    min-height: 40px !important;
+    padding: 0 !important;
+    flex-shrink: 0;
+}
+
+.sidebar-compact-btn svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+@media (max-width: 1024px) {
+    .sidebar-compact-btn {
+        display: none !important;
+    }
+}
+
+/* Desktop: updated width (248px) + smooth width transition */
+@media (min-width: 1025px) {
+    .app-shell .app-sidebar {
+        width: 248px !important;
+        transition: width 0.24s ease !important;
+    }
+
+    .app-shell .app-content {
+        margin-left: 248px !important;
+        transition: margin-left 0.24s ease !important;
+    }
+
+    body.sidebar-compact .app-shell .app-sidebar {
+        width: 72px !important;
+    }
+
+    body.sidebar-compact .app-shell .app-content {
+        margin-left: 72px !important;
+    }
+}
+
+/* Compact mode: hide labels and brand title */
+body.sidebar-compact .nav-label {
+    max-width: 0 !important;
+    opacity: 0 !important;
+}
+
+body.sidebar-compact .app-brand > span {
+    max-width: 0 !important;
+    opacity: 0 !important;
+}
+
+/* Compact mode: center brand area */
+body.sidebar-compact .app-brand {
+    justify-content: center;
+}
+
+/* Compact mode: shrink logo to fit 72px sidebar */
+body.sidebar-compact .app-logo {
+    width: 44px !important;
+    height: 36px !important;
+}
+
+/* Compact mode: center nav links, remove left-border indicator */
+body.sidebar-compact .app-nav-link {
+    justify-content: center !important;
+    padding: 9px !important;
+    border-left-color: transparent !important;
+    overflow: visible;
+}
+
+body.sidebar-compact .app-nav-link-active {
+    border-left-color: transparent !important;
+}
+
+body.sidebar-compact .app-nav-link-active::before {
+    display: none !important;
+}
+
+/* Compact mode: show tooltip on hover */
+body.sidebar-compact .nav-tooltip {
+    display: block;
+}
+
+body.sidebar-compact .app-nav-link:hover .nav-tooltip,
+body.sidebar-compact .app-nav-link:focus-visible .nav-tooltip {
+    opacity: 1;
+}
+
+/* Compact mode: stack footer buttons vertically */
+body.sidebar-compact .app-sidebar-footer {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Mobile/tablet: reset all compact overrides — sidebar uses drawer mode */
+@media (max-width: 1024px) {
+    body.sidebar-compact .app-shell .app-sidebar {
+        width: 284px !important;
+    }
+
+    body.sidebar-compact .app-shell .app-content {
+        margin-left: 0 !important;
+    }
+
+    body.sidebar-compact .nav-label {
+        max-width: 200px !important;
+        opacity: 1 !important;
+    }
+
+    body.sidebar-compact .app-brand > span {
+        max-width: 200px !important;
+        opacity: 1 !important;
+    }
+
+    body.sidebar-compact .app-brand {
+        justify-content: flex-start;
+    }
+
+    body.sidebar-compact .app-logo {
+        width: 108px !important;
+        height: 54px !important;
+    }
+
+    body.sidebar-compact .app-nav-link {
+        justify-content: flex-start !important;
+        padding: 9px 10px !important;
+        border-left: 4px solid transparent !important;
+        overflow: hidden;
+    }
+
+    body.sidebar-compact .app-sidebar-footer {
+        flex-direction: row;
+        align-items: center;
+        justify-content: flex-start;
+    }
+
+    body.sidebar-compact .nav-tooltip {
+        display: none !important;
+    }
+}

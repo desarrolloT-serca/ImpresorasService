@@ -13,7 +13,7 @@
 <body class="min-h-screen">
     <div class="app-shell">
         <div id="sidebar-overlay" class="sidebar-overlay"></div>
-        <aside class="app-sidebar">
+        <aside class="app-sidebar" id="app-sidebar">
             <div class="app-brand">
                 @if(file_exists(public_path('img/serca-logo.png')))
                     <img src="{{ asset('img/serca-logo.png') }}" alt="AD Serca" class="app-logo">
@@ -30,41 +30,49 @@
             </div>
 
             <nav class="app-nav">
-                <a href="{{ route('dashboard') }}" class="app-nav-link {{ request()->routeIs('dashboard') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('dashboard')) aria-current="page" @endif>
+                <a href="{{ route('dashboard') }}" class="app-nav-link {{ request()->routeIs('dashboard') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('dashboard')) aria-current="page" @endif data-label="Dashboard">
                     <svg class="nav-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-                    Dashboard
+                    <span class="nav-label">Dashboard</span>
+                    <span class="nav-tooltip" aria-hidden="true">Dashboard</span>
                 </a>
-                <a href="{{ url('/cola') }}" class="app-nav-link {{ request()->is('cola*') ? 'app-nav-link-active' : '' }}" @if(request()->is('cola*')) aria-current="page" @endif>
+                <a href="{{ url('/cola') }}" class="app-nav-link {{ request()->is('cola*') ? 'app-nav-link-active' : '' }}" @if(request()->is('cola*')) aria-current="page" @endif data-label="Cola">
                     <svg class="nav-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
-                    Cola
+                    <span class="nav-label">Cola</span>
+                    <span class="nav-tooltip" aria-hidden="true">Cola</span>
                 </a>
                 @if(($isStoreManager ?? false) || ($isAdmin ?? false))
-                    <a href="{{ route('impresoras.index') }}" class="app-nav-link {{ request()->routeIs('impresoras.*') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('impresoras.*')) aria-current="page" @endif>
+                    <a href="{{ route('impresoras.index') }}" class="app-nav-link {{ request()->routeIs('impresoras.*') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('impresoras.*')) aria-current="page" @endif data-label="Impresoras">
                         <svg class="nav-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>
-                        Impresoras
+                        <span class="nav-label">Impresoras</span>
+                        <span class="nav-tooltip" aria-hidden="true">Impresoras</span>
                     </a>
                 @endif
                 @if($isAdmin ?? false)
-                    <a href="{{ route('reglas.index') }}" class="app-nav-link {{ request()->routeIs('reglas.*') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('reglas.*')) aria-current="page" @endif>
+                    <a href="{{ route('reglas.index') }}" class="app-nav-link {{ request()->routeIs('reglas.*') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('reglas.*')) aria-current="page" @endif data-label="Reglas">
                         <svg class="nav-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="12" y2="18"/><polyline points="15 15 18 18 21 15"/><line x1="18" y1="18" x2="18" y2="11"/></svg>
-                        Reglas
+                        <span class="nav-label">Reglas</span>
+                        <span class="nav-tooltip" aria-hidden="true">Reglas</span>
                     </a>
-                    <a href="{{ route('tiendas.index') }}" class="app-nav-link {{ request()->routeIs('tiendas.*') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('tiendas.*')) aria-current="page" @endif>
+                    <a href="{{ route('tiendas.index') }}" class="app-nav-link {{ request()->routeIs('tiendas.*') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('tiendas.*')) aria-current="page" @endif data-label="Tiendas">
                         <svg class="nav-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-                        Tiendas
+                        <span class="nav-label">Tiendas</span>
+                        <span class="nav-tooltip" aria-hidden="true">Tiendas</span>
                     </a>
-                    <a href="{{ route('usuarios.index') }}" class="app-nav-link {{ request()->routeIs('usuarios.*') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('usuarios.*')) aria-current="page" @endif>
+                    <a href="{{ route('usuarios.index') }}" class="app-nav-link {{ request()->routeIs('usuarios.*') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('usuarios.*')) aria-current="page" @endif data-label="Usuarios">
                         <svg class="nav-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                        Usuarios
+                        <span class="nav-label">Usuarios</span>
+                        <span class="nav-tooltip" aria-hidden="true">Usuarios</span>
                     </a>
-                    <a href="{{ route('ajustes.index') }}" class="app-nav-link {{ request()->routeIs('ajustes.*') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('ajustes.*')) aria-current="page" @endif>
+                    <a href="{{ route('ajustes.index') }}" class="app-nav-link {{ request()->routeIs('ajustes.*') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('ajustes.*')) aria-current="page" @endif data-label="Ajustes">
                         <svg class="nav-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-                        Ajustes
+                        <span class="nav-label">Ajustes</span>
+                        <span class="nav-tooltip" aria-hidden="true">Ajustes</span>
                     </a>
                 @endif
-                <a href="{{ url('/alertas') }}" class="app-nav-link {{ request()->is('alertas*') ? 'app-nav-link-active' : '' }}" @if(request()->is('alertas*')) aria-current="page" @endif>
+                <a href="{{ url('/alertas') }}" class="app-nav-link {{ request()->is('alertas*') ? 'app-nav-link-active' : '' }}" @if(request()->is('alertas*')) aria-current="page" @endif data-label="Alertas">
                     <svg class="nav-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-                    Alertas
+                    <span class="nav-label">Alertas</span>
+                    <span class="nav-tooltip" aria-hidden="true">Alertas</span>
                 </a>
             </nav>
             <div class="app-sidebar-footer">
@@ -82,6 +90,14 @@
                     </svg>
                     <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                         <path d="M21 12.79A8.5 8.5 0 1 1 11.21 3a6.8 6.8 0 0 0 9.79 9.79Z" />
+                    </svg>
+                </button>
+                <button type="button" id="sidebar-compact-toggle" class="btn btn-ghost sidebar-compact-btn" title="Contraer menú" aria-label="Contraer menú">
+                    <svg class="icon-collapse" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/>
+                    </svg>
+                    <svg class="icon-expand" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+                        <polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/>
                     </svg>
                 </button>
             </div>
@@ -207,10 +223,39 @@
                 });
             }
 
+            function initSidebarCollapse() {
+                const compact = localStorage.getItem('sidebar-compact') === 'true';
+                if (compact) document.body.classList.add('sidebar-compact');
+
+                const btn = document.getElementById('sidebar-compact-toggle');
+                if (!btn) return;
+
+                const iconCollapse = btn.querySelector('.icon-collapse');
+                const iconExpand = btn.querySelector('.icon-expand');
+
+                function syncCompactBtn() {
+                    const isCompact = document.body.classList.contains('sidebar-compact');
+                    if (iconCollapse) iconCollapse.style.display = isCompact ? 'none' : '';
+                    if (iconExpand) iconExpand.style.display = isCompact ? '' : 'none';
+                    btn.title = isCompact ? 'Expandir menú' : 'Contraer menú';
+                    btn.setAttribute('aria-label', isCompact ? 'Expandir menú' : 'Contraer menú');
+                }
+
+                syncCompactBtn();
+
+                btn.addEventListener('click', function() {
+                    document.body.classList.toggle('sidebar-compact');
+                    const isCompact = document.body.classList.contains('sidebar-compact');
+                    localStorage.setItem('sidebar-compact', isCompact ? 'true' : 'false');
+                    syncCompactBtn();
+                });
+            }
+
             const stored = localStorage.getItem('theme') || 'light';
             applyTheme(stored === 'dark');
             syncServerRenderedControls();
             initAutoFilters();
+            initSidebarCollapse();
             document.getElementById('sidebar-toggle')?.addEventListener('click', toggleSidebar);
             document.getElementById('sidebar-overlay')?.addEventListener('click', closeSidebar);
             window.addEventListener('resize', function() {
