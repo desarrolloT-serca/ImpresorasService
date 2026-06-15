@@ -117,15 +117,6 @@
                             : null;
                         $contextStoreName = is_array($contextStore ?? null) ? ($contextStore['name'] ?? null) : null;
                     @endphp
-                    <span class="badge badge-neutral app-context-badge">
-                        @if($isAdmin ?? false)
-                            {{ $authRoleLabel ?? 'Administrador' }}
-                        @elseif($contextStoreId !== null)
-                            {{ \App\Helpers\StoreFormat::label($contextStoreId, $contextStoreName) }}
-                        @else
-                            {{ $authRoleLabel ?? 'Empleado' }}
-                        @endif
-                    </span>
                     @if($isAdmin ?? false)
                         <form method="POST" action="{{ url('/store-filter') }}" class="flex items-center gap-2">
                             @csrf
@@ -140,15 +131,21 @@
                             </select>
                         </form>
                     @endif
+                    <span class="badge badge-neutral app-context-badge">
+                        @if($isAdmin ?? false)
+                            {{ $authRoleLabel ?? 'Administrador' }}
+                        @elseif($contextStoreId !== null)
+                            {{ \App\Helpers\StoreFormat::label($contextStoreId, $contextStoreName) }}
+                        @else
+                            {{ $authRoleLabel ?? 'Empleado' }}
+                        @endif
+                    </span>
                     <form action="{{ route('logout') }}" method="POST" class="inline">
                         @csrf
                         <button type="submit" class="btn btn-danger">Cerrar sesi&oacute;n</button>
                     </form>
                 </div>
             </header>
-            @if(session('error'))
-                <div class="mb-4 alert alert-error" role="alert">{{ session('error') }}</div>
-            @endif
             @if($errors->any())
                 <div class="mb-4 alert alert-error" role="alert">
                     <ul class="list-disc pl-5 space-y-1">
@@ -274,5 +271,109 @@
         })();
     </script>
     @yield('page_scripts')
+    <style id="app-toast-critical">
+        /* Fallback: los estilos completos viven en system.css (requiere npm run build). */
+        #app-toast-region {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+            max-width: min(380px, calc(100vw - 48px));
+        }
+        .app-toast {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 12px 14px;
+            background: var(--ui-surface-raised, #fff);
+            border: 1px solid var(--ui-border, #d8dee8);
+            border-left-width: 4px;
+            border-radius: 6px;
+            box-shadow: 0 10px 24px rgba(27, 47, 130, .08);
+            pointer-events: all;
+            opacity: 0;
+            transform: translateX(20px);
+            transition: opacity .22s ease, transform .22s ease;
+            font-size: 13.5px;
+            color: var(--ui-text, #1d2433);
+            word-break: break-word;
+        }
+        .app-toast.is-visible { opacity: 1; transform: translateX(0); }
+        .app-toast.is-hiding { opacity: 0; transform: translateX(20px); }
+        .app-toast.toast-success { border-left-color: var(--ui-success, #167a5b); }
+        .app-toast.toast-error { border-left-color: var(--ui-danger, #c81e34); }
+        .app-toast.toast-warning { border-left-color: var(--ui-warning, #b66b00); }
+        .app-toast-body { flex: 1; min-width: 0; line-height: 1.4; }
+        .app-toast-close {
+            flex-shrink: 0;
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--ui-text-muted, #5f6b7a);
+            padding: 0 0 0 4px;
+            line-height: 1;
+            font-size: 14px;
+        }
+    </style>
+    <div id="app-toast-region" aria-live="polite" aria-atomic="false"></div>
+    <script>
+    (function () {
+        var ICONS = {
+            success: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+            error:   '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+            warning: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
+        };
+
+        function dismissToast(toast) {
+            clearTimeout(toast._t);
+            toast.classList.remove('is-visible');
+            toast.classList.add('is-hiding');
+            setTimeout(function () { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 220);
+        }
+
+        function showToast(message, type) {
+            type = type || 'success';
+            var region = document.getElementById('app-toast-region');
+            if (!region || !message) return;
+
+            var toast = document.createElement('div');
+            toast.className = 'app-toast toast-' + type;
+            toast.setAttribute('role', 'alert');
+            var safeMsg = String(message).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+            toast.innerHTML =
+                '<span class="app-toast-icon">' + (ICONS[type] || ICONS.success) + '</span>' +
+                '<span class="app-toast-body">' + safeMsg + '</span>' +
+                '<button type="button" class="app-toast-close" aria-label="Cerrar">&times;</button>';
+
+            toast.querySelector('.app-toast-close').addEventListener('click', function () { dismissToast(toast); });
+            region.appendChild(toast);
+
+            requestAnimationFrame(function () {
+                requestAnimationFrame(function () { toast.classList.add('is-visible'); });
+            });
+
+            toast._t = setTimeout(function () { dismissToast(toast); }, 4500);
+        }
+
+        window.showToast = showToast;
+
+    })();
+    </script>
+    <script>
+    window.__toastQueue = [];
+    @if(session('success'))
+    window.__toastQueue.push({ type: 'success', message: @json(session('success')) });
+    @endif
+    @if(session('error'))
+    window.__toastQueue.push({ type: 'error', message: @json(session('error')) });
+    @endif
+    window.__toastQueue.forEach(function (item, i) {
+        setTimeout(function () { if (window.showToast) window.showToast(item.message, item.type); }, i * 130);
+    });
+    </script>
 </body>
 </html>

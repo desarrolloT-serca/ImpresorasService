@@ -7,9 +7,6 @@
 @section('title', 'Cola de impresión')
 
 @section('content')
-@if(session('success'))
-    <div class="mb-4 alert alert-success">{{ session('success') }}</div>
-@endif
 
 <div class="dbx-wrap">
 <x-ui.card>
