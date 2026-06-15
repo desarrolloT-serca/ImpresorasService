@@ -58,8 +58,9 @@ public class DashboardController : ControllerBase
         var fromUtc = ResolveWindowStartUtc(window);
 
         var jobs = _dbContext.PrintJobs.AsNoTracking();
-        var stores = _dbContext.Stores.AsNoTracking().Where(x => x.IsActive == true);
-        var printers = _dbContext.Printers.AsNoTracking().Where(x => x.IsActive == true);
+        var activeOnly = true;
+        var stores = _dbContext.Stores.AsNoTracking().Where(x => x.IsActive == activeOnly);
+        var printers = _dbContext.Printers.AsNoTracking().Where(x => x.IsActive == activeOnly);
 
         if (effectiveStoreId.HasValue)
         {

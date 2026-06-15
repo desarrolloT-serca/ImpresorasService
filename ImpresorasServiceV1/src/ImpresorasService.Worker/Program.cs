@@ -37,7 +37,8 @@ await using (var scope = host.Services.CreateAsyncScope())
     if (applyMigrations)
         await dbContext.Database.MigrateAsync();
 
-    var rulesCount = await dbContext.RoutingRules.CountAsync(r => r.IsActive);
+    var activeOnly = true;
+    var rulesCount = await dbContext.RoutingRules.CountAsync(r => r.IsActive == activeOnly);
     logger.LogInformation("Reglas de enrutado activas: {Count}", rulesCount);
 }
 

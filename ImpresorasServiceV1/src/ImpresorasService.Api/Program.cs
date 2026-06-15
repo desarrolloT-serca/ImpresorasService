@@ -291,7 +291,8 @@ app.MapGet("/diagnostics", async (ImpresorasDbContext db) =>
         ?.Substring("Database=".Length).Trim() ?? "?";
     var sourceCount = await db.SourcePrintJobs.CountAsync();
     var printCount = await db.PrintJobs.CountAsync();
-    var pendingSource = await db.SourcePrintJobs.CountAsync(x => !x.IsProcessed);
+    var pendingOnly = false;
+    var pendingSource = await db.SourcePrintJobs.CountAsync(x => x.IsProcessed == pendingOnly);
     return Results.Ok(new
     {
         provider,

@@ -26,9 +26,10 @@ public class RoutingResolver : IRoutingResolver
     {
         var now = DateTimeOffset.UtcNow;
 
+        var activeOnly = true;
         var rules = await _db.RoutingRules
             .AsNoTracking()
-            .Where(r => r.IsActive)
+            .Where(r => r.IsActive == activeOnly)
             .OrderBy(r => r.Priority)
             .ToListAsync(cancellationToken);
 
@@ -38,7 +39,7 @@ public class RoutingResolver : IRoutingResolver
 
         var printerIds = await _db.Printers
             .AsNoTracking()
-            .Where(p => p.IsActive)
+            .Where(p => p.IsActive == activeOnly)
             .Select(p => p.PrinterId)
             .ToListAsync(cancellationToken);
 
