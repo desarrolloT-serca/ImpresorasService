@@ -1986,11 +1986,11 @@ html.dark .dbx-printer-summary {
     border-radius: var(--ui-radius-sm);
     color: var(--ui-text-muted);
     cursor: pointer;
-    font-size: 0.68rem;
+    font-size: 0.64rem;
     font-weight: 850;
-    letter-spacing: 0.035em;
-    line-height: 1;
-    padding: 6px 8px;
+    letter-spacing: 0.02em;
+    line-height: 1.1;
+    padding: 6px 4px;
     text-transform: uppercase;
     transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease, box-shadow 0.14s ease;
 }
@@ -2062,9 +2062,9 @@ html.dark .severity-picker {
 .threshold-rule-head,
 .threshold-rule-row {
     display: grid;
-    grid-template-columns: minmax(92px, 0.68fr) minmax(190px, 1fr) auto;
+    grid-template-columns: minmax(52px, 64px) minmax(0, 1fr) 38px;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
 }
 
 .threshold-rule-head {
@@ -2095,8 +2095,15 @@ html.dark .severity-picker {
     min-width: 0;
 }
 
+.threshold-value-field {
+    max-width: 64px;
+}
+
 .threshold-min-input {
+    width: 100%;
+    max-width: 64px;
     min-height: 38px;
+    padding-inline: 6px;
     text-align: center;
 }
 
@@ -2523,7 +2530,7 @@ html.dark .login-logo-frame {
 
 .dbx-routing-layout {
     display: grid;
-    grid-template-columns: minmax(230px, 300px) minmax(0, 1fr);
+    grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
     gap: 14px;
     align-items: start;
 }
@@ -2602,8 +2609,9 @@ html.dark .login-logo-frame {
 .dbx-routing-store-line {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 8px;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 6px 8px;
     min-width: 0;
 }
 
@@ -2710,6 +2718,40 @@ html.dark .login-logo-frame {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.dbx-printers-table .dbx-table {
+    width: 100%;
+    table-layout: fixed;
+}
+
+.dbx-printers-table .dbx-table th.text-col:nth-child(1),
+.dbx-printers-table .dbx-table td.text-col:nth-child(1) {
+    width: 16%;
+}
+
+.dbx-printers-table .dbx-table th.text-col:nth-child(2),
+.dbx-printers-table .dbx-table td.text-col:nth-child(2) {
+    width: 18%;
+}
+
+.dbx-printers-table .dbx-table th.text-col:nth-child(3),
+.dbx-printers-table .dbx-table td.text-col:nth-child(3) {
+    width: 24%;
+}
+
+.dbx-printers-table .dbx-table th.status-col,
+.dbx-printers-table .dbx-table td.status-col {
+    width: 9%;
+}
+
+.dbx-printers-table .dbx-table th.actions-col,
+.dbx-printers-table .dbx-table td.actions-col {
+    width: 14%;
+}
+
+.dbx-printers-table .dbx-printer-text-cell {
+    max-width: none;
 }
 
 .dbx-routing-create-btn {
@@ -4444,4 +4486,1167 @@ html.dark .dbx-store-view-tab.is-active {
     .threshold-remove:hover {
         transform: none;
     }
+}
+
+/* =====================================================================
+   APPLE-LIKE GLASS REFINEMENT
+   Refinamiento final: material translucido, compacto y sin brillos falsos.
+   ===================================================================== */
+
+.btn,
+.dbx-tab,
+.dashboard-tab,
+.dbx-store-view-tab {
+    --glass-accent: var(--ui-primary);
+    --glass-text: var(--ui-primary-strong);
+    --glass-bg: color-mix(in srgb, var(--ui-surface) 70%, transparent);
+    --glass-bg-tint: color-mix(in srgb, var(--glass-accent) 8%, var(--ui-surface));
+    --glass-border: color-mix(in srgb, var(--glass-accent) 30%, rgba(255, 255, 255, 0.82));
+    --glass-shadow: color-mix(in srgb, var(--glass-accent) 14%, transparent);
+    -webkit-backdrop-filter: blur(18px) saturate(1.35);
+    backdrop-filter: blur(18px) saturate(1.35);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.04) 46%, rgba(255, 255, 255, 0.12)),
+        linear-gradient(135deg, var(--glass-bg), var(--glass-bg-tint));
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.58),
+        inset 0 -1px 0 color-mix(in srgb, var(--glass-accent) 12%, transparent),
+        0 1px 1px rgba(15, 23, 42, 0.06),
+        0 8px 18px var(--glass-shadow);
+    color: var(--glass-text);
+    min-height: 32px;
+    padding: 6px 12px;
+    text-shadow: none;
+}
+
+.btn::before {
+    background:
+        radial-gradient(circle at 18% 0%, rgba(255, 255, 255, 0.48), transparent 32%),
+        linear-gradient(110deg, transparent 0 24%, rgba(255, 255, 255, 0.22) 36%, transparent 52%);
+    opacity: 0.38;
+}
+
+.btn:hover:not(:disabled):not(.is-disabled),
+.dbx-tab:hover,
+.dashboard-tab:hover,
+.dbx-store-view-tab:hover {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.44), rgba(255, 255, 255, 0.08) 46%, rgba(255, 255, 255, 0.16)),
+        linear-gradient(135deg, color-mix(in srgb, var(--ui-surface) 78%, transparent), color-mix(in srgb, var(--glass-accent) 12%, var(--ui-surface)));
+    border-color: color-mix(in srgb, var(--glass-accent) 46%, rgba(255, 255, 255, 0.86));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.68),
+        inset 0 -1px 0 color-mix(in srgb, var(--glass-accent) 16%, transparent),
+        0 1px 2px rgba(15, 23, 42, 0.08),
+        0 11px 24px color-mix(in srgb, var(--glass-accent) 18%, transparent);
+    color: var(--glass-text);
+    transform: translateY(-1px);
+}
+
+.btn:active:not(:disabled):not(.is-disabled),
+.dbx-tab:active,
+.dashboard-tab:active,
+.dbx-store-view-tab:active {
+    box-shadow:
+        inset 0 2px 4px rgba(15, 23, 42, 0.12),
+        inset 0 1px 0 rgba(255, 255, 255, 0.34),
+        0 1px 2px rgba(15, 23, 42, 0.06);
+    transform: translateY(0);
+}
+
+.btn-primary,
+.dbx-tab.is-active,
+.dashboard-tab-active,
+.dbx-store-view-tab.is-active {
+    --glass-accent: var(--ui-primary);
+    --glass-text: #ffffff;
+    --glass-bg: var(--ad-blue);
+    --glass-bg-tint: var(--ad-blue-deep);
+    --glass-border: color-mix(in srgb, var(--ad-blue) 88%, #000000);
+    --glass-shadow: rgba(27, 47, 130, 0.24);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02) 42%, rgba(0, 0, 0, 0.16)),
+        linear-gradient(135deg, var(--ad-blue) 0%, #172a75 58%, var(--ad-blue-deep) 100%);
+    border-color: var(--glass-border);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.22),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.28),
+        0 2px 4px rgba(15, 23, 42, 0.12),
+        0 10px 22px var(--glass-shadow);
+    color: #ffffff;
+}
+
+.btn-primary:hover:not(:disabled):not(.is-disabled),
+.dbx-tab.is-active:hover,
+.dashboard-tab-active:hover,
+.dbx-store-view-tab.is-active:hover {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.03) 42%, rgba(0, 0, 0, 0.14)),
+        linear-gradient(135deg, #20378d 0%, var(--ad-blue) 56%, var(--ad-blue-deep) 100%);
+    border-color: color-mix(in srgb, var(--ad-blue) 82%, #000000);
+    color: #ffffff;
+}
+
+.btn-secondary,
+.btn-outline,
+.btn-ghost {
+    --glass-accent: var(--ui-primary);
+    --glass-text: var(--ui-primary-strong);
+    --glass-bg: color-mix(in srgb, var(--ui-surface) 62%, transparent);
+    --glass-bg-tint: color-mix(in srgb, var(--ui-primary-soft) 48%, transparent);
+}
+
+.btn-danger {
+    --glass-accent: var(--ui-danger);
+    --glass-text: var(--ui-danger);
+    --glass-bg-tint: color-mix(in srgb, var(--ui-danger) 9%, var(--ui-surface));
+    --glass-border: color-mix(in srgb, var(--ui-danger) 40%, rgba(255, 255, 255, 0.78));
+}
+
+.btn-danger:hover:not(:disabled):not(.is-disabled) {
+    --glass-text: #ffffff;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.05) 44%, rgba(0, 0, 0, 0.08)),
+        linear-gradient(135deg, color-mix(in srgb, var(--ui-danger) 78%, rgba(255, 255, 255, 0.18)), color-mix(in srgb, var(--ui-danger) 90%, #780918));
+    color: #ffffff;
+}
+
+.btn-warning {
+    --glass-accent: var(--ui-warning);
+    --glass-text: #7a4700;
+    --glass-bg-tint: color-mix(in srgb, var(--ui-warning) 11%, var(--ui-surface));
+    --glass-border: color-mix(in srgb, var(--ui-warning) 42%, rgba(255, 255, 255, 0.78));
+}
+
+.btn-success {
+    --glass-accent: var(--ui-success);
+    --glass-text: var(--ui-success);
+    --glass-bg-tint: color-mix(in srgb, var(--ui-success) 10%, var(--ui-surface));
+    --glass-border: color-mix(in srgb, var(--ui-success) 38%, rgba(255, 255, 255, 0.78));
+}
+
+.btn-sm,
+.btn-action,
+.action-buttons .btn,
+.dbx-table td .btn,
+.table td .btn {
+    border-radius: 7px;
+    min-height: 28px;
+    padding: 4px 9px;
+}
+
+.btn-icon {
+    border-radius: 8px;
+}
+
+.app-context-badge,
+.app-topbar-actions .select,
+.theme-toggle,
+.sidebar-toggle,
+.sidebar-compact-btn,
+.threshold-add,
+.threshold-remove {
+    -webkit-backdrop-filter: blur(18px) saturate(1.25);
+    backdrop-filter: blur(18px) saturate(1.25);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.06) 46%, rgba(255, 255, 255, 0.12)),
+        linear-gradient(135deg, color-mix(in srgb, var(--ui-surface) 72%, transparent), color-mix(in srgb, var(--ui-primary-soft) 38%, transparent));
+    border-color: color-mix(in srgb, var(--ui-primary) 28%, rgba(255, 255, 255, 0.82));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.58),
+        0 8px 18px rgba(24, 47, 122, 0.08);
+}
+
+html.dark .btn,
+html.dark .dbx-tab,
+html.dark .dashboard-tab,
+html.dark .dbx-store-view-tab {
+    --glass-bg: rgba(30, 41, 59, 0.58);
+    --glass-bg-tint: color-mix(in srgb, var(--glass-accent) 12%, rgba(15, 23, 42, 0.58));
+    --glass-border: color-mix(in srgb, var(--glass-accent) 30%, rgba(148, 163, 184, 0.36));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.1),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.22),
+        0 10px 22px rgba(0, 0, 0, 0.24);
+}
+
+html.dark .btn-primary,
+html.dark .dbx-tab.is-active,
+html.dark .dashboard-tab-active,
+html.dark .dbx-store-view-tab.is-active {
+    --glass-bg: color-mix(in srgb, var(--ui-primary) 62%, rgba(255, 255, 255, 0.08));
+    --glass-bg-tint: color-mix(in srgb, var(--ui-primary) 78%, #000000);
+    --glass-border: color-mix(in srgb, var(--ui-primary) 50%, rgba(255, 255, 255, 0.28));
+}
+
+/* =====================================================================
+   PRIORITIZED ALERTS TABLE
+   Los colores de estado ganan al zebra-striping global.
+   ===================================================================== */
+
+.table-alerts-wrap {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 4px;
+    scrollbar-gutter: stable;
+}
+
+.table-alerts {
+    min-width: 900px;
+    table-layout: auto;
+}
+
+.table-alerts th {
+    white-space: nowrap;
+}
+
+.table-alerts th.text-col,
+.table-alerts td.text-col {
+    min-width: 320px;
+    max-width: 620px;
+    white-space: normal;
+}
+
+.table-alerts td.text-col {
+    line-height: 1.35;
+}
+
+.table-alerts tbody tr.alert-row-critical td,
+.table-alerts tbody tr.alert-row-critical:nth-child(even) td,
+.table-alerts tbody tr.dbx-alert-row-critical td,
+.table-alerts tbody tr.dbx-alert-row-critical:nth-child(even) td {
+    background: color-mix(in srgb, var(--ui-danger) 9%, var(--ui-surface)) !important;
+}
+
+.table-alerts tbody tr.alert-row-warning td,
+.table-alerts tbody tr.alert-row-warning:nth-child(even) td,
+.table-alerts tbody tr.dbx-alert-row-warning td,
+.table-alerts tbody tr.dbx-alert-row-warning:nth-child(even) td {
+    background: color-mix(in srgb, var(--ui-warning) 11%, var(--ui-surface)) !important;
+}
+
+.table-alerts tbody tr.alert-row-ok:nth-child(even) td,
+.table-alerts tbody tr.dbx-alert-row-healthy:nth-child(even) td {
+    background: color-mix(in srgb, var(--ui-surface-soft) 82%, var(--ui-surface));
+}
+
+.table-alerts tbody tr.alert-row-critical td:first-child,
+.table-alerts tbody tr.dbx-alert-row-critical td:first-child {
+    border-left: 4px solid var(--ui-danger);
+    padding-left: 10px;
+}
+
+.table-alerts tbody tr.alert-row-warning td:first-child,
+.table-alerts tbody tr.dbx-alert-row-warning td:first-child {
+    border-left: 4px solid var(--ui-warning);
+    padding-left: 10px;
+}
+
+.table-alerts tbody tr.alert-row-ok td:first-child,
+.table-alerts tbody tr.dbx-alert-row-healthy td:first-child {
+    border-left: 4px solid transparent;
+    padding-left: 10px;
+}
+
+.table-alerts tr[data-alert-href] {
+    cursor: pointer;
+}
+
+.table-alerts tbody tr.alert-row-critical:hover td,
+.table-alerts tbody tr.dbx-alert-row-critical:hover td {
+    background: color-mix(in srgb, var(--ui-danger) 14%, var(--ui-surface)) !important;
+}
+
+.table-alerts tbody tr.alert-row-warning:hover td,
+.table-alerts tbody tr.dbx-alert-row-warning:hover td {
+    background: color-mix(in srgb, var(--ui-warning) 16%, var(--ui-surface)) !important;
+}
+
+.table-alerts tbody tr.alert-row-ok:hover td,
+.table-alerts tbody tr.dbx-alert-row-healthy:hover td {
+    background: color-mix(in srgb, var(--ui-primary-soft) 35%, var(--ui-surface)) !important;
+}
+
+.table-alerts .dbx-pill.critical {
+    border-color: color-mix(in srgb, var(--ui-danger) 62%, var(--ui-border));
+    background: color-mix(in srgb, var(--ui-danger) 13%, var(--ui-surface));
+    color: var(--ui-danger);
+}
+
+.table-alerts .dbx-pill.warning {
+    border-color: color-mix(in srgb, var(--ui-warning) 62%, var(--ui-border));
+    background: color-mix(in srgb, var(--ui-warning) 14%, var(--ui-surface));
+    color: color-mix(in srgb, var(--ui-warning) 86%, #000000);
+}
+
+html.dark .table-alerts tbody tr.alert-row-critical td,
+html.dark .table-alerts tbody tr.alert-row-critical:nth-child(even) td,
+html.dark .table-alerts tbody tr.dbx-alert-row-critical td,
+html.dark .table-alerts tbody tr.dbx-alert-row-critical:nth-child(even) td {
+    background: color-mix(in srgb, var(--ui-danger) 14%, var(--ui-surface)) !important;
+}
+
+html.dark .table-alerts tbody tr.alert-row-warning td,
+html.dark .table-alerts tbody tr.alert-row-warning:nth-child(even) td,
+html.dark .table-alerts tbody tr.dbx-alert-row-warning td,
+html.dark .table-alerts tbody tr.dbx-alert-row-warning:nth-child(even) td {
+    background: color-mix(in srgb, var(--ui-warning) 16%, var(--ui-surface)) !important;
+}
+
+html.dark .table-alerts tbody tr.alert-row-critical:hover td,
+html.dark .table-alerts tbody tr.dbx-alert-row-critical:hover td {
+    background: color-mix(in srgb, var(--ui-danger) 20%, var(--ui-surface)) !important;
+}
+
+html.dark .table-alerts tbody tr.alert-row-warning:hover td,
+html.dark .table-alerts tbody tr.dbx-alert-row-warning:hover td {
+    background: color-mix(in srgb, var(--ui-warning) 22%, var(--ui-surface)) !important;
+}
+
+/* Alertas priorizadas: filas neutras; la gravedad vive en los chips. */
+.table-alerts th.store-col,
+.table-alerts td.store-col {
+    min-width: 170px;
+    text-align: left !important;
+    white-space: normal;
+}
+
+.table-alerts tbody tr td,
+.table-alerts tbody tr:nth-child(even) td,
+.table-alerts tbody tr.alert-row-critical td,
+.table-alerts tbody tr.alert-row-critical:nth-child(even) td,
+.table-alerts tbody tr.alert-row-warning td,
+.table-alerts tbody tr.alert-row-warning:nth-child(even) td,
+.table-alerts tbody tr.alert-row-ok td,
+.table-alerts tbody tr.alert-row-ok:nth-child(even) td,
+.table-alerts tbody tr.dbx-alert-row-critical td,
+.table-alerts tbody tr.dbx-alert-row-critical:nth-child(even) td,
+.table-alerts tbody tr.dbx-alert-row-warning td,
+.table-alerts tbody tr.dbx-alert-row-warning:nth-child(even) td,
+.table-alerts tbody tr.dbx-alert-row-healthy td,
+.table-alerts tbody tr.dbx-alert-row-healthy:nth-child(even) td {
+    background: var(--ui-surface) !important;
+}
+
+.table-alerts tbody tr td:first-child,
+.table-alerts tbody tr.alert-row-critical td:first-child,
+.table-alerts tbody tr.alert-row-warning td:first-child,
+.table-alerts tbody tr.alert-row-ok td:first-child,
+.table-alerts tbody tr.dbx-alert-row-critical td:first-child,
+.table-alerts tbody tr.dbx-alert-row-warning td:first-child,
+.table-alerts tbody tr.dbx-alert-row-healthy td:first-child {
+    border-left: 4px solid transparent;
+    padding-left: 10px;
+}
+
+.table-alerts tbody tr:hover td,
+.table-alerts tbody tr.alert-row-critical:hover td,
+.table-alerts tbody tr.alert-row-warning:hover td,
+.table-alerts tbody tr.alert-row-ok:hover td,
+.table-alerts tbody tr.dbx-alert-row-critical:hover td,
+.table-alerts tbody tr.dbx-alert-row-warning:hover td,
+.table-alerts tbody tr.dbx-alert-row-healthy:hover td {
+    background: color-mix(in srgb, var(--ui-primary-soft) 26%, var(--ui-surface)) !important;
+}
+
+html.dark .table-alerts tbody tr td,
+html.dark .table-alerts tbody tr:nth-child(even) td,
+html.dark .table-alerts tbody tr.alert-row-critical td,
+html.dark .table-alerts tbody tr.alert-row-critical:nth-child(even) td,
+html.dark .table-alerts tbody tr.alert-row-warning td,
+html.dark .table-alerts tbody tr.alert-row-warning:nth-child(even) td,
+html.dark .table-alerts tbody tr.alert-row-ok td,
+html.dark .table-alerts tbody tr.alert-row-ok:nth-child(even) td,
+html.dark .table-alerts tbody tr.dbx-alert-row-critical td,
+html.dark .table-alerts tbody tr.dbx-alert-row-critical:nth-child(even) td,
+html.dark .table-alerts tbody tr.dbx-alert-row-warning td,
+html.dark .table-alerts tbody tr.dbx-alert-row-warning:nth-child(even) td,
+html.dark .table-alerts tbody tr.dbx-alert-row-healthy td,
+html.dark .table-alerts tbody tr.dbx-alert-row-healthy:nth-child(even) td {
+    background: var(--ui-surface) !important;
+}
+
+html.dark .table-alerts tbody tr:hover td,
+html.dark .table-alerts tbody tr.alert-row-critical:hover td,
+html.dark .table-alerts tbody tr.alert-row-warning:hover td,
+html.dark .table-alerts tbody tr.alert-row-ok:hover td,
+html.dark .table-alerts tbody tr.dbx-alert-row-critical:hover td,
+html.dark .table-alerts tbody tr.dbx-alert-row-warning:hover td,
+html.dark .table-alerts tbody tr.dbx-alert-row-healthy:hover td {
+    background: color-mix(in srgb, var(--ui-primary-soft) 34%, var(--ui-surface)) !important;
+}
+
+/* =====================================================================
+   RESPONSIVE LAYOUT HARDENING
+   Base para que cards, paneles, filtros y acciones se contraigan bien.
+   ===================================================================== */
+
+.app-shell,
+.app-content,
+.app-topbar,
+.app-topbar-title,
+.app-topbar-actions,
+.app-content > .ajustes-wrap,
+.app-content > .dbx-wrap,
+.app-content > .dbx-dashboard-page,
+.dbx-dashboard-page,
+.dbx-wrap,
+.dbx-card,
+.dbx-card-body,
+.dbx-store,
+.dbx-store-view-shell,
+.dbx-operational-card,
+.dbx-routing-layout,
+.dbx-routing-stores-card,
+.dbx-routing-rules-card,
+.dbx-rule-form-card,
+.dbx-rule-form,
+.dbx-rule-form-section,
+.local-dashboard,
+.local-hero,
+.local-main-grid,
+.local-printers-card {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.app-content {
+    overflow-x: clip;
+}
+
+.app-topbar {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.app-topbar-title {
+    flex: 1 1 18rem;
+}
+
+.app-topbar-title h1 {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.app-topbar-actions {
+    display: flex;
+    flex: 1 1 auto;
+    justify-content: flex-end;
+    min-width: min(100%, 18rem);
+}
+
+.app-topbar-actions form {
+    align-items: center;
+    display: flex;
+    flex: 1 1 18rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    min-width: 0;
+}
+
+.app-topbar-actions label {
+    flex: 0 0 auto;
+}
+
+.app-topbar-actions .select {
+    flex: 1 1 12rem;
+    max-width: 22rem;
+    min-width: 9rem;
+}
+
+.app-topbar-actions .btn,
+.app-context-badge {
+    flex: 0 1 auto;
+    max-width: 100%;
+}
+
+.dbx-title-row,
+.dbx-routing-title-row,
+.dbx-rule-form-header,
+.dbx-rule-form-section-title,
+.dbx-table-meta,
+.dbx-store-view-shell .dbx-card-body {
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.dbx-title,
+.dbx-routing-store-name,
+.dbx-risk-store-name,
+.dbx-diagnostic-head h3,
+.dbx-rule-form-section-title h3,
+.local-hero-main h2,
+.local-printer-row strong {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.dbx-filters,
+.filters-row,
+.local-filters,
+.dbx-form-grid,
+.dbx-form-actions,
+.form-actions,
+.local-actions,
+.dbx-diagnostic-actions,
+.action-buttons,
+.dbx-printer-panel-tools,
+.dbx-rule-form-actions,
+.dbx-bulk-toolbar {
+    min-width: 0;
+}
+
+.dbx-filters,
+.filters-row,
+.local-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.dbx-filter-item,
+.filters-row > *,
+.local-filters > *,
+.dbx-form-grid > *,
+.dbx-rule-form-grid > * {
+    min-width: 0;
+}
+
+.dbx-filter-item {
+    flex: 1 1 12rem;
+}
+
+.dbx-filter-item .input,
+.dbx-filter-item .select,
+.filters-row .input,
+.filters-row .select,
+.dbx-form-grid .input,
+.dbx-form-grid .select,
+.dbx-rule-form-grid .input,
+.dbx-rule-form-grid .select {
+    max-width: 100%;
+    min-width: 0;
+    width: 100%;
+}
+
+.dbx-form-actions,
+.form-actions,
+.local-actions,
+.dbx-diagnostic-actions,
+.action-buttons,
+.dbx-printer-panel-tools,
+.dbx-rule-form-actions,
+.dbx-bulk-toolbar {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.dbx-form-actions .btn,
+.form-actions .btn,
+.local-actions .btn,
+.dbx-diagnostic-actions .btn,
+.action-buttons .btn,
+.dbx-printer-panel-tools .btn,
+.dbx-rule-form-actions .btn,
+.dbx-bulk-toolbar .btn {
+    max-width: 100%;
+}
+
+.dbx-table-wrap,
+.table-wrap,
+.table-alerts-wrap {
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+}
+
+.dbx-table,
+.table {
+    width: max-content;
+    min-width: 100%;
+}
+
+.dbx-printers-table .dbx-table {
+    width: 100%;
+    table-layout: fixed;
+}
+
+.dbx-printers-table .dbx-table th,
+.dbx-printers-table .dbx-table td {
+    max-width: none;
+}
+
+.dbx-table th,
+.dbx-table td,
+.table th,
+.table td {
+    max-width: min(34rem, 42vw);
+}
+
+.dbx-table .text-col,
+.dbx-table .long-text-col,
+.table .text-col,
+.table .long-text-col {
+    overflow-wrap: anywhere;
+    white-space: normal;
+}
+
+.dbx-printer-text-cell,
+.external-job-id,
+.dbx-code-truncate,
+.dbx-code-wide,
+.dbx-routing-store-name,
+.dbx-routing-store-meta,
+.dbx-risk-store-name,
+.dbx-printer-summary,
+.dbx-diagnostic-printer-row span:first-child,
+.dbx-risk-printer-row span:first-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dbx-printer-text-cell,
+.dbx-routing-store-name,
+.dbx-routing-store-meta,
+.dbx-risk-store-name,
+.dbx-printer-summary,
+.dbx-diagnostic-printer-row span:first-child,
+.dbx-risk-printer-row span:first-child {
+    white-space: nowrap;
+}
+
+.dbx-queue-topbar {
+    grid-template-columns: minmax(0, 1fr) minmax(0, auto) !important;
+}
+
+.dbx-queue-topbar .dbx-cola-filters-form,
+.dbx-queue-topbar .dbx-bulk-toolbar,
+.dbx-queue-topbar .dbx-form-actions {
+    min-width: 0;
+}
+
+.dbx-queue-topbar .dbx-bulk-toolbar {
+    flex-wrap: wrap !important;
+}
+
+.local-main-grid,
+.dbx-dual-panels {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+/* Impresoras / reglas: panel izquierdo estrecho, detalle amplio */
+.dbx-routing-layout {
+    display: grid;
+    grid-template-columns: minmax(200px, 260px) minmax(0, 1fr) !important;
+}
+
+.dbx-store-summary-groups,
+.local-kpi-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)) !important;
+}
+
+.dbx-rule-form-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)) !important;
+}
+
+.threshold-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)) !important;
+}
+
+.threshold-rule-head,
+.threshold-rule-row {
+    grid-template-columns: minmax(52px, 64px) minmax(0, 1fr) 38px;
+}
+
+.dbx-diagnostic-printer-row,
+.dbx-risk-printer-row {
+    grid-template-columns: minmax(0, 1fr) minmax(72px, auto) minmax(0, auto);
+}
+
+.dbx-store-grid .dbx-risk-list-row {
+    grid-template-columns: minmax(0, 1.35fr) minmax(82px, auto) minmax(7rem, 0.75fr) minmax(0, 1.2fr) auto;
+}
+
+@media (max-width: 1320px) {
+    .dbx-store-grid,
+    .dbx-store-grid.cols-2,
+    .dbx-store-grid.cols-3,
+    .dbx-store-grid.cols-4 {
+        grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)) !important;
+    }
+}
+
+@media (max-width: 1180px) {
+    .dbx-queue-topbar,
+    .local-main-grid,
+    .dbx-dual-panels {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .dbx-queue-topbar .dbx-cola-filters-form {
+        align-items: stretch;
+        flex-wrap: wrap;
+    }
+
+    .dbx-queue-topbar .dbx-bulk-toolbar,
+    .dbx-queue-topbar .dbx-form-actions,
+    .dbx-printer-panel-tools {
+        justify-content: flex-start;
+        margin-left: 0;
+    }
+
+    .dbx-store-grid .dbx-risk-list-row {
+        grid-template-columns: minmax(0, 1fr) minmax(82px, auto);
+        grid-template-areas:
+            "store status"
+            "reason reason"
+            "metrics action";
+    }
+
+    .dbx-store-grid .dbx-risk-list-row .dbx-risk-store-name {
+        grid-area: store;
+    }
+
+    .dbx-store-grid .dbx-risk-list-row .dbx-pill {
+        grid-area: status;
+    }
+
+    .dbx-store-grid .dbx-risk-list-row .dbx-risk-row-reason {
+        grid-area: reason;
+    }
+
+    .dbx-store-grid .dbx-risk-list-row .dbx-risk-row-metrics {
+        grid-area: metrics;
+    }
+
+    .dbx-store-grid .dbx-risk-list-row .dbx-risk-detail-link {
+        grid-area: action;
+    }
+}
+
+@media (max-width: 760px) {
+    .app-content {
+        padding-inline: 10px;
+    }
+
+    .app-topbar {
+        align-items: stretch;
+    }
+
+    .app-topbar-title,
+    .app-topbar-actions,
+    .app-topbar-actions form {
+        flex-basis: 100%;
+        justify-content: flex-start;
+    }
+
+    .app-topbar-actions .select,
+    .app-topbar-actions .btn,
+    .app-context-badge {
+        flex: 1 1 100%;
+        max-width: none;
+    }
+
+    .dbx-card-body {
+        padding: clamp(12px, 3vw, 18px);
+    }
+
+    .dbx-filter-item,
+    .filters-row > *,
+    .local-filters > * {
+        flex-basis: 100%;
+    }
+
+    .dbx-form-actions .btn,
+    .form-actions .btn,
+    .local-actions .btn,
+    .dbx-diagnostic-actions .btn,
+    .action-buttons .btn,
+    .dbx-printer-panel-tools .btn,
+    .dbx-rule-form-actions .btn,
+    .dbx-bulk-toolbar .btn {
+        flex: 1 1 auto;
+    }
+
+    .dbx-diagnostic-printer-row,
+    .dbx-risk-printer-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .dbx-printer-queue-slot {
+        justify-content: flex-start;
+    }
+
+    .threshold-rule-head {
+        display: none;
+    }
+
+    .threshold-rule-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+}
+
+@media (max-width: 520px) {
+    .dbx-diagnostic-printer-row,
+    .dbx-risk-printer-row,
+    .local-printer-head,
+    .local-printer-row {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .dbx-diagnostic-printer-row > *,
+    .dbx-risk-printer-row > *,
+    .local-printer-row > * {
+        justify-content: flex-start;
+        text-align: left;
+    }
+}
+
+/* Progressive panel loading */
+[data-dynamic-panel],
+[data-dashboard-dynamic] {
+    transition: opacity 0.16s ease, filter 0.16s ease;
+}
+
+.is-dynamic-loading {
+    cursor: progress;
+    opacity: 0.68;
+    filter: saturate(0.92);
+}
+
+.dynamic-panel-error {
+    margin: 0 0 0.9rem;
+    padding: 0.75rem 0.85rem;
+    border: 1px solid rgba(239, 68, 68, 0.34);
+    border-left: 4px solid var(--danger);
+    border-radius: 8px;
+    background: rgba(254, 242, 242, 0.9);
+    color: #991b1b;
+    font-size: 0.86rem;
+    line-height: 1.45;
+}
+
+html.dark .dynamic-panel-error {
+    background: rgba(127, 29, 29, 0.22);
+    color: #fecaca;
+}
+
+/* =====================================================================
+   DASHBOARD UI REFINEMENT — compact topbar, filters, bars, summary, health
+   ===================================================================== */
+
+/* ── 1. Topbar: controles compactos, todo agrupado a la derecha ─────── */
+.app-topbar-actions {
+    gap: 8px;
+    flex: 0 0 auto !important;
+}
+
+.app-topbar-actions form {
+    flex: 0 0 auto !important;
+    justify-content: flex-start !important;
+}
+
+.app-topbar-actions .btn,
+.app-topbar-actions .select,
+.app-context-badge {
+    min-height: 28px;
+}
+
+.app-topbar-actions .select {
+    flex: 0 1 auto !important;
+    min-width: 8rem !important;
+    max-width: 15rem !important;
+    padding-top: 3px;
+    padding-bottom: 3px;
+    font-size: 0.78rem;
+}
+
+.app-context-badge {
+    min-height: 28px;
+    padding-inline: 8px;
+    font-size: 0.72rem;
+}
+
+.app-topbar-actions label {
+    font-size: 0.7rem;
+    font-weight: 800;
+    color: var(--ui-text-muted);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.app-topbar-actions .btn-danger {
+    min-width: auto;
+    padding-inline: 10px;
+}
+
+/* ── 2. Filtros: desplegables compactos y no estirados ───────────────── */
+.dbx-filter-item {
+    flex: 0 1 auto !important;
+}
+
+.dbx-filter-item .select {
+    min-height: 28px !important;
+    padding-top: 3px !important;
+    padding-bottom: 3px !important;
+    font-size: 0.8rem !important;
+    width: auto !important;
+}
+
+.dbx-filters {
+    gap: 8px !important;
+    align-items: flex-end;
+}
+
+/* ── 3. Barras de estadísticas: más finas y menos espaciado ─────────── */
+.dbx-bars {
+    gap: 2px !important;
+}
+
+.dbx-bar-row {
+    min-height: 26px !important;
+    padding: 2px 0 !important;
+    grid-template-columns: 120px minmax(0, 1fr) 56px !important;
+    gap: 6px 14px !important;
+    border-bottom: none !important;
+}
+
+.dbx-bar-track {
+    height: 7px !important;
+    border-radius: 2px !important;
+}
+
+/* ── 4. Divisor de sección: más sutil ───────────────────────────────── */
+.dbx-section-divider {
+    border-top-color: color-mix(in srgb, var(--ui-border) 55%, transparent) !important;
+    margin-top: 8px !important;
+    padding-top: 8px !important;
+}
+
+/* ── 5. Resumen entidades: franja horizontal en lugar de cajas ───────── */
+.dbx-summary-mini-grid {
+    display: flex !important;
+    gap: 0 !important;
+    margin-top: 4px !important;
+    border: 1px solid color-mix(in srgb, var(--ui-primary) 14%, var(--ui-border));
+    border-radius: var(--ui-radius-sm);
+    overflow: hidden;
+    background: color-mix(in srgb, var(--ui-primary-soft) 18%, var(--ui-surface));
+}
+
+.dbx-summary-mini {
+    flex: 1 1 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 1px !important;
+    padding: 7px 6px !important;
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0 !important;
+}
+
+.dbx-summary-mini + .dbx-summary-mini {
+    border-left: 1px solid color-mix(in srgb, var(--ui-primary) 14%, var(--ui-border)) !important;
+}
+
+.dbx-summary-mini-value {
+    font-size: 18px !important;
+    line-height: 1 !important;
+    font-weight: 900 !important;
+    color: var(--ui-primary) !important;
+    letter-spacing: -0.02em;
+}
+
+.dbx-summary-mini-label {
+    font-size: 8px !important;
+    letter-spacing: 0.07em !important;
+    text-transform: uppercase !important;
+    color: var(--ui-text-muted) !important;
+    font-weight: 800 !important;
+}
+
+/* ── 6. Panel de salud: layout horizontal para aprovechar el ancho ───── */
+.dbx-store-health-panel {
+    display: grid !important;
+    grid-template-columns: auto 1fr !important;
+    grid-template-rows: 1fr 1fr !important;
+    align-items: center !important;
+    justify-items: start !important;
+    gap: 4px 44px !important;
+    margin-top: 8px !important;
+    min-height: 240px !important;
+}
+
+.dbx-health-ring {
+    grid-column: 1 !important;
+    grid-row: 1 / 3 !important;
+    align-self: center !important;
+    width: 240px !important;
+    height: 240px !important;
+    aspect-ratio: 1 !important;
+}
+
+/* Ring: trazo a punto intermedio */
+.dbx-health-ring::before {
+    inset: 24px !important;
+}
+
+/* Centrado vertical: card de salud llena toda la altura del panel dual */
+.dbx-dual-panels > article.dbx-card:nth-child(2) > .dbx-card-body {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 6px !important;
+}
+
+.dbx-dual-panels > article.dbx-card:nth-child(2) .dbx-store-health-panel {
+    flex: 1 1 auto !important;
+    align-content: center !important;
+}
+
+/* Copy en fila 1, legend en fila 2 — filas iguales (1fr 1fr) centran el grupo con el ring */
+.dbx-health-ring-copy {
+    grid-column: 2 !important;
+    grid-row: 1 !important;
+    text-align: left !important;
+    justify-items: start !important;
+    max-width: none !important;
+    align-self: end !important;
+}
+
+/* Legend: grid maestro para alinear columnas */
+.dbx-health-legend {
+    grid-column: 2 !important;
+    grid-row: 2 !important;
+    align-self: start !important;
+    margin-top: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    display: grid !important;
+    grid-template-columns: 10px auto 2rem 3rem !important;
+    column-gap: 10px !important;
+    row-gap: 8px !important;
+    align-items: center !important;
+}
+
+.dbx-health-legend-row {
+    display: contents !important;
+}
+
+.dbx-health-legend strong,
+.dbx-health-legend small {
+    text-align: right !important;
+    justify-self: end !important;
+}
+
+@media (max-width: 560px) {
+    .dbx-store-health-panel {
+        grid-template-columns: 1fr !important;
+        justify-items: center !important;
+    }
+
+    .dbx-health-ring {
+        grid-row: auto !important;
+    }
+
+    .dbx-health-ring-copy,
+    .dbx-health-legend {
+        grid-column: auto !important;
+        grid-row: auto !important;
+        text-align: center !important;
+        justify-items: center !important;
+    }
+}
+
+/* ── Toast notifications ──────────────────────────────────────────────── */
+#app-toast-region {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
+    max-width: min(380px, calc(100vw - 48px));
+}
+
+.app-toast {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+    background: var(--ui-surface-raised);
+    border: 1px solid var(--ui-border);
+    border-left: 4px solid var(--ui-border);
+    border-radius: var(--ui-radius);
+    box-shadow: var(--ui-shadow);
+    pointer-events: all;
+    opacity: 0;
+    transform: translateX(20px);
+    transition: opacity 0.22s ease, transform 0.22s ease;
+    font-size: 13.5px;
+    color: var(--ui-text);
+    word-break: break-word;
+}
+
+.app-toast.is-visible {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.app-toast.is-hiding {
+    opacity: 0;
+    transform: translateX(20px);
+    transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.app-toast.toast-success { border-left-color: var(--ui-success); }
+.app-toast.toast-error   { border-left-color: var(--ui-danger); }
+.app-toast.toast-warning { border-left-color: var(--ui-warning); }
+
+.app-toast-icon {
+    flex-shrink: 0;
+    width: 17px;
+    height: 17px;
+    margin-top: 1px;
+}
+
+.app-toast.toast-success .app-toast-icon { color: var(--ui-success); }
+.app-toast.toast-error   .app-toast-icon { color: var(--ui-danger); }
+.app-toast.toast-warning .app-toast-icon { color: var(--ui-warning); }
+
+.app-toast-body { flex: 1; min-width: 0; line-height: 1.4; }
+
+.app-toast-close {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--ui-text-muted);
+    padding: 0 0 0 4px;
+    line-height: 1;
+    font-size: 14px;
+    margin-top: 1px;
+    opacity: 0.55;
+    transition: opacity 0.15s;
+}
+
+.app-toast-close:hover { opacity: 1; }
+
+html.dark .app-toast {
+    background: var(--ui-surface-raised);
+    border-color: var(--ui-border-strong);
+    box-shadow: var(--ui-shadow);
 }
