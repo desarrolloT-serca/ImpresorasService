@@ -16,7 +16,7 @@ class ReglasController extends Controller
     {
     }
 
-    public function index(Request $request): View
+    public function index(Request $request)
     {
         $effectiveStore = AuthHelper::getEffectiveStoreId();
         $selectedStoreId = $effectiveStore !== null
@@ -136,7 +136,7 @@ class ReglasController extends Controller
             }));
         }
 
-        return view('reglas.index', [
+        $view = view('reglas.index', [
             'rules' => $selectedRules,
             'rulesByStore' => array_values($storesById),
             'selectedStoreGroup' => $selectedStoreGroup,
@@ -145,6 +145,8 @@ class ReglasController extends Controller
             'isActiveFilter' => $request->query('isActive', ''),
             'printers' => $printers,
         ]);
+
+        return $request->ajax() ? $view->fragment('routing-layout') : $view;
     }
 
     public function create(Request $request): View

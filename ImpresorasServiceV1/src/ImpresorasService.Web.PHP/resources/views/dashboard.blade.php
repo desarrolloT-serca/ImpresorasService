@@ -120,7 +120,8 @@
     };
 @endphp
 
-<div class="dbx-dashboard-page">
+@fragment('dashboard-content')
+<div class="dbx-dashboard-page" data-dashboard-dynamic aria-live="polite">
 @include('dashboard.partials.filters')
 
 <section class="dbx-wrap">
@@ -395,14 +396,14 @@
         @if(count($alerts) === 0)
             <p class="dbx-subtle">Sin alertas activas para el ambito y periodo seleccionados.</p>
         @else
-            <div class="dbx-table-wrap dbx-alerts-wrap" style="--dbx-visible-rows: {{ $alertsVisibleRows }};">
-                <table class="dbx-table">
+            <div class="dbx-table-wrap dbx-alerts-wrap table-alerts-wrap" style="--dbx-visible-rows: {{ $alertsVisibleRows }};">
+                <table class="dbx-table table-alerts">
                     <thead>
                         <tr>
-                            <th>Tienda</th>
+                            <th class="store-col">Tienda</th>
                             <th>Salud</th>
                             <th>Tipo</th>
-                            <th>Motivo</th>
+                            <th class="text-col">Motivo</th>
                             <th>En cola</th>
                             <th>Fallo sin reenviar (periodo)</th>
                         </tr>
@@ -469,17 +470,23 @@
                                             $href = '/cola?storeId=' . urlencode((string)$storeId) . '&status=0';
                                         }
                                     }
+
+                                    $alertRowClass = match ($status) {
+                                        'critical' => 'alert-row-critical',
+                                        'warning' => 'alert-row-warning',
+                                        default => 'alert-row-ok',
+                                    };
                                 @endphp
-                                <tr class="{{ $idx === 0 ? 'dbx-alert-group-start' : 'dbx-alert-group-cont' }} dbx-alert-row-{{ $status }}" @if($href) data-alert-href="{{ $href }}" @endif>
+                                <tr class="{{ $idx === 0 ? 'dbx-alert-group-start' : 'dbx-alert-group-cont' }} dbx-alert-row-{{ $status }} {{ $alertRowClass }}" @if($href) data-alert-href="{{ $href }}" @endif>
                                     @if($idx === 0)
-                                        <td rowspan="{{ $rowspan }}">{{ $formatStoreLabel($groupStoreId, $group['storeName'] ?? 'Sin nombre') }}</td>
+                                        <td class="store-col" rowspan="{{ $rowspan }}">{{ $formatStoreLabel($groupStoreId, $group['storeName'] ?? 'Sin nombre') }}</td>
                                     @endif
                                     <td><span class="dbx-pill {{ $status }}">{{ strtoupper($status) }}</span></td>
                                     <td>
                                         {{-- La columna "Tipo" usa el mismo color que la columna "Salud" para no confundir. --}}
                                         <span class="dbx-pill {{ $status === 'healthy' ? 'healthy' : $status }}">{{ $alertTypeLabel }}</span>
                                     </td>
-                                    <td>{{ $reason !== '' ? $reason : '-' }}</td>
+                                    <td class="text-col">{{ $reason !== '' ? $reason : '-' }}</td>
                                     <td>{{ $alert['queuedCurrent'] ?? 0 }}</td>
                                     <td>{{ $alert['failedWithoutRetryCurrent'] ?? 0 }}</td>
                                 </tr>
@@ -800,6 +807,7 @@
 @endif
 </section>
 </div>
+@endfragment
 
 <script>
 (function() {
@@ -896,9 +904,13 @@
         const autoRefreshSeconds = Number(params.get('autoRefresh') ?? serverAutoRefreshSeconds ?? 0);
 
         if (autoRefreshSeconds > 0) {
-            setTimeout(function() {
-                window.location.reload();
-            }, autoRefreshSeconds * 1000);
+            if (window.DashboardDynamic && typeof window.DashboardDynamic.scheduleAutoRefresh === 'function') {
+                window.DashboardDynamic.scheduleAutoRefresh(autoRefreshSeconds);
+            } else {
+                setTimeout(function() {
+                    window.location.reload();
+                }, autoRefreshSeconds * 1000);
+            }
         }
     });
 })();
@@ -930,6 +942,200 @@
         mode = mode === 'number' ? 'percent' : 'number';
         applyMode();
     });
+})();
+
+(function() {
+    let dashboardAbortController = null;
+    let dashboardRequestId = 0;
+    let autoRefreshTimer = null;
+
+    function getDashboardRoot() {
+        return document.querySelector('[data-dashboard-dynamic]');
+    }
+
+    function initStatsToggle(root) {
+        const toggle = root.querySelector('#dbx-stats-toggle');
+        if (!toggle || toggle.dataset.dynamicBound === '1') return;
+
+        toggle.dataset.dynamicBound = '1';
+        let mode = 'number';
+
+        function applyMode() {
+            root.querySelectorAll('.dbx-bar-value').forEach(function(v) {
+                const num = v.querySelector('.dbx-bar-value-number');
+                const pct = v.querySelector('.dbx-bar-value-percent');
+                if (!num || !pct) return;
+                if (mode === 'number') {
+                    num.style.display = '';
+                    pct.style.display = 'none';
+                } else {
+                    num.style.display = 'none';
+                    pct.style.display = '';
+                }
+            });
+            toggle.textContent = mode === 'number' ? '%' : 'N';
+        }
+
+        toggle.addEventListener('click', function() {
+            mode = mode === 'number' ? 'percent' : 'number';
+            applyMode();
+        });
+    }
+
+    function prepareDynamicDashboard(root) {
+        const form = root.querySelector('form[data-dashboard-filter-form]');
+        if (form) {
+            form.dataset.dynamicOwned = '1';
+        }
+
+        initStatsToggle(root);
+        scheduleAutoRefresh(Number(root.querySelector('#autoRefresh')?.value || 0));
+    }
+
+    function scheduleAutoRefresh(seconds) {
+        if (autoRefreshTimer) {
+            window.clearTimeout(autoRefreshTimer);
+            autoRefreshTimer = null;
+        }
+
+        if (seconds > 0) {
+            autoRefreshTimer = window.setTimeout(function() {
+                loadDashboard(window.location.href, false);
+            }, seconds * 1000);
+        }
+    }
+
+    function showDashboardError(root, url) {
+        const previous = root.querySelector('.dynamic-panel-error');
+        if (previous) previous.remove();
+
+        const error = document.createElement('div');
+        error.className = 'dynamic-panel-error';
+        error.innerHTML = 'No se pudo actualizar el dashboard. <a class="btn btn-ghost btn-sm" href="' + url + '">Abrir vista completa</a>';
+        root.prepend(error);
+    }
+
+    function collectFormUrl(form) {
+        const formData = new FormData(form);
+        const url = new URL(form.action || window.location.href, window.location.href);
+        url.search = '';
+
+        formData.forEach(function(value, key) {
+            if (value !== null && value !== '') {
+                url.searchParams.append(key, value);
+            }
+        });
+
+        return url.toString();
+    }
+
+    function writeDynamicPrefs(form) {
+        try {
+            const prefs = {};
+            new FormData(form).forEach(function(value, key) {
+                prefs[key] = value;
+            });
+            localStorage.setItem('dashboard.filters.v1', JSON.stringify(prefs));
+        } catch {}
+    }
+
+    async function loadDashboard(url, pushState) {
+        const currentRoot = getDashboardRoot();
+        if (!currentRoot || !window.fetch || !window.DOMParser) {
+            window.location.href = url;
+            return;
+        }
+
+        if (dashboardAbortController) {
+            dashboardAbortController.abort();
+        }
+
+        dashboardAbortController = new AbortController();
+        const requestId = ++dashboardRequestId;
+        currentRoot.classList.add('is-dynamic-loading');
+        currentRoot.setAttribute('aria-busy', 'true');
+
+        try {
+            const response = await fetch(url, {
+                headers: {
+                    'Accept': 'text/html',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                signal: dashboardAbortController.signal
+            });
+
+            if (!response.ok) {
+                throw new Error('HTTP ' + response.status);
+            }
+
+            const html = await response.text();
+            if (requestId !== dashboardRequestId) return;
+
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+            const nextRoot = doc.querySelector('[data-dashboard-dynamic]');
+
+            if (!nextRoot) {
+                throw new Error('Dashboard no encontrado');
+            }
+
+            currentRoot.replaceWith(nextRoot);
+            prepareDynamicDashboard(nextRoot);
+
+            if (pushState) {
+                history.pushState({ dynamicPanel: 'dashboard' }, '', url);
+            }
+        } catch (error) {
+            if (error.name === 'AbortError') return;
+            const root = getDashboardRoot();
+            if (root) {
+                root.classList.remove('is-dynamic-loading');
+                root.removeAttribute('aria-busy');
+                showDashboardError(root, url);
+            }
+        }
+    }
+
+    document.addEventListener('click', function(event) {
+        const link = event.target.closest('a.dbx-store-view-tab');
+        if (!link || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+        event.preventDefault();
+        loadDashboard(link.href, true);
+    });
+
+    document.addEventListener('submit', function(event) {
+        const form = event.target.closest('form[data-dashboard-filter-form]');
+        if (!form) return;
+
+        event.preventDefault();
+        writeDynamicPrefs(form);
+        loadDashboard(collectFormUrl(form), true);
+    });
+
+    document.addEventListener('change', function(event) {
+        const form = event.target.closest('form[data-dashboard-filter-form][data-dynamic-owned="1"]');
+        const field = event.target.closest('select, input[type="checkbox"], input[type="radio"]');
+        if (!form || !field) return;
+
+        if (typeof form.requestSubmit === 'function') {
+            form.requestSubmit();
+        } else {
+            loadDashboard(collectFormUrl(form), true);
+        }
+    });
+
+    window.addEventListener('popstate', function() {
+        if (window.location.pathname === '/' || window.location.pathname === '') {
+            loadDashboard(window.location.href, false);
+        }
+    });
+
+    window.DashboardDynamic = {
+        refresh: function() {
+            return loadDashboard(window.location.href, false);
+        },
+        scheduleAutoRefresh: scheduleAutoRefresh
+    };
 })();
 </script>
 @endsection

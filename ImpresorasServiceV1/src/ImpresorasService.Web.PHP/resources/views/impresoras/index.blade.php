@@ -14,11 +14,8 @@
         : route('impresoras.create');
 @endphp
 
-@if(session('success'))
-    <div class="mb-4 alert alert-success">{{ session('success') }}</div>
-@endif
-
 <div class="dbx-wrap">
+@fragment('routing-layout')
 <section class="dbx-routing-layout">
     <x-ui.card class="dbx-routing-stores-card">
         <div class="dbx-title-row">
@@ -46,6 +43,8 @@
                         $printerWord = $printersCount === 1 ? 'impresora' : 'impresoras';
                     @endphp
                     <a href="{{ route('impresoras.index', $storeUrlParams) }}"
+                       data-dynamic-store-link
+                       data-dynamic-target="impresoras"
                        class="dbx-routing-store-link {{ $isSelected ? 'is-active' : '' }} is-printer-status-{{ $visualStatus }}">
                         <span class="dbx-routing-store-line">
                             <span class="dbx-routing-store-name">{{ $storeGroup['formattedStoreName'] ?? 'Sin tienda' }}</span>
@@ -71,7 +70,7 @@
         @endif
     </x-ui.card>
 
-    <x-ui.card class="dbx-routing-rules-card">
+    <x-ui.card class="dbx-routing-rules-card" data-dynamic-panel="impresoras" aria-live="polite">
         <div class="dbx-title-row dbx-routing-title-row">
             <div>
                 <h2 class="dbx-title">
@@ -222,6 +221,7 @@
         @endif
     </x-ui.card>
 </section>
+@endfragment
 </div>
 
 <script>
@@ -363,16 +363,121 @@
     }
 
     function netConnectionAll() {
-        document.querySelectorAll('[data-printer-id]').forEach(row => {
-            const id = row.dataset.printerId;
-            if (id) doNetConnection(id);
-        });
+        const ids = Array.from(document.querySelectorAll('[data-printer-id]'))
+            .map(row => row.dataset.printerId)
+            .filter(Boolean);
+        const batchSize = 4;
+        let index = 0;
+
+        function runBatch() {
+            ids.slice(index, index + batchSize).forEach(doNetConnection);
+            index += batchSize;
+
+            if (index < ids.length) {
+                window.setTimeout(runBatch, 120);
+            }
+        }
+
+        runBatch();
     }
 
     if (pingInterval > 0) {
         netConnectionAll();
         setInterval(netConnectionAll, pingInterval);
     }
+
+    let panelAbortController = null;
+    let panelRequestId = 0;
+
+    function getDynamicPanel() {
+        return document.querySelector('[data-dynamic-panel="impresoras"]');
+    }
+
+    function showPanelError(panel, url) {
+        const previous = panel.querySelector('.dynamic-panel-error');
+        if (previous) previous.remove();
+
+        const error = document.createElement('div');
+        error.className = 'dynamic-panel-error';
+        error.innerHTML = 'No se pudo actualizar el panel. <a class="btn btn-ghost btn-sm" href="' + url + '">Abrir vista completa</a>';
+        panel.prepend(error);
+    }
+
+    async function loadStorePanel(url, pushState) {
+        const currentPanel = getDynamicPanel();
+        if (!currentPanel || !window.fetch || !window.DOMParser) {
+            window.location.href = url;
+            return;
+        }
+
+        if (panelAbortController) {
+            panelAbortController.abort();
+        }
+
+        panelAbortController = new AbortController();
+        const requestId = ++panelRequestId;
+        currentPanel.classList.add('is-dynamic-loading');
+        currentPanel.setAttribute('aria-busy', 'true');
+
+        try {
+            const response = await fetch(url, {
+                headers: {
+                    'Accept': 'text/html',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                signal: panelAbortController.signal
+            });
+
+            if (!response.ok) {
+                throw new Error('HTTP ' + response.status);
+            }
+
+            const html = await response.text();
+            if (requestId !== panelRequestId) return;
+
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+            const nextPanel = doc.querySelector('[data-dynamic-panel="impresoras"]');
+            const nextStores = doc.querySelector('.dbx-routing-store-list');
+            const currentStores = document.querySelector('.dbx-routing-store-list');
+
+            if (!nextPanel) {
+                throw new Error('Panel no encontrado');
+            }
+
+            currentPanel.replaceWith(nextPanel);
+            if (nextStores && currentStores) {
+                currentStores.replaceWith(nextStores);
+            }
+
+            if (pushState) {
+                history.pushState({ dynamicPanel: 'impresoras' }, '', url);
+            }
+
+            netConnectionAll();
+        } catch (error) {
+            if (error.name === 'AbortError') return;
+            const panel = getDynamicPanel();
+            if (panel) {
+                panel.classList.remove('is-dynamic-loading');
+                panel.removeAttribute('aria-busy');
+                showPanelError(panel, url);
+            }
+        }
+    }
+
+    document.addEventListener('click', function(event) {
+        const link = event.target.closest('a[data-dynamic-store-link][data-dynamic-target="impresoras"]');
+        if (!link || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+        event.preventDefault();
+        loadStorePanel(link.href, true);
+    });
+
+    window.addEventListener('popstate', function() {
+        if (window.location.pathname.includes('/impresoras')) {
+            loadStorePanel(window.location.href, false);
+        }
+    });
 })();
 </script>
 @endsection
