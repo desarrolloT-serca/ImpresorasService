@@ -21,7 +21,7 @@ class DashboardController extends Controller
     {
     }
 
-    public function index(): View
+    public function index(Request $request)
     {
         $isAdminUser = AuthHelper::isAdmin();
         $effectiveStore = AuthHelper::getEffectiveStoreId();
@@ -35,10 +35,13 @@ class DashboardController extends Controller
         $autoRefreshSecondsRaw = (int) request()->query('autoRefresh', 30);
         $allowedRefresh = [0, 15, 30, 60, 120];
         $autoRefreshSeconds = in_array($autoRefreshSecondsRaw, $allowedRefresh, true) ? $autoRefreshSecondsRaw : 0;
-        $thresholds = $this->resolveHealthThresholds();
+        ['stores' => $storesRaw, 'thr' => $rawThresholdsResponse] =
+            \GuzzleHttp\Promise\Utils::unwrap([
+                'stores' => $this->api->getAsync('api/stores?isActive=true'),
+                'thr'    => $this->api->getAsync('api/dashboard/thresholds'),
+            ]);
 
-        $storesPath = 'api/stores?isActive=true';
-        $storesRaw = $this->safeApiGetList($storesPath);
+        $thresholds = $this->resolveHealthThresholds($rawThresholdsResponse);
         $activeStoreIds = [];
         $storeNameById = [];
         foreach ($storesRaw as $storeRow) {
@@ -69,14 +72,20 @@ class DashboardController extends Controller
             $storeSort = 'severity';
         }
 
-        $jobsPath = 'api/printjobs?limit=5000' . ($effectiveStore !== null ? '&storeId=' . $effectiveStore : '');
-        $jobs = $this->safeApiGetList($jobsPath);
-
+        $jobsPath     = 'api/printjobs?limit=5000' . ($effectiveStore !== null ? '&storeId=' . $effectiveStore : '');
         $printersPath = 'api/printers?isActive=true' . ($effectiveStore !== null ? '&storeId=' . $effectiveStore : '');
-        $printers = $this->safeApiGetList($printersPath);
 
-        // Usuarios solo aporta en el resumen global de administrador.
-        $users = $isAdminDashboard ? $this->safeApiGetList('api/users') : [];
+        $batch2 = [
+            'jobs'     => $this->api->getAsync($jobsPath),
+            'printers' => $this->api->getAsync($printersPath),
+        ];
+        if ($isAdminDashboard) {
+            $batch2['users'] = $this->api->getAsync('api/users');
+        }
+        $batch2Result = \GuzzleHttp\Promise\Utils::unwrap($batch2);
+        $jobs     = $batch2Result['jobs'];
+        $printers = $batch2Result['printers'];
+        $users    = $isAdminDashboard ? ($batch2Result['users'] ?? []) : [];
 
         [$windowStart, $windowEnd] = $this->resolveWindowRange($window);
         $connWarnMin = (int) ($thresholds['connWarningFailuresMin'] ?? 2);
@@ -331,7 +340,7 @@ class DashboardController extends Controller
         }
         $viewName = $isAdminDashboard ? 'dashboard' : 'dashboard-local';
 
-        return view($viewName, [
+        $view = view($viewName, [
             'isAdminUser' => $isAdminUser,
             'isAdminDashboard' => $isAdminDashboard,
             'window' => $window,
@@ -348,6 +357,10 @@ class DashboardController extends Controller
             'alerts' => $alerts,
             'stores' => $stores,
         ]);
+
+        return $request->ajax() && $viewName === 'dashboard'
+            ? $view->fragment('dashboard-content')
+            : $view;
     }
 
     public function ajustes(): View
@@ -638,7 +651,7 @@ class DashboardController extends Controller
         return ['healthy', 'Operacion dentro de umbrales'];
     }
 
-    private function resolveHealthThresholds(): array
+    private function resolveHealthThresholds(?array $rawApiResponse = null): array
     {
         $defaults = [
             'warningQueueMin' => 10,
@@ -659,7 +672,7 @@ class DashboardController extends Controller
         $defaults['thresholdRules'] = $this->legacyRulesFromThresholds($defaults);
 
         try {
-            $thresholds = $this->api->get('api/dashboard/thresholds');
+            $thresholds = $rawApiResponse ?? $this->api->get('api/dashboard/thresholds');
             if (!is_array($thresholds)) {
                 return $defaults;
             }
@@ -889,43 +902,6 @@ class DashboardController extends Controller
     private function storeDynamicThresholdRules(array $rules): void
     {
         Storage::disk('local')->put(self::THRESHOLD_RULES_FILE, json_encode($rules, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-    }
-
-    /**
-     * Fetch list endpoints defensively so a 4xx/5xx does not break dashboard rendering.
-     */
-    private function safeApiGetList(string $path): array
-    {
-        try {
-            $data = $this->api->get($path);
-            if (!is_array($data)) {
-                return [];
-            }
-
-            // La API puede responder como lista plana o como envoltorio { value, Count }.
-            if (array_key_exists('value', $data) && is_array($data['value'])) {
-                return $data['value'];
-            }
-
-            if (array_key_exists('Value', $data) && is_array($data['Value'])) {
-                return $data['Value'];
-            }
-
-            return $data;
-        } catch (RequestException $e) {
-            $status = $e->getResponse()?->getStatusCode();
-            Log::warning('Dashboard API list fallback', [
-                'path' => $path,
-                'status' => $status,
-            ]);
-            return [];
-        } catch (\Throwable $e) {
-            Log::warning('Dashboard API unexpected fallback', [
-                'path' => $path,
-                'error' => $e->getMessage(),
-            ]);
-            return [];
-        }
     }
 
     /**

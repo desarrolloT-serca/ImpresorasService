@@ -30,6 +30,32 @@ class ApiClient
         return new self($client, $baseUrl);
     }
 
+    public function getAsync(string $path): \GuzzleHttp\Promise\PromiseInterface
+    {
+        $normalizedPath = ltrim($path, '/');
+        $token = Session::get('impresoras_token');
+        $cacheKey = sha1(($token ? 'auth:' . $token : 'guest') . '|' . $normalizedPath);
+
+        if (array_key_exists($cacheKey, $this->requestGetCache)) {
+            return \GuzzleHttp\Promise\Create::promiseFor($this->requestGetCache[$cacheKey]);
+        }
+
+        $options = $token ? ['headers' => ['Authorization' => 'Bearer ' . $token]] : [];
+
+        return $this->client->getAsync($normalizedPath, $options)->then(
+            function ($response) use ($cacheKey) {
+                $decoded = json_decode((string) $response->getBody(), true) ?? [];
+                if (array_key_exists('value', $decoded) && is_array($decoded['value'])) {
+                    $decoded = $decoded['value'];
+                } elseif (array_key_exists('Value', $decoded) && is_array($decoded['Value'])) {
+                    $decoded = $decoded['Value'];
+                }
+                return $this->requestGetCache[$cacheKey] = $decoded;
+            },
+            function () { return []; }
+        );
+    }
+
     public function get(string $path): array
     {
         $normalizedPath = ltrim($path, '/');
