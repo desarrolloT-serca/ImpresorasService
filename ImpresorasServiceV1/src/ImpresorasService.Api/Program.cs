@@ -2,12 +2,16 @@ using System.Data.Odbc;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Text;
+using System.Threading.RateLimiting;
 using ImpresorasService.Api.Security;
 using ImpresorasService.Application;
 using ImpresorasService.Infrastructure;
 using ImpresorasService.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 
@@ -145,14 +149,33 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AdminOnly", policy => policy.RequireRole(RoleCatalog.Admin));
     options.AddPolicy("StoreManagerOrAdmin", policy => policy.RequireRole(RoleCatalog.Admin, RoleCatalog.StoreManager));
     options.AddPolicy("EmployeeOrAbove", policy => policy.RequireRole(RoleCatalog.Admin, RoleCatalog.StoreManager, RoleCatalog.Employee));
-    options.AddPolicy(
-        "SupervisorOrAdmin",
-        policy => policy.RequireRole(RoleCatalog.Admin, RoleCatalog.StoreManager, RoleCatalog.LegacySupervisor));
 });
 
 builder.Services.AddControllers();
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<ImpresorasDbContext>("database");
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        context.HttpContext.Response.ContentType = "application/json";
+        await context.HttpContext.Response.WriteAsJsonAsync(
+            new { error = "Demasiados intentos. Espera un momento e inténtalo de nuevo." },
+            cancellationToken);
+    };
+    options.AddFixedWindowLimiter("auth", limiter =>
+    {
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.PermitLimit = 10;
+        limiter.QueueLimit = 0;
+    });
+});
+
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -215,15 +238,33 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseSecurityHeaders();
+
 app.UseHttpsRedirection();
 
 app.UseCors();
+
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+        var status = report.Status == HealthStatus.Healthy ? "ok" : "degraded";
+        await context.Response.WriteAsJsonAsync(new
+        {
+            status,
+            checks = report.Entries.ToDictionary(
+                entry => entry.Key,
+                entry => entry.Value.Status.ToString())
+        });
+    }
+});
 app.MapPost("/bootstrap/first-admin", async (
     BootstrapAdminRequest request,
     ImpresorasDbContext db,
@@ -372,8 +413,11 @@ ORDER BY POSITION";
     }
 }).RequireAuthorization("AdminOnly");
 
-// Redirigir raíz a Swagger para que el navegador muestre algo
-app.MapGet("/", () => Results.Redirect("/swagger"));
+// Raíz: Swagger en desarrollo; health en el resto de entornos
+if (app.Environment.IsDevelopment())
+    app.MapGet("/", () => Results.Redirect("/swagger"));
+else
+    app.MapGet("/", () => Results.Redirect("/health"));
 
 app.Run();
 

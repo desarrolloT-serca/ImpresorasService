@@ -355,17 +355,6 @@ class ImpresorasController extends Controller
         }
     }
 
-    public function ping(int $impresora): JsonResponse
-    {
-        try {
-            $result = $this->api->post("api/printers/{$impresora}/ping", []);
-            return response()->json($result);
-        } catch (\GuzzleHttp\Exception\RequestException $e) {
-            $body = $e->getResponse() ? json_decode((string) $e->getResponse()->getBody(), true) : [];
-            return response()->json(['reachable' => false, 'error' => $body['error'] ?? $e->getMessage()], 500);
-        }
-    }
-
     public function netconnection(Request $request, int $impresora): JsonResponse
     {
         try {

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Helpers\AuthHelper;
 use App\Services\ApiClient;
+use App\Services\DashboardOverviewService;
 use GuzzleHttp\Exception\RequestException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,7 +18,10 @@ class DashboardController extends Controller
     private const SEVERITIES = ['info', 'warning', 'critical'];
     private const RULE_METRICS = ['queue', 'failed', 'missingHost', 'conn'];
 
-    public function __construct(private readonly ApiClient $api)
+    public function __construct(
+        private readonly ApiClient $api,
+        private readonly DashboardOverviewService $overviewService,
+    )
     {
     }
 
@@ -316,6 +320,11 @@ class DashboardController extends Controller
             'activePrinters' => array_sum(array_map(fn (array $row): int => (int) ($row['connectedPrinters'] ?? 0), $stores)),
             'activeStores' => count(array_filter($stores, fn (array $row): bool => (int) ($row['connectedPrinters'] ?? 0) > 0)),
         ];
+
+        if (config('impresoras.dashboard_log_overview_diff')) {
+            $this->overviewService->logKpiDiffIfAny($kpis, $effectiveStore, $window);
+        }
+
         $summary = [
             'storesTotal' => count($storeStats),
             'storesActive' => $kpis['activeStores'],

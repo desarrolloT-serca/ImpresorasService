@@ -25,7 +25,6 @@ Route::middleware('auth.impresoras')->group(function () {
         Route::post('/cola/reintentar-masivo', [ColaController::class, 'reintentarMasivo'])->name('cola.reintentar_masivo');
         Route::post('/cola/cancelar-masivo', [ColaController::class, 'cancelarMasivo'])->name('cola.cancelar_masivo');
         Route::get('/impresoras', [ImpresorasController::class, 'index'])->name('impresoras.index');
-        Route::post('/impresoras/{impresora}/ping', [ImpresorasController::class, 'ping'])->name('impresoras.ping');
         Route::post('/impresoras/{impresora}/netconnection', [ImpresorasController::class, 'netconnection'])->name('impresoras.netconnection');
     });
     Route::middleware('admin.only')->group(function () {
@@ -37,7 +36,6 @@ Route::middleware('auth.impresoras')->group(function () {
     });
     Route::middleware('admin.only')->group(function () {
         Route::get('/ajustes', [DashboardController::class, 'ajustes'])->name('ajustes.index');
-        Route::post('/dashboard/thresholds', [DashboardController::class, 'updateThresholds'])->name('dashboard.thresholds.update');
         Route::post('/ajustes/thresholds', [DashboardController::class, 'updateThresholds'])->name('ajustes.thresholds.update');
         Route::get('/reglas', [ReglasController::class, 'index'])->name('reglas.index');
         Route::get('/reglas/create', [ReglasController::class, 'create'])->name('reglas.create');

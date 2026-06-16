@@ -1,0 +1,41 @@
+# CI mínima .NET para ImpresorasServiceV1.
+# Ampliar con más tests (PHP, E2E, HANA smoke) cuando crezca la batería de pruebas.
+name: ImpresorasService CI
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "ImpresorasServiceV1/**"
+      - ".github/workflows/impresoras-service-ci.yml"
+  pull_request:
+    branches: ["**"]
+    paths:
+      - "ImpresorasServiceV1/**"
+      - ".github/workflows/impresoras-service-ci.yml"
+
+jobs:
+  dotnet:
+    name: Build and test (.NET 8)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ImpresorasServiceV1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore ImpresorasServiceV1.sln
+
+      - name: Build
+        run: dotnet build ImpresorasServiceV1.sln --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test tests/ImpresorasService.Api.IntegrationTests/ImpresorasService.Api.IntegrationTests.csproj --no-build --configuration Release --verbosity normal
