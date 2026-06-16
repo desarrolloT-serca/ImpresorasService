@@ -4,10 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Helpers\AuthHelper;
 use App\Services\ApiClient;
+use GuzzleHttp\Exception\RequestException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
-use GuzzleHttp\Exception\RequestException;
 
 class ColaController extends Controller
 {
@@ -46,11 +47,10 @@ class ColaController extends Controller
             $lastPage = max(1, (int) ceil($total / max(1, $limit)));
         }
 
-        // Normalizar status a int para compatibilidad con la vista
         foreach ($jobs as &$job) {
             $s = $job['status'] ?? $job['Status'] ?? null;
             if ($s !== null && $s !== '') {
-                $job['_status'] = is_numeric($s) ? (int) $s : $s;
+                $job['_status'] = \App\Helpers\StatusLabels::normalizeToInt($s) ?? $s;
             }
         }
 
@@ -95,6 +95,7 @@ class ColaController extends Controller
             $needle = mb_strtolower($externalJobId);
             $jobs = array_values(array_filter($jobs, static function ($job) use ($needle) {
                 $value = (string) ($job['externalJobId'] ?? $job['ExternalJobId'] ?? '');
+
                 return mb_stripos($value, $needle) !== false;
             }));
         }
@@ -106,8 +107,6 @@ class ColaController extends Controller
     }
 
     /**
-     * Compatibilidad con APIs aun no reiniciadas: obtienen una lista plana limitada.
-     *
      * @return array<int, mixed>
      */
     private function fetchLegacyQueueSnapshot(array $params, array $initialResponse): array
@@ -130,118 +129,218 @@ class ColaController extends Controller
         return in_array($value, $allowed, true) ? $value : 100;
     }
 
-    public function reintentar(string $id): RedirectResponse
+    public function reintentar(Request $request, string $id): RedirectResponse|JsonResponse
     {
-        try {
-            $this->api->post("api/printjobs/{$id}/route");
-            return back()->with('success', 'Reintento enviado.');
-        } catch (\GuzzleHttp\Exception\RequestException $e) {
-            return back()->with('error', $this->apiErrorMessage(
-                $e,
-                'No se pudo reintentar el trabajo seleccionado.'
-            ));
-        }
+        $result = $this->routeJob($id);
+
+        return $this->respondAction(
+            $request,
+            $result,
+            $result['ok'] ? 'Reintento enviado.' : ($result['error'] ?? 'No se pudo reintentar el trabajo seleccionado.')
+        );
     }
 
-    public function cancelar(string $id): RedirectResponse
+    public function cancelar(Request $request, string $id): RedirectResponse|JsonResponse
     {
-        try {
-            $this->api->post("api/printjobs/{$id}/cancel");
-            return back()->with('success', 'Trabajo cancelado.');
-        } catch (\GuzzleHttp\Exception\RequestException $e) {
-            $statusCode = $e->getResponse()?->getStatusCode();
-            if ($statusCode === 404) {
-                return back()->with(
-                    'error',
-                    'La API activa no tiene disponible el endpoint de cancelacion. Reinicia la API para cargar la version actual.'
-                );
-            }
+        $result = $this->cancelJob($id);
 
-            return back()->with('error', $this->apiErrorMessage(
-                $e,
-                'No se pudo cancelar el trabajo seleccionado.'
-            ));
-        }
+        return $this->respondAction(
+            $request,
+            $result,
+            $result['ok'] ? 'Trabajo cancelado.' : ($result['error'] ?? 'No se pudo cancelar el trabajo seleccionado.')
+        );
     }
 
-    public function reintentarMasivo(Request $request): RedirectResponse
+    public function reintentarMasivo(Request $request): RedirectResponse|JsonResponse
     {
-        $jobIds = $request->input('jobIds');
-        if (!is_array($jobIds) || count($jobIds) === 0) {
-            return back()->with('error', 'Selecciona al menos un trabajo.');
+        $jobIds = $this->normalizeJobIds($request->input('jobIds'));
+        if ($jobIds === []) {
+            return $this->respondBulk($request, [], 0, 0, 'Selecciona al menos un trabajo.', true);
         }
 
-        $total = count($jobIds);
+        $results = [];
         $ok = 0;
         $errors = [];
 
-        foreach ($jobIds as $jobIdRaw) {
-            $jobId = is_string($jobIdRaw) ? trim($jobIdRaw) : '';
-            if ($jobId === '') continue;
-
-            try {
-                $this->api->post("api/printjobs/{$jobId}/route");
+        foreach ($jobIds as $jobId) {
+            $result = $this->routeJob($jobId);
+            $results[] = $result;
+            if ($result['ok']) {
                 $ok++;
-            } catch (RequestException $e) {
-                $errors[] = $this->apiErrorMessage($e, 'No se pudo reintentar el trabajo.');
+            } else {
+                $errors[] = $result['error'] ?? 'No se pudo reintentar el trabajo.';
             }
-        }
-
-        if (!empty($errors)) {
-            return back()->with([
-                'error' => $this->bulkActionMessage(
-                    'reintentar',
-                    $total,
-                    $ok,
-                    $errors,
-                    'Solo se pueden reintentar trabajos pendientes o en error final.'
-                ),
-            ]);
-        }
-
-        return back()->with('success', "Reintento enviado para {$ok} trabajo(s).");
-    }
-
-    public function cancelarMasivo(Request $request): RedirectResponse
-    {
-        $jobIds = $request->input('jobIds');
-        if (!is_array($jobIds) || count($jobIds) === 0) {
-            return back()->with('error', 'Selecciona al menos un trabajo.');
         }
 
         $total = count($jobIds);
+        $message = $errors === []
+            ? "Reintento enviado para {$ok} trabajo(s)."
+            : $this->bulkActionMessage('reintentar', $total, $ok, $errors, 'Solo se pueden reintentar trabajos pendientes o en error final.');
+
+        return $this->respondBulk($request, $results, $ok, $total, $message);
+    }
+
+    public function cancelarMasivo(Request $request): RedirectResponse|JsonResponse
+    {
+        $jobIds = $this->normalizeJobIds($request->input('jobIds'));
+        if ($jobIds === []) {
+            return $this->respondBulk($request, [], 0, 0, 'Selecciona al menos un trabajo.', true);
+        }
+
+        $results = [];
         $ok = 0;
         $errors = [];
 
-        foreach ($jobIds as $jobIdRaw) {
-            $jobId = is_string($jobIdRaw) ? trim($jobIdRaw) : '';
-            if ($jobId === '') continue;
-
-            try {
-                $this->api->post("api/printjobs/{$jobId}/cancel");
+        foreach ($jobIds as $jobId) {
+            $result = $this->cancelJob($jobId);
+            $results[] = $result;
+            if ($result['ok']) {
                 $ok++;
-            } catch (RequestException $e) {
-                $errors[] = $this->apiErrorMessage($e, 'No se pudo cancelar el trabajo.');
+            } else {
+                $errors[] = $result['error'] ?? 'No se pudo cancelar el trabajo.';
             }
         }
 
-        if (!empty($errors)) {
-            return back()->with([
-                'error' => $this->bulkActionMessage(
-                    'cancelar',
-                    $total,
-                    $ok,
-                    $errors,
-                    'Los trabajos seleccionados no se pueden cancelar en su estado actual.'
-                ),
-            ]);
-        }
+        $total = count($jobIds);
+        $message = $errors === []
+            ? "Cancelación enviada para {$ok} trabajo(s)."
+            : $this->bulkActionMessage('cancelar', $total, $ok, $errors, 'Los trabajos seleccionados no se pueden cancelar en su estado actual.');
 
-        return back()->with('success', "Cancelación enviada para {$ok} trabajo(s).");
+        return $this->respondBulk($request, $results, $ok, $total, $message);
     }
 
     /**
-     * @param array<int, string> $errors
+     * @return array{ok: bool, jobId: string, newStatus?: int, message?: string, error?: string}
+     */
+    private function routeJob(string $id): array
+    {
+        try {
+            $apiResult = $this->api->post("api/printjobs/{$id}/route");
+            $statusKey = strtolower((string) ($apiResult['status'] ?? $apiResult['Status'] ?? 'routed'));
+            $newStatus = $statusKey === 'errorfinal' ? 8 : 1;
+
+            return [
+                'ok' => true,
+                'jobId' => $id,
+                'newStatus' => $newStatus,
+                'message' => $newStatus === 8
+                    ? 'Reintento enviado; el trabajo permanece en error final.'
+                    : 'Reintento enviado.',
+            ];
+        } catch (RequestException $e) {
+            return [
+                'ok' => false,
+                'jobId' => $id,
+                'error' => $this->apiErrorMessage($e, 'No se pudo reintentar el trabajo seleccionado.'),
+            ];
+        }
+    }
+
+    /**
+     * @return array{ok: bool, jobId: string, newStatus?: int, error?: string}
+     */
+    private function cancelJob(string $id): array
+    {
+        try {
+            $this->api->post("api/printjobs/{$id}/cancel");
+
+            return [
+                'ok' => true,
+                'jobId' => $id,
+                'newStatus' => 7,
+            ];
+        } catch (RequestException $e) {
+            $statusCode = $e->getResponse()?->getStatusCode();
+            $error = $statusCode === 404
+                ? 'La API activa no tiene disponible el endpoint de cancelacion. Reinicia la API para cargar la version actual.'
+                : $this->apiErrorMessage($e, 'No se pudo cancelar el trabajo seleccionado.');
+
+            return [
+                'ok' => false,
+                'jobId' => $id,
+                'error' => $error,
+            ];
+        }
+    }
+
+    /**
+     * @param  array<int, string|mixed>  $raw
+     * @return array<int, string>
+     */
+    private function normalizeJobIds(mixed $raw): array
+    {
+        if (! is_array($raw)) {
+            return [];
+        }
+
+        $ids = [];
+        foreach ($raw as $jobIdRaw) {
+            $jobId = is_string($jobIdRaw) ? trim($jobIdRaw) : '';
+            if ($jobId !== '') {
+                $ids[] = $jobId;
+            }
+        }
+
+        return $ids;
+    }
+
+    /**
+     * @param  array{ok: bool, jobId: string, newStatus?: int, message?: string, error?: string}  $result
+     */
+    private function respondAction(Request $request, array $result, string $flashMessage): RedirectResponse|JsonResponse
+    {
+        if ($this->wantsJson($request)) {
+            return response()->json([
+                'ok' => $result['ok'],
+                'message' => $flashMessage,
+                'results' => [$result],
+            ], $result['ok'] ? 200 : 422);
+        }
+
+        return $result['ok']
+            ? back()->with('success', $flashMessage)
+            : back()->with('error', $flashMessage);
+    }
+
+    /**
+     * @param  array<int, array{ok: bool, jobId: string, newStatus?: int, message?: string, error?: string}>  $results
+     */
+    private function respondBulk(
+        Request $request,
+        array $results,
+        int $ok,
+        int $total,
+        string $message,
+        bool $validationError = false
+    ): RedirectResponse|JsonResponse {
+        $allOk = $total > 0 && $ok === $total;
+        $noneOk = $ok === 0 && $total > 0;
+
+        if ($this->wantsJson($request)) {
+            return response()->json([
+                'ok' => $allOk,
+                'partial' => ! $allOk && ! $noneOk && $total > 0,
+                'message' => $message,
+                'processed' => $ok,
+                'total' => $total,
+                'results' => $results,
+            ], ($noneOk || $validationError) ? 422 : 200);
+        }
+
+        if ($allOk) {
+            return back()->with('success', $message);
+        }
+
+        return back()->with('error', $message);
+    }
+
+    private function wantsJson(Request $request): bool
+    {
+        return $request->expectsJson() || $request->ajax();
+    }
+
+    /**
+     * @param  array<int, string>  $errors
      */
     private function bulkActionMessage(string $action, int $total, int $ok, array $errors, string $defaultReason): string
     {

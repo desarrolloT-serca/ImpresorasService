@@ -5408,6 +5408,52 @@ html.dark .dynamic-panel-error {
     align-items: flex-end;
 }
 
+.dbx-auto-refresh-status {
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    z-index: 35;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border: 1px solid color-mix(in srgb, var(--ui-border) 82%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--ui-surface) 88%, transparent);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 6px 18px color-mix(in srgb, var(--ui-shadow, #000) 12%, transparent);
+    color: var(--ui-text-muted);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    pointer-events: none;
+    user-select: none;
+}
+
+.dbx-auto-refresh-status.is-active::before,
+.dbx-auto-refresh-status.is-loading::before {
+    content: "";
+    flex: 0 0 6px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--ui-primary);
+}
+
+.dbx-auto-refresh-status.is-active::before {
+    animation: dbx-auto-refresh-pulse 1.4s ease-in-out infinite;
+}
+
+.dbx-auto-refresh-status.is-loading::before {
+    animation: dbx-auto-refresh-pulse 0.7s ease-in-out infinite;
+}
+
+@keyframes dbx-auto-refresh-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.35; transform: scale(0.88); }
+}
+
 /* ── 3. Barras de estadísticas: más finas y menos espaciado ─────────── */
 .dbx-bars {
     gap: 2px !important;

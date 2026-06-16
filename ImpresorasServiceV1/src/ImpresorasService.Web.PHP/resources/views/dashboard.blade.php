@@ -120,6 +120,8 @@
     };
 @endphp
 
+<span id="autoRefreshCountdown" class="dbx-auto-refresh-status" hidden aria-live="polite" title="Próximo refresco automático"></span>
+
 @fragment('dashboard-content')
 <div class="dbx-dashboard-page" data-dashboard-dynamic aria-live="polite">
 @include('dashboard.partials.filters')
@@ -812,7 +814,6 @@
 <script>
 (function() {
     const STORAGE_KEY = 'dashboard.filters.v1';
-    const serverAutoRefreshSeconds = {{ (int) ($autoRefreshSeconds ?? 0) }};
 
     function readStoredPrefs() {
         try {
@@ -895,23 +896,6 @@
                 if (prefs) writeStoredPrefs(prefs);
             });
         }
-
-        // Si vuelves a entrar sin parámetros (por ejemplo usando navegación del navegador),
-        // recargamos la URL con lo guardado para que el servidor renderice igual (y el auto-refresh funcione).
-        // Programar auto-refresh (si ya viene en la URL). Si no viene, se aplicará tras el redirect anterior.
-        const url = new URL(window.location.href);
-        const params = url.searchParams;
-        const autoRefreshSeconds = Number(params.get('autoRefresh') ?? serverAutoRefreshSeconds ?? 0);
-
-        if (autoRefreshSeconds > 0) {
-            if (window.DashboardDynamic && typeof window.DashboardDynamic.scheduleAutoRefresh === 'function') {
-                window.DashboardDynamic.scheduleAutoRefresh(autoRefreshSeconds);
-            } else {
-                setTimeout(function() {
-                    window.location.reload();
-                }, autoRefreshSeconds * 1000);
-            }
-        }
     });
 })();
 
@@ -948,6 +932,79 @@
     let dashboardAbortController = null;
     let dashboardRequestId = 0;
     let autoRefreshTimer = null;
+    let autoRefreshCountdownTimer = null;
+    let autoRefreshSecondsRemaining = 0;
+
+    function getAutoRefreshCountdownEl() {
+        return document.getElementById('autoRefreshCountdown');
+    }
+
+    function updateAutoRefreshIndicator(remaining, loading) {
+        const el = getAutoRefreshCountdownEl();
+        if (!el) return;
+
+        el.classList.remove('is-active', 'is-loading');
+
+        if (loading) {
+            el.hidden = false;
+            el.classList.add('is-loading');
+            el.textContent = '↻ …';
+            el.title = 'Actualizando dashboard';
+            return;
+        }
+
+        const seconds = Number(remaining) || 0;
+        if (seconds > 0) {
+            el.hidden = false;
+            el.classList.add('is-active');
+            el.textContent = '↻ ' + seconds + 's';
+            el.title = 'Próximo refresco automático en ' + seconds + ' segundos';
+            return;
+        }
+
+        el.hidden = true;
+        el.textContent = '';
+        el.title = 'Próximo refresco automático';
+    }
+
+    function stopAutoRefreshCountdown() {
+        if (autoRefreshCountdownTimer) {
+            window.clearInterval(autoRefreshCountdownTimer);
+            autoRefreshCountdownTimer = null;
+        }
+    }
+
+    function scheduleAutoRefresh(seconds) {
+        if (autoRefreshTimer) {
+            window.clearTimeout(autoRefreshTimer);
+            autoRefreshTimer = null;
+        }
+        stopAutoRefreshCountdown();
+
+        const interval = Number(seconds) || 0;
+        if (interval <= 0) {
+            updateAutoRefreshIndicator(0, false);
+            return;
+        }
+
+        autoRefreshSecondsRemaining = interval;
+        updateAutoRefreshIndicator(autoRefreshSecondsRemaining, false);
+
+        autoRefreshCountdownTimer = window.setInterval(function() {
+            autoRefreshSecondsRemaining -= 1;
+            if (autoRefreshSecondsRemaining <= 0) {
+                stopAutoRefreshCountdown();
+                updateAutoRefreshIndicator(0, true);
+                return;
+            }
+            updateAutoRefreshIndicator(autoRefreshSecondsRemaining, false);
+        }, 1000);
+
+        autoRefreshTimer = window.setTimeout(function() {
+            stopAutoRefreshCountdown();
+            loadDashboard(window.location.href, false);
+        }, interval * 1000);
+    }
 
     function getDashboardRoot() {
         return document.querySelector('[data-dashboard-dynamic]');
@@ -990,19 +1047,6 @@
 
         initStatsToggle(root);
         scheduleAutoRefresh(Number(root.querySelector('#autoRefresh')?.value || 0));
-    }
-
-    function scheduleAutoRefresh(seconds) {
-        if (autoRefreshTimer) {
-            window.clearTimeout(autoRefreshTimer);
-            autoRefreshTimer = null;
-        }
-
-        if (seconds > 0) {
-            autoRefreshTimer = window.setTimeout(function() {
-                loadDashboard(window.location.href, false);
-            }, seconds * 1000);
-        }
     }
 
     function showDashboardError(root, url) {
@@ -1054,6 +1098,8 @@
         const requestId = ++dashboardRequestId;
         currentRoot.classList.add('is-dynamic-loading');
         currentRoot.setAttribute('aria-busy', 'true');
+        stopAutoRefreshCountdown();
+        updateAutoRefreshIndicator(0, true);
 
         try {
             const response = await fetch(url, {
@@ -1091,6 +1137,7 @@
                 root.classList.remove('is-dynamic-loading');
                 root.removeAttribute('aria-busy');
                 showDashboardError(root, url);
+                scheduleAutoRefresh(Number(root.querySelector('#autoRefresh')?.value || 0));
             }
         }
     }
@@ -1136,6 +1183,11 @@
         },
         scheduleAutoRefresh: scheduleAutoRefresh
     };
+
+    const initialDashboardRoot = getDashboardRoot();
+    if (initialDashboardRoot) {
+        prepareDynamicDashboard(initialDashboardRoot);
+    }
 })();
 </script>
 @endsection
