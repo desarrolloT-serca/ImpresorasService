@@ -158,23 +158,26 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<ImpresorasDbContext>("database");
 
-builder.Services.AddRateLimiter(options =>
+if (!builder.Environment.IsEnvironment("Testing"))
 {
-    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.OnRejected = async (context, cancellationToken) =>
+    builder.Services.AddRateLimiter(options =>
     {
-        context.HttpContext.Response.ContentType = "application/json";
-        await context.HttpContext.Response.WriteAsJsonAsync(
-            new { error = "Demasiados intentos. Espera un momento e inténtalo de nuevo." },
-            cancellationToken);
-    };
-    options.AddFixedWindowLimiter("auth", limiter =>
-    {
-        limiter.Window = TimeSpan.FromMinutes(1);
-        limiter.PermitLimit = 10;
-        limiter.QueueLimit = 0;
+        options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+        options.OnRejected = async (context, cancellationToken) =>
+        {
+            context.HttpContext.Response.ContentType = "application/json";
+            await context.HttpContext.Response.WriteAsJsonAsync(
+                new { error = "Demasiados intentos. Espera un momento e inténtalo de nuevo." },
+                cancellationToken);
+        };
+        options.AddFixedWindowLimiter("auth", limiter =>
+        {
+            limiter.Window = TimeSpan.FromMinutes(1);
+            limiter.PermitLimit = 10;
+            limiter.QueueLimit = 0;
+        });
     });
-});
+}
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
@@ -244,7 +247,10 @@ app.UseHttpsRedirection();
 
 app.UseCors();
 
-app.UseRateLimiter();
+if (!app.Environment.IsEnvironment("Testing"))
+{
+    app.UseRateLimiter();
+}
 
 app.UseAuthentication();
 app.UseAuthorization();

@@ -70,6 +70,7 @@ class LayoutComposer
             'effectiveStoreId' => $effectiveStoreId,
             'selectedStoreId' => $selectedStoreId,
             'storeOptions' => $storeOptions,
+            'apiError' => session(ApiClient::SESSION_API_ERROR_KEY),
         ]);
     }
 }

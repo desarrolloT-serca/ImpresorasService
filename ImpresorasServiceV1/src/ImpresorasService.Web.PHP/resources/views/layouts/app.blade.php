@@ -155,6 +155,11 @@
                     </ul>
                 </div>
             @endif
+            @if(!empty($apiError))
+                <div class="mb-4 alert alert-error" role="alert" aria-live="polite">
+                    {{ $apiError }}
+                </div>
+            @endif
             @yield('content')
         </main>
     </div>

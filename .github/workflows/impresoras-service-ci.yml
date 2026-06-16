@@ -1,5 +1,5 @@
-# CI mínima .NET para ImpresorasServiceV1.
-# Ampliar con más tests (PHP, E2E, HANA smoke) cuando crezca la batería de pruebas.
+# CI ImpresorasServiceV1 (.NET + Laravel).
+# Ampliar con E2E y smoke HANA cuando crezca la batería de pruebas.
 name: ImpresorasService CI
 
 on:
@@ -39,3 +39,32 @@ jobs:
 
       - name: Test
         run: dotnet test tests/ImpresorasService.Api.IntegrationTests/ImpresorasService.Api.IntegrationTests.csproj --no-build --configuration Release --verbosity normal
+
+  php:
+    name: Test (Laravel / PHP 8.2)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ImpresorasServiceV1/src/ImpresorasService.Web.PHP
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+          extensions: mbstring, xml, curl, sqlite3
+          coverage: none
+
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Test
+        run: php artisan test
