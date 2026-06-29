@@ -14,6 +14,7 @@ class StatusLabels
         6 => 'Reintento programado',
         7 => 'Cancelado',
         8 => 'Error final',
+        9 => 'Bloqueado',
     ];
 
     public static function get(int|string|null $status): string
@@ -43,6 +44,7 @@ class StatusLabels
             'retryscheduled' => 6,
             'cancelled', 'canceled' => 7,
             'errorfinal' => 8,
+            'printerblocked' => 9,
             default => null,
         };
     }

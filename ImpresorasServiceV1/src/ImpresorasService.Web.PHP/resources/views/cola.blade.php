@@ -38,6 +38,7 @@
                         <option value="6" {{ ($status ?? '') == '6' ? 'selected' : '' }}>Reintento programado</option>
                         <option value="7" {{ ($status ?? '') == '7' ? 'selected' : '' }}>Cancelado</option>
                         <option value="8" {{ ($status ?? '') == '8' ? 'selected' : '' }}>Error final</option>
+                        <option value="9" {{ ($status ?? '') == '9' ? 'selected' : '' }}>Bloqueado</option>
                     </select>
                 </div>
                 <div class="min-w-44">
@@ -62,14 +63,13 @@
 
         @if(($isAdmin ?? false) || ($isStoreManager ?? false))
             <div class="dbx-bulk-toolbar">
-                <span id="bulk-selected-count" class="dbx-selection-count bulk-action-control bulk-selected-counter" aria-live="polite">0 seleccionados</span>
                 <form id="bulk-reintentar-form" method="POST" action="{{ route('cola.reintentar_masivo') }}" class="inline"
                     data-cola-action="reintentar-masivo"
                     data-confirm="¿Reintentar masivamente los trabajos seleccionados?">
                     @csrf
                     <div id="bulk-reintentar-jobIds"></div>
                     <button type="submit" id="bulk-reintentar-submit" class="btn btn-ghost bulk-action-control" disabled>
-                        Reintentar masivo
+                        Reintentar
                     </button>
                 </form>
                 <form id="bulk-cancelar-form" method="POST" action="{{ route('cola.cancelar_masivo') }}" class="inline"
@@ -78,7 +78,7 @@
                     @csrf
                     <div id="bulk-cancelar-jobIds"></div>
                     <button type="submit" id="bulk-cancelar-submit" class="btn btn-danger bulk-action-control" disabled>
-                        Cancelar masivo
+                        Cancelar
                     </button>
                 </form>
             </div>
@@ -87,17 +87,22 @@
 </x-ui.card>
 
 <x-ui.card class="dbx-operational-card">
-<div class="dbx-table-meta">
-    <div>
+<div class="dbx-cola-section-header">
+    <div class="dbx-cola-section-header-top">
         <h2 class="dbx-title">Trabajos de cola</h2>
+        @if(($isAdmin ?? false) || ($isStoreManager ?? false))
+            <span id="bulk-selected-count" class="dbx-selection-count bulk-action-control bulk-selected-counter" aria-live="polite">0 seleccionados</span>
+        @endif
+    </div>
+    <div class="dbx-cola-section-header-bottom">
         <span class="dbx-subtle">
             {{ $total ?? count($jobs ?? []) }} resultado(s) con los filtros actuales
             @if(($total ?? count($jobs ?? [])) > 0)
                 - mostrando {{ $from ?? 1 }}-{{ $to ?? count($jobs ?? []) }}
             @endif
         </span>
+        <span class="dbx-subtle">Selecciona filas para acciones masivas</span>
     </div>
-    <span class="dbx-subtle">Selecciona filas para acciones masivas</span>
 </div>
 <x-ui.table class="dbx-actions-table">
         <caption class="sr-only">Listado operativo de trabajos de impresion en cola</caption>
@@ -136,15 +141,16 @@
                     $stRaw = $job['_status'] ?? $job['status'] ?? $job['Status'] ?? null;
                     $stInt = \App\Helpers\StatusLabels::normalizeToInt($stRaw);
                     $statusClass = match ($stInt) {
-                        8 => 'critical', // Error final
-                        0, 2, 6 => 'warning', // Pendiente / Imprimiendo / Reintento
-                        1 => 'info', // Enrutado
-                        3, 4, 5 => 'healthy', // Aceptado / Impreso
-                        7 => 'neutral', // Cancelado
+                        8 => 'critical',
+                        0, 2, 6, 9 => 'warning',
+                        1 => 'info',
+                        3, 4, 5 => 'healthy',
+                        7 => 'neutral',
                         default => 'neutral',
                     };
+                    $pillTitle = $stInt === 9 ? ($job['lastErrorMessage'] ?? $job['LastErrorMessage'] ?? null) : null;
                 @endphp
-                <td class="status-col"><span class="dbx-pill {{ $statusClass }}">{{ \App\Helpers\StatusLabels::get($stRaw) }}</span></td>
+                <td class="status-col"><span class="dbx-pill {{ $statusClass }}"{!! $pillTitle ? ' title="'.e($pillTitle).'"' : '' !!}>{{ \App\Helpers\StatusLabels::get($stRaw) }}</span></td>
                 @php
                     $printerName = $job['printerName'] ?? $job['PrinterName'] ?? null;
                     $printerId = $job['printerId'] ?? $job['PrinterId'] ?? null;
@@ -226,7 +232,7 @@
 
     function statusPillClass(statusInt) {
         if (statusInt === 8) return 'critical';
-        if ([0, 2, 6].includes(statusInt)) return 'warning';
+        if ([0, 2, 6, 9].includes(statusInt)) return 'warning';
         if (statusInt === 1) return 'info';
         if ([3, 4, 5].includes(statusInt)) return 'healthy';
         return 'neutral';

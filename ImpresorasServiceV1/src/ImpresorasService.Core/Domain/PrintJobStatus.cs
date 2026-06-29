@@ -10,5 +10,6 @@ public enum PrintJobStatus
     PrintedUnknown = 5,
     RetryScheduled = 6,
     Cancelled = 7,
-    ErrorFinal = 8
+    ErrorFinal = 8,
+    PrinterBlocked = 9
 }
