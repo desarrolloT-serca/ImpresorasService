@@ -863,10 +863,6 @@
         return prefs;
     }
 
-    function applyPrefsToUrlIfMissing(prefs) {
-        return false;
-    }
-
     function syncControlsWithServerRender() {
         document.querySelectorAll('[data-current]').forEach(function(el) {
             const value = el.getAttribute('data-current');

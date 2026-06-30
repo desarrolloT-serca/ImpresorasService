@@ -6,11 +6,11 @@
 @php
     $printersByStore = is_array($printersByStore ?? null) ? $printersByStore : [];
     $selectedStoreGroup = is_array($selectedStoreGroup ?? null) ? $selectedStoreGroup : null;
-    $selectedStoreId = $selectedStoreGroup['storeId'] ?? ($selectedStoreId ?? null);
-    $selectedStoreKey = $selectedStoreId !== null ? (string) $selectedStoreId : 'none';
+    $pageStoreId = $selectedStoreGroup['storeId'] ?? ($selectedStoreId ?? null);
+    $selectedStoreKey = $pageStoreId !== null ? (string) $pageStoreId : 'none';
     $selectedStorePrintersCount = is_array($selectedStoreGroup['printers'] ?? null) ? count($selectedStoreGroup['printers']) : 0;
-    $createUrl = $selectedStoreId !== null
-        ? route('impresoras.create', ['storeId' => $selectedStoreId])
+    $createUrl = $pageStoreId !== null
+        ? route('impresoras.create', ['storeId' => $pageStoreId])
         : route('impresoras.create');
 @endphp
 
@@ -103,6 +103,7 @@
                         <th class="status-col">Activa</th>
                         <th class="status-col">Conectividad</th>
                         <th class="status-col">Puerto</th>
+                        <th class="status-col">IPP</th>
                         <th class="actions-col">Acciones</th>
                     </tr>
                 </thead>
@@ -114,7 +115,7 @@
                             $spoolQueue = $p['spoolQueue'] ?? $p['SpoolQueue'] ?? '-';
                             $host = trim((string) ($p['host'] ?? $p['Host'] ?? ''));
                             $isActive = (bool) ($p['isActive'] ?? $p['IsActive'] ?? false);
-                            $editUrl = $id ? route('impresoras.edit', ['impresora' => $id, 'storeId' => $selectedStoreId]) : '#';
+                            $editUrl = $id ? route('impresoras.edit', ['impresora' => $id, 'storeId' => $pageStoreId]) : '#';
                             $connectivityStatus = strtolower(trim((string) ($p['connectivityStatus'] ?? $p['ConnectivityStatus'] ?? '')));
                             $connectivitySeverity = strtolower(trim((string) ($p['connectivitySeverity'] ?? $p['ConnectivitySeverity'] ?? '')));
                             $connectionLabel = trim((string) ($p['connectivityLabel'] ?? $p['ConnectivityLabel'] ?? ''));
@@ -181,6 +182,8 @@
                             } elseif ($lastConnectionTransport !== '') {
                                 $initialPort = $lastConnectionTransport;
                             }
+                            $ippRaw = $p['ippSupported'] ?? $p['IppSupported'] ?? null;
+                            $ippSupported = ($ippRaw === null || $ippRaw === '') ? null : filter_var($ippRaw, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
                         @endphp
                         <tr data-printer-id="{{ $id ?? '' }}">
                             <td class="text-col">{{ $name }}</td>
@@ -197,6 +200,15 @@
                             <td class="status-col">
                                 <span class="ping-port badge badge-neutral" data-id="{{ $id ?? '' }}">{{ $initialPort }}</span>
                             </td>
+                            <td class="status-col">
+                                @if($ippSupported === true)
+                                    <span class="badge badge-success" title="Soporta IPP">IPP ✓</span>
+                                @elseif($ippSupported === false)
+                                    <span class="badge badge-neutral" title="No soporta IPP">IPP ✗</span>
+                                @else
+                                    <span class="badge badge-warning" title="Compatibilidad IPP sin comprobar">IPP ?</span>
+                                @endif
+                            </td>
                             <td class="actions-col">
                                 @if(($isAdmin ?? false) && $id)
                                     <x-ui.action-buttons>
@@ -204,8 +216,8 @@
                                         <form action="{{ route('impresoras.destroy', $id) }}" method="POST" onsubmit="return confirm('&iquest;Eliminar?')">
                                             @csrf
                                             @method('DELETE')
-                                            @if($selectedStoreId !== null)
-                                                <input type="hidden" name="storeId" value="{{ $selectedStoreId }}">
+                                            @if($pageStoreId !== null)
+                                                <input type="hidden" name="storeId" value="{{ $pageStoreId }}">
                                             @endif
                                             <button type="submit" class="btn btn-danger">Eliminar</button>
                                         </form>
