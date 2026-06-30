@@ -41,10 +41,23 @@ class ColaController extends Controller
         [$jobs, $total, $page, $limit] = $this->fetchQueuePage($params, $externalJobId, $page, $limit);
         $lastPage = max(1, (int) ceil($total / max(1, $limit)));
 
+        // Una página parcial (menos ítems que el límite) es definitivamente la última página.
+        // Esto evita redirecciones incorrectas cuando el campo count de la API devuelve
+        // el recuento de la página actual en lugar del total global.
+        if (! empty($jobs) && count($jobs) < $limit) {
+            $lastPage = max($lastPage, $page);
+            if ($total === count($jobs) && $page > 1) {
+                $total = ($page - 1) * $limit + count($jobs);
+            }
+        }
+
         if ($total > 0 && $page > $lastPage) {
             $params['page'] = $lastPage;
             [$jobs, $total, $page, $limit] = $this->fetchQueuePage($params, $externalJobId, $lastPage, $limit);
             $lastPage = max(1, (int) ceil($total / max(1, $limit)));
+            if (! empty($jobs) && count($jobs) < $limit) {
+                $lastPage = max($lastPage, $page);
+            }
         }
 
         foreach ($jobs as &$job) {
