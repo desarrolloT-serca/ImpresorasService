@@ -23,14 +23,12 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
         TimeZoneInfo.FindSystemTimeZoneById(
             OperatingSystem.IsWindows() ? "Romance Standard Time" : "Europe/Madrid");
 
+    // Debe mantenerse idéntico a DashboardController.QueueStatuses.
     private static readonly PrintJobStatus[] QueueStatuses =
     [
         PrintJobStatus.Pending, PrintJobStatus.Routed,
-        PrintJobStatus.Printing, PrintJobStatus.RetryScheduled,
-        PrintJobStatus.PrinterBlocked
+        PrintJobStatus.Printing, PrintJobStatus.RetryScheduled
     ];
-
-    private static readonly PrintJobStatus[] FailedStatuses = [PrintJobStatus.ErrorFinal];
 
     public StoreHealthAlertBackgroundService(
         IServiceScopeFactory scopeFactory,
@@ -110,7 +108,8 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
                 .Where(p => p.IsActive == activeOnly && p.StoreId == store.StoreId)
                 .Select(p => new
                 {
-                    MissingHost = (p.Host == null || p.Host == "") ? 1 : 0,
+                    // Excluir impresoras con SpoolQueue UNC (\\servidor\cola): tienen host implícito.
+                    MissingHost = (p.Host == null || p.Host == "") && !EF.Functions.Like(p.SpoolQueue, "\\\\%") ? 1 : 0,
                     ConnWarn = p.ConnectionFailuresStreak >= connWarnMin ? 1 : 0,
                     ConnCrit = p.ConnectionFailuresStreak >= connCritMin ? 1 : 0,
                 })
@@ -124,10 +123,17 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
             var queued = await db.PrintJobs.AsNoTracking()
                 .CountAsync(j => j.StoreId == store.StoreId && QueueStatuses.Contains(j.Status), ct);
 
+            // Alineado con DashboardController.BuildStoreRowsAsync: failedWindowStats usa UpdatedAtUtc
+            // y cuenta ErrorFinal más jobs con múltiples intentos aún sin éxito.
             var failed = await db.PrintJobs.AsNoTracking()
                 .CountAsync(j => j.StoreId == store.StoreId
-                    && j.CreatedAtUtc >= windowStart
-                    && FailedStatuses.Contains(j.Status), ct);
+                    && j.UpdatedAtUtc >= windowStart
+                    && (j.Status == PrintJobStatus.ErrorFinal
+                        || (j.Status != PrintJobStatus.RetryScheduled
+                            && j.Status != PrintJobStatus.SpoolAccepted
+                            && j.Status != PrintJobStatus.PrintedConfirmed
+                            && j.Status != PrintJobStatus.PrintedUnknown
+                            && j.AttemptCount > 1)), ct);
 
             var (health, reason) = StoreHealthEvaluator.Compute(
                 connected, queued, failed, missingHost, connWarn, connCrit,
