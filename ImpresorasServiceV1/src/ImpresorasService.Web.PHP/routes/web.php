@@ -59,5 +59,12 @@ Route::middleware('auth.impresoras')->group(function () {
         Route::put('/usuarios/{usuario}', [UsuariosController::class, 'update'])->name('usuarios.update');
         Route::delete('/usuarios/{usuario}', [UsuariosController::class, 'destroy'])->name('usuarios.destroy');
     });
-    Route::get('/alertas', [AlertasController::class, 'index']);
+    Route::get('/alertas', [AlertasController::class, 'index'])->name('alertas.index');
+    Route::middleware('admin.only')->group(function () {
+        Route::get('/alertas/configuracion', [AlertasController::class, 'configuracion'])->name('alertas.configuracion');
+        Route::post('/alertas/configuracion', [AlertasController::class, 'saveConfig'])->name('alertas.config.save');
+        Route::post('/alertas/chats', [AlertasController::class, 'addChat'])->name('alertas.chats.add');
+        Route::post('/alertas/chats/{chatId}/delete', [AlertasController::class, 'deleteChat'])->name('alertas.chats.delete');
+        Route::post('/alertas/test', [AlertasController::class, 'sendTest'])->name('alertas.test');
+    });
 });

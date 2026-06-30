@@ -69,8 +69,13 @@
                         <span class="nav-label">Ajustes</span>
                         <span class="nav-tooltip" aria-hidden="true">Ajustes</span>
                     </a>
+                    <a href="{{ route('alertas.configuracion') }}" class="app-nav-link {{ request()->routeIs('alertas.configuracion') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('alertas.configuracion')) aria-current="page" @endif data-label="Telegram">
+                        <svg class="nav-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                        <span class="nav-label">Telegram</span>
+                        <span class="nav-tooltip" aria-hidden="true">Telegram</span>
+                    </a>
                 @endif
-                <a href="{{ url('/alertas') }}" class="app-nav-link {{ request()->is('alertas*') ? 'app-nav-link-active' : '' }}" @if(request()->is('alertas*')) aria-current="page" @endif data-label="Alertas">
+                <a href="{{ route('alertas.index') }}" class="app-nav-link {{ request()->routeIs('alertas.index') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('alertas.index')) aria-current="page" @endif data-label="Alertas">
                     <svg class="nav-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
                     <span class="nav-label">Alertas</span>
                     <span class="nav-tooltip" aria-hidden="true">Alertas</span>
