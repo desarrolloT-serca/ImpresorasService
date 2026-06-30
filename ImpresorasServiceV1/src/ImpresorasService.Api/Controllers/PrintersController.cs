@@ -145,21 +145,28 @@ public class PrintersController : ControllerBase
 
         var now = DateTimeOffset.UtcNow;
         var nowStr = now.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+        var hostChanged = !string.Equals(printer.Host, input.Host, StringComparison.OrdinalIgnoreCase);
 
         try
         {
             // Raw SQL garantiza parametrizado real — el proveedor HANA EF Core falla al
             // generar WHERE con strings que contienen paréntesis cuando usa LINQ.
+            // Cuando el host cambia, reseteamos ipp_supported a NULL para que el Worker
+            // vuelva a descubrir el soporte IPP del nuevo host en el siguiente ciclo.
+            var sql = hostChanged
+                ? "UPDATE \"printer_printer\" SET " +
+                  "\"printer_name\" = {0}, \"spool_queue\" = {1}, \"host\" = {2}, " +
+                  "\"store_id\" = {3}, \"is_active\" = {4}, \"capabilities_json\" = {5}, " +
+                  "\"ipp_supported\" = NULL, \"updated_at_utc\" = {6} " +
+                  "WHERE \"printer_id\" = {7}"
+                : "UPDATE \"printer_printer\" SET " +
+                  "\"printer_name\" = {0}, \"spool_queue\" = {1}, \"host\" = {2}, " +
+                  "\"store_id\" = {3}, \"is_active\" = {4}, \"capabilities_json\" = {5}, " +
+                  "\"updated_at_utc\" = {6} " +
+                  "WHERE \"printer_id\" = {7}";
+
             await _dbContext.Database.ExecuteSqlRawAsync(
-                "UPDATE \"printer_printer\" SET " +
-                "\"printer_name\" = {0}, " +
-                "\"spool_queue\" = {1}, " +
-                "\"host\" = {2}, " +
-                "\"store_id\" = {3}, " +
-                "\"is_active\" = {4}, " +
-                "\"capabilities_json\" = {5}, " +
-                "\"updated_at_utc\" = {6} " +
-                "WHERE \"printer_id\" = {7}",
+                sql,
                 input.PrinterName,
                 input.SpoolQueue,
                 input.Host,
@@ -193,6 +200,7 @@ public class PrintersController : ControllerBase
             LastConnectionCheckAtUtc = printer.LastConnectionCheckAtUtc,
             LastConnectionTransport = printer.LastConnectionTransport,
             LastConnectionError = printer.LastConnectionError,
+            IppSupported = hostChanged ? null : printer.IppSupported,
         };
         return Ok(ToPrinterDto(updated));
     }
@@ -500,7 +508,8 @@ public class PrintersController : ControllerBase
             connectivity.ConnectivityStatus,
             connectivity.ConnectivityLabel,
             connectivity.ConnectivitySeverity,
-            connectivity.ConnectivityDetail);
+            connectivity.ConnectivityDetail,
+            printer.IppSupported);
     }
 
     private sealed record PrinterDto(
@@ -521,7 +530,8 @@ public class PrintersController : ControllerBase
         string ConnectivityStatus,
         string ConnectivityLabel,
         string ConnectivitySeverity,
-        string? ConnectivityDetail);
+        string? ConnectivityDetail,
+        bool? IppSupported);
 
     private sealed record ConnectivityProbeResult(
         bool Reachable,
