@@ -71,6 +71,9 @@ public class DashboardController : ControllerBase
         }
 
         var jobsInWindow = jobs.Where(x => x.CreatedAtUtc >= fromUtc);
+        // failedWithoutRetryCurrent usa UpdatedAtUtc para reflejar trabajos que
+        // entraron en error durante la ventana, no solo los creados en ella.
+        var jobsUpdatedInWindow = jobs.Where(x => x.UpdatedAtUtc >= fromUtc);
 
         var kpis = new
         {
@@ -82,7 +85,7 @@ public class DashboardController : ControllerBase
                      || (PrintedStatuses.Contains(x.Status) && x.AttemptCount > 1),
                 cancellationToken),
             queueCurrent = await jobs.CountAsync(x => QueueStatuses.Contains(x.Status), cancellationToken),
-            failedWithoutRetryCurrent = await jobsInWindow.CountAsync(
+            failedWithoutRetryCurrent = await jobsUpdatedInWindow.CountAsync(
                 x => FailedWithoutRetryStatuses.Contains(x.Status)
                      || (x.Status != PrintJobStatus.RetryScheduled
                          && !PrintedStatuses.Contains(x.Status)
@@ -92,7 +95,7 @@ public class DashboardController : ControllerBase
             activeStores = await stores.CountAsync(cancellationToken)
         };
 
-        var storeRows = await BuildStoreRowsAsync(stores, printers, jobsInWindow, jobs, thresholds, cancellationToken);
+        var storeRows = await BuildStoreRowsAsync(stores, printers, jobsInWindow, jobsUpdatedInWindow, jobs, thresholds, cancellationToken);
         var alerts = storeRows
             .Where(x => x.Health != "healthy")
             .OrderByDescending(x => x.FailedWithoutRetryCurrent)
@@ -192,6 +195,7 @@ public class DashboardController : ControllerBase
         IQueryable<Domain.Entities.Store> stores,
         IQueryable<Domain.Entities.Printer> printers,
         IQueryable<Domain.Entities.PrintJob> jobsInWindow,
+        IQueryable<Domain.Entities.PrintJob> jobsUpdatedInWindow,
         IQueryable<Domain.Entities.PrintJob> allJobs,
         DashboardThresholds thresholds,
         CancellationToken cancellationToken)
@@ -240,7 +244,7 @@ public class DashboardController : ControllerBase
             })
             .ToDictionaryAsync(x => x.StoreId, x => x.QueuedCurrent, cancellationToken);
 
-        var failedWindowStats = await jobsInWindow
+        var failedWindowStats = await jobsUpdatedInWindow
             .GroupBy(x => x.StoreId)
             .Select(x => new
             {
