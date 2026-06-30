@@ -31,6 +31,7 @@ public class RoutingResolver : IRoutingResolver
             .AsNoTracking()
             .Where(r => r.IsActive == activeOnly)
             .OrderBy(r => r.Priority)
+            .ThenBy(r => r.RuleId)  // desempate determinista cuando Priority es igual
             .ToListAsync(cancellationToken);
 
         rules = rules
