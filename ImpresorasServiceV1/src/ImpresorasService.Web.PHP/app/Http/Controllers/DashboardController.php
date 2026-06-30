@@ -305,11 +305,15 @@ class DashboardController extends Controller
                 ?: (($b['queuedCurrent'] ?? 0) <=> ($a['queuedCurrent'] ?? 0));
         });
 
-        $alerts = $this->buildPrioritizedAlerts($stores, $thresholds);
-
         if (!$showHealthy) {
             $stores = array_values(array_filter($stores, fn (array $row): bool => ($row['health'] ?? 'healthy') !== 'healthy'));
         }
+
+        if (in_array($health, ['healthy', 'warning', 'critical'], true)) {
+            $stores = array_values(array_filter($stores, fn (array $row): bool => ($row['health'] ?? '') === $health));
+        }
+
+        $alerts = $this->buildPrioritizedAlerts($stores, $thresholds);
 
         $kpis = [
             'received' => $received,
@@ -333,20 +337,6 @@ class DashboardController extends Controller
             'usersTotal' => is_array($users) ? count($users) : 0,
         ];
         $generatedAtUtc = gmdate('c');
-
-        if (!is_array($kpis)) {
-            $kpis = [];
-        }
-        if (!is_array($alerts)) {
-            $alerts = [];
-        }
-        if (!is_array($stores)) {
-            $stores = [];
-        }
-
-        if (in_array($health, ['healthy', 'warning', 'critical'], true)) {
-            $stores = array_values(array_filter($stores, fn (array $row): bool => ($row['health'] ?? '') === $health));
-        }
         $viewName = $isAdminDashboard ? 'dashboard' : 'dashboard-local';
 
         $view = view($viewName, [
