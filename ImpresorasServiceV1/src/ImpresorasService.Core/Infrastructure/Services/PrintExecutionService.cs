@@ -250,15 +250,8 @@ public sealed class PrintExecutionService : IPrintExecutionService
             OccurredAtUtc = DateTimeOffset.UtcNow
         }, ct);
 
-        try
-        {
-            var rows = await _db.SaveChangesAsync(ct);
-            if (rows == 0) return false;
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            return false;
-        }
+        var rows = await _db.SaveChangesAsync(ct);
+        if (rows == 0) return false;
 
         await tx.CommitAsync(ct);
 
