@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using ImpresorasService.Application.Services;
 using ImpresorasService.Domain;
 using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure.Persistence;
@@ -295,37 +296,15 @@ public class DashboardController : ControllerBase
         int missingHost,
         int connWarn,
         int connCrit,
-        DashboardThresholds thresholds)
-    {
-        // Prioridad: conectividad crítica
-        if (connCrit > 0)
-            return (ToHealth(thresholds.ConnCriticalSeverity), "Impresora(s) sin conexion (conectividad)");
-
-        if (connectedPrinters == 0 && queuedCurrent > 0)
-            return ("critical", "Hay cola pero no hay impresoras activas");
-
-        if (failedWithoutRetryCurrent >= thresholds.CriticalFailedWithoutRetryMin || queuedCurrent >= thresholds.CriticalQueueMin)
-        {
-            if (failedWithoutRetryCurrent >= thresholds.CriticalFailedWithoutRetryMin)
-                return (ToHealth(thresholds.FailedCriticalSeverity), $"Acumula {thresholds.CriticalFailedWithoutRetryMin} o mas fallos sin reenviar");
-            return (ToHealth(thresholds.QueueCriticalSeverity), $"Cola actual mayor o igual a {thresholds.CriticalQueueMin} trabajos");
-        }
-        if (connectedPrinters == 0)
-            return ("warning", "Sin impresoras activas en la tienda");
-
-        if (connWarn > 0)
-            return (ToHealth(thresholds.ConnWarningSeverity), "Impresora(s) con fallos de conexion (conectividad)");
-        if (missingHost >= thresholds.MissingHostMin && missingHost > 0)
-            return (ToHealth(thresholds.MissingHostSeverity), "Impresora(s) sin host configurado");
-
-        if (failedWithoutRetryCurrent >= thresholds.WarningFailedWithoutRetryMin || queuedCurrent >= thresholds.WarningQueueMin)
-        {
-            if (failedWithoutRetryCurrent >= thresholds.WarningFailedWithoutRetryMin)
-                return (ToHealth(thresholds.FailedWarningSeverity), "Tiene fallos recientes sin reenviar");
-            return (ToHealth(thresholds.QueueWarningSeverity), $"Cola actual entre {thresholds.WarningQueueMin} y {thresholds.CriticalQueueMin - 1} trabajos");
-        }
-        return ("healthy", "Operacion dentro de umbrales");
-    }
+        DashboardThresholds t)
+        => StoreHealthEvaluator.Compute(
+            connectedPrinters, queuedCurrent, failedWithoutRetryCurrent,
+            missingHost, connWarn, connCrit,
+            t.WarningQueueMin, t.CriticalQueueMin,
+            t.WarningFailedWithoutRetryMin, t.CriticalFailedWithoutRetryMin,
+            t.MissingHostMin, t.ConnWarningFailuresMin, t.ConnCriticalFailuresMin,
+            t.ConnCriticalSeverity, t.FailedCriticalSeverity, t.QueueCriticalSeverity,
+            t.ConnWarningSeverity, t.MissingHostSeverity, t.FailedWarningSeverity, t.QueueWarningSeverity);
 
     private async Task<DashboardThresholds> GetThresholdsAsync(CancellationToken cancellationToken)
     {
@@ -334,23 +313,7 @@ public class DashboardController : ControllerBase
             .SingleOrDefaultAsync(x => x.Id == 1, cancellationToken);
 
         if (row is not null)
-        {
-            return new DashboardThresholds(
-                row.WarningQueueMin,
-                row.CriticalQueueMin,
-                row.QueueWarningSeverity,
-                row.QueueCriticalSeverity,
-                row.WarningFailedWithoutRetryMin,
-                row.CriticalFailedWithoutRetryMin,
-                row.FailedWarningSeverity,
-                row.FailedCriticalSeverity,
-                row.MissingHostMin,
-                row.MissingHostSeverity,
-                row.ConnWarningFailuresMin,
-                row.ConnCriticalFailuresMin,
-                row.ConnWarningSeverity,
-                row.ConnCriticalSeverity);
-        }
+            return MapThresholdRow(row);
 
         var defaults = new DashboardThresholds(
             DefaultWarningQueueMin,
@@ -388,23 +351,46 @@ public class DashboardController : ControllerBase
             UpdatedAtUtc = DateTimeOffset.UtcNow
         };
 
-        await _dbContext.DashboardThresholds.AddAsync(defaultRow, cancellationToken);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _dbContext.DashboardThresholds.AddAsync(defaultRow, cancellationToken);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            // Concurrent request inserted the singleton first; reload what it wrote.
+            _dbContext.ChangeTracker.Clear();
+            var concurrent = await _dbContext.DashboardThresholds
+                .AsNoTracking()
+                .SingleOrDefaultAsync(x => x.Id == 1, cancellationToken);
+            if (concurrent is not null)
+                return MapThresholdRow(concurrent);
+            throw;
+        }
+
         return defaults;
     }
+
+    private static DashboardThresholds MapThresholdRow(DashboardThreshold row) =>
+        new(row.WarningQueueMin,
+            row.CriticalQueueMin,
+            row.QueueWarningSeverity,
+            row.QueueCriticalSeverity,
+            row.WarningFailedWithoutRetryMin,
+            row.CriticalFailedWithoutRetryMin,
+            row.FailedWarningSeverity,
+            row.FailedCriticalSeverity,
+            row.MissingHostMin,
+            row.MissingHostSeverity,
+            row.ConnWarningFailuresMin,
+            row.ConnCriticalFailuresMin,
+            row.ConnWarningSeverity,
+            row.ConnCriticalSeverity);
 
     private static string NormalizeSeverity(string? value)
     {
         var v = (value ?? "").Trim().ToLowerInvariant();
         return v is "info" or "warning" or "critical" ? v : "warning";
-    }
-
-    private static string ToHealth(string severity)
-    {
-        // El dashboard actual solo distingue healthy/warning/critical.
-        // "info" no debe elevar el estado, pero sí puede mostrarse en reason.
-        var s = NormalizeSeverity(severity);
-        return s == "critical" ? "critical" : (s == "warning" ? "warning" : "healthy");
     }
 
     private static DateTimeOffset ResolveWindowStartUtc(string? window)
