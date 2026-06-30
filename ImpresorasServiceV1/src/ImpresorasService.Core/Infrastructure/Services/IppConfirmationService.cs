@@ -24,8 +24,10 @@ internal sealed class IppConfirmationService : IIppConfirmationService, IDisposa
     {
         _options = options;
         _logger = logger;
-        // Timeout.InfiniteTimeSpan: dejamos que el CancellationToken controle el timeout por llamada.
-        _http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
+        // Singleton HttpClient con PooledConnectionLifetime para refrescar DNS/conexiones TCP.
+        // Timeout.InfiniteTimeSpan: el CancellationToken controla el timeout por llamada.
+        _http = new HttpClient(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(10) })
+            { Timeout = Timeout.InfiniteTimeSpan };
     }
 
     public async Task<IppQueryResult> QueryPrinterStateAsync(string printerHost, CancellationToken ct)
