@@ -258,7 +258,10 @@ public sealed class PrintExecutionService : IPrintExecutionService
         PrintSpoolResult result;
         try
         {
-            result = await _spooler.SendToPrinterAsync(job.PdfBlob, printer.SpoolQueue, ct);
+            if (job.PdfBlob is null || job.PdfBlob.Length == 0)
+                result = new PrintSpoolResult(false, "PDF_MISSING", "PDF no disponible en la base de datos.", false);
+            else
+                result = await _spooler.SendToPrinterAsync(job.PdfBlob, printer.SpoolQueue, ct);
         }
         catch (OperationCanceledException)
         {
@@ -279,6 +282,7 @@ public sealed class PrintExecutionService : IPrintExecutionService
         if (result.Success)
         {
             job2.Status = PrintJobStatus.SpoolAccepted;
+            job2.PdfBlob = null;
             job2.LastErrorCode = null;
             job2.LastErrorMessage = null;
             job2.NextRetryAtUtc = null;
