@@ -4,6 +4,8 @@ public class TelegramConfig
 {
     public int Id { get; set; }
 
+    public bool Enabled { get; set; } = true;
+
     /// <summary>Severidad mínima que dispara una notificación: "warning" o "critical".</summary>
     public string MinSeverity { get; set; } = "critical";
 

@@ -78,7 +78,7 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
 
         var config = await db.TelegramConfigs.AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == 1, ct);
-        if (config is null)
+        if (config is null || !config.Enabled)
             return;
 
         var minSeverity = config.MinSeverity.Trim().ToLowerInvariant();
