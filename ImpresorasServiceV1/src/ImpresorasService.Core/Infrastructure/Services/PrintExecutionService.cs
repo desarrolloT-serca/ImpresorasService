@@ -37,6 +37,8 @@ public sealed class PrintExecutionService : IPrintExecutionService
         // Nota de decisión: tratamos "Printing" como recuperable si lleva más que el timeout configurado + buffer.
         // Buffer evita que jobs válidos se reintenten mientras el spooler todavía está procesando.
         var stalePrintingAfter = TimeSpan.FromSeconds(_options.TimeoutSeconds + 10);
+        // Pending >2 min = IngestionService falló al enrutar; rescatar aquí para evitar huérfanos indefinidos.
+        var stalePendingAfter = TimeSpan.FromMinutes(2);
         // Solo traer trabajos realmente elegibles. Si hacemos Take antes de comprobar NextRetryAtUtc,
         // muchos RetryScheduled todavia no vencidos pueden ocupar la ventana y dejar fuera reintentos listos.
         var candidates = await _db.PrintJobs
@@ -44,7 +46,8 @@ public sealed class PrintExecutionService : IPrintExecutionService
             .Where(j =>
                 j.Status == PrintJobStatus.Routed
                 || (j.Status == PrintJobStatus.RetryScheduled && j.NextRetryAtUtc != null && j.NextRetryAtUtc <= now)
-                || (j.Status == PrintJobStatus.Printing && j.UpdatedAtUtc <= now - stalePrintingAfter))
+                || (j.Status == PrintJobStatus.Printing && j.UpdatedAtUtc <= now - stalePrintingAfter)
+                || (j.Status == PrintJobStatus.Pending && j.UpdatedAtUtc <= now - stalePendingAfter))
             .OrderBy(j => j.NextRetryAtUtc ?? j.CreatedAtUtc)
             .ThenBy(j => j.CreatedAtUtc)
             .Take(batchSize)
@@ -71,6 +74,14 @@ public sealed class PrintExecutionService : IPrintExecutionService
         foreach (var item in eligible)
         {
             if (cancellationToken.IsCancellationRequested) break;
+
+            // Rescate de Pending huérfanos: la ingesta los insertó pero el routing lanzó excepción.
+            if (item.Status == PrintJobStatus.Pending)
+            {
+                await RescuePendingJobAsync(item.JobId, item.StoreId, item.DocumentType, item.Channel, item.RowVersion, cancellationToken);
+                processed++;
+                continue;
+            }
 
             int printerIdToUse;
             if (item.PrinterId != null)
@@ -324,6 +335,49 @@ public sealed class PrintExecutionService : IPrintExecutionService
         await _db.SaveChangesAsync(ct);
         await tx2.CommitAsync(ct);
         return true;
+    }
+
+    private async Task RescuePendingJobAsync(Guid jobId, int storeId, string documentType, string channel, byte[] rowVersion, CancellationToken ct)
+    {
+        var resolved = await _routingResolver.ResolvePrinterAsync(storeId, documentType, channel, ct);
+
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+        var job = await _db.PrintJobs.FirstOrDefaultAsync(j => j.JobId == jobId, ct);
+        if (job is null) { await tx.CommitAsync(ct); return; }
+
+        if (!RowVersionSnapshotStillMatches(job.RowVersion, rowVersion))
+        {
+            await tx.CommitAsync(ct);
+            return;
+        }
+
+        if (resolved is null)
+        {
+            await TransitionToErrorFinalAsync(job, PrintJobStatus.Pending, "ROUTE_NOT_FOUND",
+                "No existe regla activa aplicable para este trabajo.", ct);
+        }
+        else
+        {
+            var now = DateTimeOffset.UtcNow;
+            job.Status = PrintJobStatus.Routed;
+            job.PrinterId = resolved;
+            job.UpdatedAtUtc = now;
+            _db.PrintJobs.Update(job);
+            await _db.PrintJobEvents.AddAsync(new PrintJobEvent
+            {
+                JobId = jobId,
+                EventType = "ROUTED",
+                OldStatus = PrintJobStatus.Pending,
+                NewStatus = PrintJobStatus.Routed,
+                ActorType = "system",
+                Message = $"Re-enrutado (rescate de Pending huérfano) a impresora {resolved}.",
+                OccurredAtUtc = now
+            }, ct);
+            _logger.LogInformation("Rescate Pending: job {JobId} enrutado a impresora {PrinterId}.", jobId, resolved);
+        }
+
+        await _db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
     }
 
     private async Task TransitionToErrorFinalAsync(PrintJob job, PrintJobStatus oldStatus, string errorCode, string message, CancellationToken ct)
