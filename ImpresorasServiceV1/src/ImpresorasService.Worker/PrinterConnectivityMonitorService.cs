@@ -1,4 +1,5 @@
 using System.Net.Sockets;
+using ImpresorasService.Application.Abstractions;
 using ImpresorasService.Domain.Connectivity;
 using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure.Persistence;
@@ -15,15 +16,18 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<PrinterConnectivityMonitorService> _logger;
     private readonly PrinterConnectivityOptions _options;
+    private readonly IIppConfirmationService _ippService;
 
     public PrinterConnectivityMonitorService(
         IServiceScopeFactory scopeFactory,
         ILogger<PrinterConnectivityMonitorService> logger,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IIppConfirmationService ippService)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
         _options = PrinterConnectivityOptions.FromConfiguration(configuration);
+        _ippService = ippService;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -68,7 +72,8 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
                 p.PrinterId,
                 p.SpoolQueue,
                 p.Host,
-                p.ConnectionFailuresStreak))
+                p.ConnectionFailuresStreak,
+                p.IppSupported))
             .ToListAsync(ct);
 
         if (printers.Count == 0)
@@ -142,10 +147,26 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
                 error: PrinterConnectivityState.HostNotConfiguredError,
                 checkedAtUtc: DateTimeOffset.UtcNow);
 
-            return ToUpdate(printer);
+            return ToUpdate(printer, candidate.IppSupported);
         }
 
         var result = await TryConnectAnyPortAsync(host!, ct);
+
+        bool? ippSupported = candidate.IppSupported;
+        if (result.Ok && _options.Ports.Contains(631))
+        {
+            // Sondear IPP siempre que 631 esté en la lista, independientemente
+            // del puerto que ganó la carrera (515/9100 pueden responder antes).
+            var ippResult = await _ippService.QueryPrinterStateAsync(host!, ct);
+            ippSupported = ippResult.Outcome != IppOutcome.Unavailable;
+            _logger.LogInformation("IPP probe {Host}: {Result}", host,
+                ippSupported.Value ? "compatible" : "no compatible");
+        }
+        else if (result.Ok && !_options.Ports.Contains(631) && candidate.IppSupported is null)
+        {
+            ippSupported = false;
+        }
+
         PrinterConnectivityState.ApplyProbeResult(
             printer,
             result.Ok,
@@ -153,18 +174,14 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
             result.Error,
             DateTimeOffset.UtcNow);
 
-        return ToUpdate(printer);
+        return ToUpdate(printer, ippSupported);
     }
 
     private static void ApplyConnectivityUpdate(
         ImpresorasDbContext db,
         ConnectivityUpdate update)
     {
-        var entity = new Printer
-        {
-            PrinterId = update.PrinterId
-        };
-
+        var entity = new Printer { PrinterId = update.PrinterId };
         db.Attach(entity);
         entity.LastConnectionOk = update.LastOk;
         entity.ConnectionFailuresStreak = update.FailuresStreak;
@@ -177,16 +194,23 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
         db.Entry(entity).Property(x => x.LastConnectionCheckAtUtc).IsModified = true;
         db.Entry(entity).Property(x => x.LastConnectionTransport).IsModified = true;
         db.Entry(entity).Property(x => x.LastConnectionError).IsModified = true;
+
+        if (update.IppSupported.HasValue)
+        {
+            entity.IppSupported = update.IppSupported;
+            db.Entry(entity).Property(x => x.IppSupported).IsModified = true;
+        }
     }
 
-    private static ConnectivityUpdate ToUpdate(Printer printer)
+    private static ConnectivityUpdate ToUpdate(Printer printer, bool? ippSupported = null)
         => new(
             printer.PrinterId,
             printer.LastConnectionOk == true,
             printer.ConnectionFailuresStreak,
             printer.LastConnectionCheckAtUtc ?? DateTimeOffset.UtcNow,
             printer.LastConnectionTransport,
-            printer.LastConnectionError);
+            printer.LastConnectionError,
+            ippSupported);
 
     private async Task<(bool Ok, string? Transport, string? Error)> TryConnectAnyPortAsync(
         string host,
@@ -255,7 +279,8 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
         int PrinterId,
         string SpoolQueue,
         string? Host,
-        int ConnectionFailuresStreak);
+        int ConnectionFailuresStreak,
+        bool? IppSupported);
 
     private sealed record ConnectivityUpdate(
         int PrinterId,
@@ -263,16 +288,17 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
         int FailuresStreak,
         DateTimeOffset CheckedAtUtc,
         string? Transport,
-        string? Error);
+        string? Error,
+        bool? IppSupported);
 
     private sealed class PrinterConnectivityOptions
     {
-        private static readonly int[] DefaultPorts = [515, 9100, 631, 445, 139];
+        private static readonly int[] DefaultPorts = [515, 9100, 631];
 
         public bool Enabled { get; private init; } = true;
         public int IntervalSeconds { get; private init; } = 30;
-        public int TimeoutMsPerPort { get; private init; } = 1500;
-        public int MaxParallelChecks { get; private init; } = 1;
+        public int TimeoutMsPerPort { get; private init; } = 600;
+        public int MaxParallelChecks { get; private init; } = 3;
         public int[] Ports { get; private init; } = DefaultPorts;
         public TimeSpan Interval => TimeSpan.FromSeconds(Math.Max(1, IntervalSeconds));
 
@@ -283,8 +309,8 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
             {
                 Enabled = ReadBool(section["Enabled"], true),
                 IntervalSeconds = Math.Max(1, ReadInt(section["IntervalSeconds"], 30)),
-                TimeoutMsPerPort = Math.Max(100, ReadInt(section["TimeoutMsPerPort"], 1500)),
-                MaxParallelChecks = Math.Max(1, ReadInt(section["MaxParallelChecks"], 1)),
+                TimeoutMsPerPort = Math.Max(100, ReadInt(section["TimeoutMsPerPort"], 600)),
+                MaxParallelChecks = Math.Max(1, ReadInt(section["MaxParallelChecks"], 3)),
                 Ports = ReadPorts(section) is { Length: > 0 } ports ? ports : DefaultPorts
             };
         }
