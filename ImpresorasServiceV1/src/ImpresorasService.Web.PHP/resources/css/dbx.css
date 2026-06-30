@@ -295,17 +295,17 @@
     display: flex;
     gap: 14px;
     align-items: flex-end;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
 }
 .dbx-cola-filters-form {
     display: flex;
     gap: 14px;
     align-items: flex-end;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     flex: 1 1 auto;
     min-width: 0;
 }
-.dbx-queue-topbar .dbx-filters { flex-wrap: nowrap; }
+.dbx-queue-topbar .dbx-filters { flex-wrap: wrap; }
 .dbx-queue-topbar .dbx-filters { align-items: flex-end; }
 .dbx-queue-topbar .dbx-filters { flex: 1 1 auto; }
 .dbx-queue-topbar .dbx-bulk-toolbar { margin-bottom: 0 !important; }
@@ -375,6 +375,12 @@
     .dbx-store-grid.cols-3,
     .dbx-store-grid.cols-2 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
     .dbx-printers-head, .dbx-printer-row { grid-template-columns: minmax(0, 1fr) 74px 40px; }
+}
+
+@media (min-width: 901px) and (max-width: 1450px) {
+    .dbx-cola-filters-form {
+        flex-basis: 100%;
+    }
 }
 
 @media (max-width: 900px) {
@@ -2299,4 +2305,13 @@ html.dark .local-printer-row:nth-child(odd) {
         width: 100%;
         margin-left: 0;
     }
+}
+
+/* --- Estado de tiendas: health ring overrides de marca --- */
+.dbx-health-ring-core strong {
+    color: var(--ui-primary);
+}
+
+html.dark .dbx-health-ring-core strong {
+    color: #e9edff;
 }

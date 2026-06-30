@@ -946,6 +946,38 @@ html.dark .btn-warning {
     margin-bottom: 2px;
 }
 
+.dbx-cola-section-header {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 12px;
+    width: 100%;
+}
+
+.dbx-cola-section-header-top {
+    align-items: center;
+    display: grid;
+    gap: 12px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    width: 100%;
+}
+
+.dbx-cola-section-header-top .dbx-title {
+    margin: 0;
+}
+
+.dbx-cola-section-header-top .bulk-selected-counter {
+    justify-self: end;
+}
+
+.dbx-cola-section-header-bottom {
+    align-items: center;
+    display: grid;
+    gap: 12px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    width: 100%;
+}
+
 .dbx-bulk-toolbar {
     display: flex;
     flex-wrap: wrap;
@@ -5596,13 +5628,94 @@ html.dark .dynamic-panel-error {
     justify-self: end !important;
 }
 
+.dbx-store-status-card .dbx-store-health-panel {
+    align-items: center !important;
+    display: flex !important;
+    flex: 1 1 auto !important;
+    flex-direction: row !important;
+    gap: 24px !important;
+    justify-content: flex-start !important;
+    margin-top: 0 !important;
+    min-height: 0 !important;
+}
+
+.dbx-store-status-card .dbx-health-ring {
+    align-self: center !important;
+    flex: 0 0 190px !important;
+    grid-column: unset !important;
+    grid-row: unset !important;
+    height: 190px !important;
+    width: 190px !important;
+}
+
+.dbx-store-status-card .dbx-health-ring::before {
+    inset: 19px !important;
+}
+
+.dbx-store-status-card .dbx-health-legend {
+    align-self: center !important;
+    column-gap: 10px !important;
+    display: grid !important;
+    flex: 1 1 auto !important;
+    grid-column: unset !important;
+    grid-row: unset !important;
+    grid-template-columns: 10px minmax(0, 1fr) 2.5rem 3.2rem !important;
+    margin-top: 0 !important;
+    min-width: 0 !important;
+    row-gap: 7px !important;
+    transform: none !important;
+    width: auto !important;
+}
+
+.dbx-store-status-card .dbx-health-legend-row {
+    align-items: center !important;
+    border: 0 !important;
+    display: contents !important;
+    gap: unset !important;
+    padding: 0 !important;
+}
+
+.dbx-store-status-card .dbx-health-legend-row:last-child {
+    border-bottom: 0 !important;
+}
+
+.dbx-store-status-card .dbx-health-legend-row span:not(.dbx-health-dot),
+.dbx-store-status-card .dbx-health-legend-row small {
+    font-size: 0.9rem !important;
+    white-space: nowrap !important;
+}
+
+.dbx-store-status-card .dbx-health-legend-row strong {
+    font-size: 1.15rem !important;
+    text-align: right !important;
+}
+
+.dbx-store-status-card .dbx-health-legend-row small {
+    text-align: right !important;
+}
+
 @media (max-width: 560px) {
     .dbx-store-health-panel {
         grid-template-columns: 1fr !important;
         justify-items: center !important;
     }
 
+    .dbx-store-status-card .dbx-store-health-panel {
+        flex-direction: column !important;
+        grid-template-rows: auto auto !important;
+    }
+
+    .dbx-store-status-card .dbx-health-legend {
+        transform: none;
+    }
+
     .dbx-health-ring {
+        grid-row: auto !important;
+    }
+
+    .dbx-store-status-card .dbx-health-ring,
+    .dbx-store-status-card .dbx-health-legend {
+        grid-column: auto !important;
         grid-row: auto !important;
     }
 
@@ -5695,4 +5808,56 @@ html.dark .app-toast {
     background: var(--ui-surface-raised);
     border-color: var(--ui-border-strong);
     box-shadow: var(--ui-shadow);
+}
+
+/* Cola: contador de seleccionados fijo en esquina superior derecha del banner. */
+.dbx-operational-card .dbx-cola-section-header-top {
+    align-items: center;
+    display: grid;
+    gap: 12px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    width: 100%;
+}
+
+.dbx-operational-card .dbx-cola-section-header-top .bulk-selected-counter {
+    grid-column: 2;
+    justify-self: end;
+}
+
+/* Estado de las tiendas: donut + leyenda centrados en el eje Y del card. */
+.dbx-dual-panels > .dbx-store-status-card {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+}
+
+.dbx-store-status-card > .dbx-card-body {
+    display: flex !important;
+    flex: 1 1 auto !important;
+    flex-direction: column !important;
+    min-height: 0 !important;
+}
+
+.dbx-store-status-card .dbx-title-row {
+    flex: 0 0 auto !important;
+    margin-bottom: 0 !important;
+}
+
+.dbx-store-status-card .dbx-store-health-panel {
+    align-items: center !important;
+    display: flex !important;
+    flex: 1 1 auto !important;
+    flex-direction: row !important;
+    justify-content: flex-start !important;
+    margin-top: 0 !important;
+    min-height: 0 !important;
+}
+
+.dbx-store-status-card .dbx-health-ring {
+    height: 190px !important;
+    width: 190px !important;
+}
+
+.dbx-store-status-card .dbx-health-legend {
+    align-self: center !important;
 }
