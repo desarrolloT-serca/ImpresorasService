@@ -6,7 +6,7 @@
 @php
     $window = $window ?? 'today';
     $tab = $tab ?? 'global';
-    $storeView = request('storeView', 'estado');
+    $storeView = request('storeView', 'detalle');
     if ($tab === 'stores') {
         $tab = 'global';
         $storeView = 'estado';
@@ -203,6 +203,21 @@
     $criticalShare = max(0, 100 - $healthyShare - $warningShare);
     $healthyEnd = $healthyShare;
     $warningEnd = $healthyShare + $warningShare;
+
+    if ($criticalCount > 0) {
+        $donutStatusLabel = 'Crítico';
+        $donutStatusShare = $criticalShare;
+        $donutAriaLabel = 'Tiendas críticas: ' . $criticalShare . '%';
+    } elseif ($warningCount > 0) {
+        $donutStatusLabel = 'Warning';
+        $donutStatusShare = $warningShare;
+        $donutAriaLabel = 'Tiendas en warning: ' . $warningShare . '%';
+    } else {
+        $donutStatusLabel = 'OK';
+        $donutStatusShare = $healthyShare;
+        $donutAriaLabel = 'Tiendas saludables: ' . $healthyShare . '%';
+    }
+
     $topStores = $storesList;
     $hasStoreRisk = $warningCount > 0 || $criticalCount > 0;
 @endphp
@@ -290,42 +305,22 @@
             </div>
         </article>
 
-        <article class="dbx-card">
+        <article class="dbx-card dbx-store-status-card">
             <div class="dbx-card-body">
                 @if($isAdminView)
-                    <div class="dbx-title-row dbx-title-row-center">
-                        <h2 class="dbx-title dbx-title-center">Estado de las tiendas</h2>
+                    <div class="dbx-title-row">
+                        <h2 class="dbx-title">Estado de las tiendas</h2>
                     </div>
                     <div class="dbx-store-health-panel">
                         <div
                             class="dbx-health-ring"
                             style="--healthy-end: {{ $healthyEnd }}%; --warning-end: {{ $warningEnd }}%;"
-                            aria-label="Tiendas saludables: {{ $healthyShare }}%"
+                            aria-label="{{ $donutAriaLabel }}"
                         >
                             <div class="dbx-health-ring-core">
-                                <strong>{{ $healthyShare }}%</strong>
-                                <span>
-                                    @if($criticalCount > 0)
-                                        Cr&iacute;tico
-                                    @elseif($warningCount > 0)
-                                        Warning
-                                    @else
-                                        OK
-                                    @endif
-                                </span>
+                                <strong>{{ $donutStatusShare }}%</strong>
+                                <span>{{ $donutStatusLabel }}</span>
                             </div>
-                        </div>
-                        <div class="dbx-health-ring-copy">
-                            @if($criticalCount > 0)
-                                <strong>Atenci&oacute;n prioritaria</strong>
-                                <span>Hay incidencias cr&iacute;ticas activas.</span>
-                            @elseif($warningCount > 0)
-                                <strong>Seguimiento recomendado</strong>
-                                <span>Operativa estable con avisos abiertos.</span>
-                            @else
-                                <strong>Operativa estable</strong>
-                                <span>Sin alertas cr&iacute;ticas activas.</span>
-                            @endif
                         </div>
                         <div class="dbx-health-legend" aria-label="Resumen de estado por tiendas">
                             <div class="dbx-health-legend-row">
@@ -1124,8 +1119,15 @@
                 throw new Error('Dashboard no encontrado');
             }
 
+            const prevToggle = currentRoot.querySelector('#dbx-stats-toggle');
+            const wasPercent = prevToggle?.textContent === 'N';
+
             currentRoot.replaceWith(nextRoot);
             prepareDynamicDashboard(nextRoot);
+
+            if (wasPercent) {
+                nextRoot.querySelector('#dbx-stats-toggle')?.click();
+            }
 
             if (pushState) {
                 history.pushState({ dynamicPanel: 'dashboard' }, '', url);
