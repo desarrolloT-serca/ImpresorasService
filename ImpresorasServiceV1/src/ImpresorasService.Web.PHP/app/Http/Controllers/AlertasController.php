@@ -40,7 +40,6 @@ class AlertasController extends Controller
 
         try {
             $this->api->put('api/telegram/config', [
-                'enabled'              => $request->boolean('enabled'),
                 'minSeverity'          => $minSeverity,
                 'notifyOnRecovery'     => $request->boolean('notifyOnRecovery'),
                 'checkIntervalMinutes' => $interval,

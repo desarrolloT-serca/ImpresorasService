@@ -372,7 +372,6 @@ public class ImpresorasDbContext : DbContext
             entity.ToTable("printer_telegram_config");
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
-            entity.Property(x => x.Enabled).HasColumnName("enabled").HasDefaultValue(true).IsRequired();
             entity.Property(x => x.MinSeverity).HasColumnName("min_severity").HasMaxLength(20).HasDefaultValue("critical").IsRequired();
             entity.Property(x => x.NotifyOnRecovery).HasColumnName("notify_on_recovery").HasDefaultValue(true).IsRequired();
             entity.Property(x => x.CheckIntervalMinutes).HasColumnName("check_interval_minutes").HasDefaultValue(5).IsRequired();

@@ -76,7 +76,7 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
 
         var config = await db.TelegramConfigs.AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == 1, ct);
-        if (config is null || !config.Enabled)
+        if (config is null)
             return;
 
         var minSeverity = config.MinSeverity.Trim().ToLowerInvariant();
@@ -104,36 +104,32 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
 
         foreach (var store in stores)
         {
-            var printerStats = await db.Printers.AsNoTracking()
+            var printers = await db.Printers.AsNoTracking()
                 .Where(p => p.IsActive == activeOnly && p.StoreId == store.StoreId)
                 .Select(p => new
                 {
-                    // Excluir impresoras con SpoolQueue UNC (\\servidor\cola): tienen host implícito.
-                    MissingHost = (p.Host == null || p.Host == "") && !EF.Functions.Like(p.SpoolQueue, "\\\\%") ? 1 : 0,
-                    ConnWarn = p.ConnectionFailuresStreak >= connWarnMin ? 1 : 0,
-                    ConnCrit = p.ConnectionFailuresStreak >= connCritMin ? 1 : 0,
+                    p.Host,
+                    p.SpoolQueue,
+                    p.ConnectionFailuresStreak,
                 })
                 .ToListAsync(ct);
 
-            var connected = printerStats.Count;
-            var missingHost = printerStats.Sum(x => x.MissingHost);
-            var connWarn = printerStats.Sum(x => x.ConnWarn);
-            var connCrit = printerStats.Sum(x => x.ConnCrit);
+            var connected = printers.Count;
+            var missingHost = printers.Count(p => string.IsNullOrEmpty(p.Host) && !HasImplicitHost(p.SpoolQueue));
+            var connWarn = printers.Count(p => p.ConnectionFailuresStreak >= connWarnMin);
+            var connCrit = printers.Count(p => p.ConnectionFailuresStreak >= connCritMin);
 
             var queued = await db.PrintJobs.AsNoTracking()
                 .CountAsync(j => j.StoreId == store.StoreId && QueueStatuses.Contains(j.Status), ct);
 
             // Alineado con DashboardController.BuildStoreRowsAsync: failedWindowStats usa UpdatedAtUtc
             // y cuenta ErrorFinal más jobs con múltiples intentos aún sin éxito.
-            var failed = await db.PrintJobs.AsNoTracking()
-                .CountAsync(j => j.StoreId == store.StoreId
-                    && j.UpdatedAtUtc >= windowStart
-                    && (j.Status == PrintJobStatus.ErrorFinal
-                        || (j.Status != PrintJobStatus.RetryScheduled
-                            && j.Status != PrintJobStatus.SpoolAccepted
-                            && j.Status != PrintJobStatus.PrintedConfirmed
-                            && j.Status != PrintJobStatus.PrintedUnknown
-                            && j.AttemptCount > 1)), ct);
+            var updatedJobs = await db.PrintJobs.AsNoTracking()
+                .Where(j => j.StoreId == store.StoreId && j.UpdatedAtUtc >= windowStart)
+                .Select(j => new { j.Status, j.AttemptCount })
+                .ToListAsync(ct);
+
+            var failed = updatedJobs.Count(j => j.Status == PrintJobStatus.ErrorFinal || IsFailedAfterRetry(j.Status, j.AttemptCount));
 
             var (health, reason) = StoreHealthEvaluator.Compute(
                 connected, queued, failed, missingHost, connWarn, connCrit,
@@ -236,6 +232,17 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
         "critical" => 2,
         _ => 0
     };
+
+    private static bool IsFailedAfterRetry(PrintJobStatus status, int attemptCount)
+        => status != PrintJobStatus.RetryScheduled
+            && status != PrintJobStatus.SpoolAccepted
+            && status != PrintJobStatus.PrintedConfirmed
+            && status != PrintJobStatus.PrintedUnknown
+            && attemptCount > 1;
+
+    private static bool HasImplicitHost(string? spoolQueue)
+        => !string.IsNullOrEmpty(spoolQueue)
+            && spoolQueue.StartsWith(@"\\", StringComparison.Ordinal);
 
     private async Task<int> GetCheckIntervalAsync(CancellationToken ct)
     {

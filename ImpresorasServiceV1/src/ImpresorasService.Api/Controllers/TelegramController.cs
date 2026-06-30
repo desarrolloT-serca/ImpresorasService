@@ -36,11 +36,11 @@ public class TelegramController : ControllerBase
             .SingleOrDefaultAsync(x => x.Id == 1, ct);
 
         if (cfg is null)
-            return Ok(new { enabled = false, minSeverity = "critical", notifyOnRecovery = true, checkIntervalMinutes = 5 });
+            return Ok(new { enabled = _telegramOptions.Value.Enabled, minSeverity = "critical", notifyOnRecovery = true, checkIntervalMinutes = 5 });
 
         return Ok(new
         {
-            cfg.Enabled,
+            enabled = _telegramOptions.Value.Enabled,
             cfg.MinSeverity,
             cfg.NotifyOnRecovery,
             cfg.CheckIntervalMinutes,
@@ -64,7 +64,6 @@ public class TelegramController : ControllerBase
             await _db.TelegramConfigs.AddAsync(cfg, ct);
         }
 
-        cfg.Enabled = req.Enabled;
         cfg.MinSeverity = req.MinSeverity!.ToLowerInvariant();
         cfg.NotifyOnRecovery = req.NotifyOnRecovery;
         cfg.CheckIntervalMinutes = req.CheckIntervalMinutes;
@@ -178,6 +177,6 @@ public class TelegramController : ControllerBase
 
     // --- DTOs ---
 
-    public record PutConfigRequest(bool Enabled, string? MinSeverity, bool NotifyOnRecovery, int CheckIntervalMinutes);
+    public record PutConfigRequest(string? MinSeverity, bool NotifyOnRecovery, int CheckIntervalMinutes);
     public record AddChatRequest(long ChatId, string? Description, int? StoreId);
 }

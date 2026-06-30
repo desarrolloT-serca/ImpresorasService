@@ -34,10 +34,11 @@
             <form method="POST" action="{{ route('alertas.config.save') }}" class="dbx-form mt-4">
                 @csrf
                 <div class="dbx-form-grid">
-                    <div class="dbx-form-group flex items-center gap-2 pt-5">
-                        <input id="enabled" type="checkbox" name="enabled" value="1"
-                            {{ $enabled ? 'checked' : '' }}>
-                        <label for="enabled" class="dbx-filter-label m-0">Alertas activas</label>
+                    <div class="dbx-form-group">
+                        <span class="dbx-filter-label">Estado del servicio</span>
+                        <span class="badge {{ $enabled ? 'badge-success' : 'badge-neutral' }}">
+                            {{ $enabled ? 'Alertas activas' : 'Alertas desactivadas' }}
+                        </span>
                     </div>
 
                     <div class="dbx-form-group">
