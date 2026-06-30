@@ -18,4 +18,7 @@ public class Printer
     public DateTimeOffset? LastConnectionCheckAtUtc { get; set; }
     public string? LastConnectionTransport { get; set; }
     public string? LastConnectionError { get; set; }
+
+    // null = sin comprobar, true = soporta IPP, false = no soporta IPP
+    public bool? IppSupported { get; set; }
 }

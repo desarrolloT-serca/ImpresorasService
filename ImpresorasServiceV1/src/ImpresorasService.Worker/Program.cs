@@ -17,6 +17,7 @@ builder.Services.AddHostedService<IngestionBackgroundService>();
 builder.Services.AddHostedService<PrintExecutionBackgroundService>();
 builder.Services.AddHostedService<SpoolAcceptedWatchdogBackgroundService>();
 builder.Services.AddHostedService<PrinterConnectivityMonitorService>();
+builder.Services.AddHostedService<StoreHealthAlertBackgroundService>();
 
 var host = builder.Build();
 
