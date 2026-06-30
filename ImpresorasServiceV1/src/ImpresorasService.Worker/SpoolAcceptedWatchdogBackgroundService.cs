@@ -65,9 +65,21 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
         var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
 
         var windowLimit = Math.Max(200, _options.Value.SpoolAcceptedWatchBatchSize * 50);
+
+        // Proyectar solo campos escalares: PdfBlob se excluye deliberadamente para evitar OOM.
         var windowCandidates = await db.PrintJobs
             .AsNoTracking()
             .Where(j => j.Status == PrintJobStatus.SpoolAccepted || j.Status == PrintJobStatus.PrinterBlocked)
+            .Select(j => new WatchdogJob
+            {
+                JobId          = j.JobId,
+                PrinterId      = j.PrinterId,
+                Status         = j.Status,
+                UpdatedAtUtc   = j.UpdatedAtUtc,
+                LastErrorCode  = j.LastErrorCode,
+                LastErrorMessage = j.LastErrorMessage,
+                NextRetryAtUtc = j.NextRetryAtUtc,
+            })
             .Take(windowLimit)
             .ToListAsync(ct);
 
@@ -95,7 +107,21 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
                     job.JobId, oldStatus, ippResult?.Outcome, (now - job.UpdatedAtUtc).TotalMinutes);
                 continue;
             }
-            db.PrintJobs.Update(job);
+
+            // Attach + mark-modified evita cargar la entidad completa (PdfBlob).
+            var entity = new PrintJob { JobId = job.JobId };
+            db.PrintJobs.Attach(entity);
+            entity.Status           = job.Status;
+            entity.UpdatedAtUtc     = job.UpdatedAtUtc;
+            entity.LastErrorCode    = job.LastErrorCode;
+            entity.LastErrorMessage = job.LastErrorMessage;
+            entity.NextRetryAtUtc  = job.NextRetryAtUtc;
+            db.Entry(entity).Property(x => x.Status).IsModified           = true;
+            db.Entry(entity).Property(x => x.UpdatedAtUtc).IsModified     = true;
+            db.Entry(entity).Property(x => x.LastErrorCode).IsModified    = true;
+            db.Entry(entity).Property(x => x.LastErrorMessage).IsModified = true;
+            db.Entry(entity).Property(x => x.NextRetryAtUtc).IsModified   = true;
+
             await db.PrintJobEvents.AddAsync(BuildEvent(job, oldStatus, now), ct);
         }
 
@@ -120,7 +146,7 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
 
     private static async Task<Dictionary<int, (string Host, bool? IppSupported)>> LoadPrinterHostsAsync(
         ImpresorasDbContext db,
-        List<PrintJob> candidates,
+        List<WatchdogJob> candidates,
         CancellationToken ct)
     {
         var printerIds = candidates
@@ -165,7 +191,7 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
     }
 
     private IppQueryResult? ResolveIppResult(
-        PrintJob job,
+        WatchdogJob job,
         Dictionary<int, (string Host, bool? IppSupported)> printerHosts,
         Dictionary<string, IppQueryResult> ippResults)
     {
@@ -181,7 +207,7 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
 
     // Devuelve false si el trabajo debe ignorarse este ciclo (esperar recuperación de impresora).
     private static bool ApplyOutcome(
-        PrintJob job,
+        WatchdogJob job,
         IppQueryResult? ippResult,
         int maxAgeSeconds,
         DateTimeOffset now)
@@ -255,7 +281,7 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
         }
     }
 
-    private static PrintJobEvent BuildEvent(PrintJob job, PrintJobStatus oldStatus, DateTimeOffset now)
+    private static PrintJobEvent BuildEvent(WatchdogJob job, PrintJobStatus oldStatus, DateTimeOffset now)
     {
         var message = job.Status switch
         {
@@ -276,5 +302,16 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
             ActorType = "system",
             OccurredAtUtc = now
         };
+    }
+
+    private sealed class WatchdogJob
+    {
+        public Guid JobId { get; init; }
+        public int? PrinterId { get; init; }
+        public PrintJobStatus Status { get; set; }
+        public DateTimeOffset UpdatedAtUtc { get; set; }
+        public string? LastErrorCode { get; set; }
+        public string? LastErrorMessage { get; set; }
+        public DateTimeOffset? NextRetryAtUtc { get; set; }
     }
 }
