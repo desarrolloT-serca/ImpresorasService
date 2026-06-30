@@ -124,7 +124,7 @@
                         </td>
                     </tr>
                     @empty
-                    <x-ui.empty-row colspan="5" message="No hay chats registrados." />
+                    <x-ui.empty-row colspan="6" message="No hay chats registrados." />
                     @endforelse
                 </tbody>
             </x-ui.table>
