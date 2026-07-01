@@ -23,17 +23,24 @@ public class SourcePrintJobsController : ControllerBase
     // Cancela todos los PrintJobs de prueba que aún no hayan llegado al spooler.
     // Los que ya están en SpoolAccepted ya fueron enviados a Windows; no los toca.
     [HttpPost("test/cancel-all")]
-    public async Task<IActionResult> CancelAllTestJobs(CancellationToken cancellationToken)
+    public async Task<IActionResult> CancelAllTestJobs(
+        [FromQuery] string? runId,
+        CancellationToken cancellationToken)
     {
         var activeStates = new[]
         {
             PrintJobStatus.Pending, PrintJobStatus.Routed,
-            PrintJobStatus.RetryScheduled, PrintJobStatus.Printing
+            PrintJobStatus.RetryScheduled, PrintJobStatus.Printing,
+            PrintJobStatus.PrinterBlocked
         };
 
-        var jobs = await _dbContext.PrintJobs
-            .Where(j => j.SourceSystem == "PRUEBA" && activeStates.Contains(j.Status))
-            .ToListAsync(cancellationToken);
+        var query = _dbContext.PrintJobs
+            .Where(j => j.SourceSystem == "PRUEBA" && activeStates.Contains(j.Status));
+
+        if (!string.IsNullOrWhiteSpace(runId))
+            query = query.Where(j => EF.Functions.Like(j.ExternalJobId, $"%{runId}%"));
+
+        var jobs = await query.ToListAsync(cancellationToken);
 
         if (jobs.Count == 0)
             return Ok(new { cancelled = 0 });

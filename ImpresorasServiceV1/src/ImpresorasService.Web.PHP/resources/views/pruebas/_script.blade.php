@@ -1,11 +1,20 @@
 (function () {
     const csrf     = document.querySelector('meta[name="csrf-token"]')?.content || '';
-    const TERMINAL = new Set(['SpoolAccepted', 'ErrorFinal', 'PrintedConfirmed', 'PrintedUnknown']);
+    const TERMINAL = new Set([
+        'SpoolAccepted', 'ErrorFinal', 'PrintedConfirmed',
+        'PrintedUnknown', 'Cancelled', 'PrinterBlocked',
+    ]);
     const CSS_MAP  = {
-        SpoolAccepted: 'badge-success', PrintedConfirmed: 'badge-success',
-        PrintedUnknown: 'badge-success', ErrorFinal: 'badge-danger',
-        Pending: 'badge-warning', Routed: 'badge-warning',
-        Printing: 'badge-warning', RetryScheduled: 'badge-warning',
+        PrintedConfirmed: 'badge-success',
+        SpoolAccepted:    'badge-success',
+        PrintedUnknown:   'badge-warning',   // incertidumbre, no éxito
+        ErrorFinal:       'badge-danger',
+        PrinterBlocked:   'badge-danger',
+        Cancelled:        'badge-neutral',
+        Pending:          'badge-warning',
+        Routed:           'badge-warning',
+        Printing:         'badge-warning',
+        RetryScheduled:   'badge-warning',
     };
 
     const STORE_OPTIONS = @json(collect($stores)->map(function ($s) {
@@ -207,21 +216,26 @@
 
         if (jobIds.length && runId) {
             // Persistir estado para sobrevivir a un refresco de página
+            const startedAt = Date.now();
             sessionStorage.setItem('prueba_run', JSON.stringify({
-                scenarioId, runId, jobIds, startedAt: Date.now(),
+                scenarioId, runId, jobIds, startedAt,
             }));
-            startPolling(runId, jobIds);
+            startPolling(runId, jobIds, startedAt);
+        } else {
+            // Sin jobs rastreables (todos fallaron al inyectar): re-habilitar botón
+            setRunning(false);
+            if (!data.errors?.length) window.showToast?.('No se inyectó ningún trabajo.', 'warning');
         }
     });
 
     // ── Polling ──────────────────────────────────────────────────────────────
 
     const POLL_INTERVAL_MS = 1500;
-    const POLL_TIMEOUT_MS  = 5 * 60 * 1000; // 5 minutos máximo
+    const POLL_TIMEOUT_MS  = 7 * 60 * 1000; // 7 min: backoffs máximos 15+30+60+90=195s + margen
 
-    function startPolling(runId, jobIds) {
+    // startedAt opcional: permite pasar el timestamp original en restore para no reiniciar el timeout
+    function startPolling(runId, jobIds, startedAt = Date.now()) {
         if (pollTimer) clearInterval(pollTimer);
-        const startedAt = Date.now();
 
         async function tick() {
             // Timeout de seguridad: parar si lleva más de 5 minutos
@@ -298,18 +312,24 @@
         });
         document.getElementById('pruebas-resultado-resumen').textContent = 'Retomando seguimiento…';
         setRunning(true);
-        startPolling(runId, jobIds);
+        startPolling(runId, jobIds, startedAt); // conserva el timeout original, no reinicia en F5
     })();
 
     // ── Cancelar prueba activa ───────────────────────────────────────────────
 
     document.getElementById('btn-cancelar-prueba')?.addEventListener('click', async () => {
+        // Leer runId ANTES de borrar sessionStorage para filtrar solo los jobs de este run
+        let runId = null;
+        try { runId = JSON.parse(sessionStorage.getItem('prueba_run') || '{}').runId || null; } catch {}
+
         if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
         sessionStorage.removeItem('prueba_run');
         setRunning(false);
         document.getElementById('pruebas-resultado-resumen').textContent = 'Cancelando…';
 
-        const { ok, data } = await apiFetch('{{ route('pruebas.cancel') }}', { method: 'POST' });
+        const { ok, data } = await apiFetch('{{ route('pruebas.cancel') }}', {
+            method: 'POST', json: runId ? { runId } : {},
+        });
         document.getElementById('pruebas-resultado-resumen').textContent = ok
             ? `Cancelados ${data?.cancelled ?? 0} trabajos pendientes. Los ya enviados al spooler Windows siguen en su cola.`
             : 'Error al cancelar.';

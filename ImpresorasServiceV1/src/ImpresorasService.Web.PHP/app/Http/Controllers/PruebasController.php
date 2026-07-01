@@ -20,10 +20,6 @@ class PruebasController extends Controller
         'ALBARAN', 'FACTURA', 'TRASPASO', 'CALLCENTER', 'AD360', 'DEVOLUCION',
     ];
 
-    private const TERMINAL_STATUSES = [
-        'SpoolAccepted', 'ErrorFinal', 'PrintedConfirmed', 'PrintedUnknown',
-    ];
-
     private const STATUS_NAMES = [
         0 => 'Pending', 1 => 'Routed', 2 => 'Printing', 3 => 'SpoolAccepted',
         4 => 'PrintedConfirmed', 5 => 'PrintedUnknown', 6 => 'RetryScheduled',
@@ -92,11 +88,20 @@ class PruebasController extends Controller
             'batches.*.pdfId'        => 'nullable|string|max:36',
         ]);
 
-        $id       = $request->input('id') ?: (string) Str::uuid();
+        $id = $request->input('id') ?: (string) Str::uuid();
+
+        // Preservar createdAt original para no alterar el orden de la lista en cada edición
+        $existingCreatedAt = null;
+        $existingPath = self::SCENARIOS_DIR . '/' . $id . '.json';
+        if (Storage::disk(self::SCENARIOS_DISK)->exists($existingPath)) {
+            $existing = json_decode(Storage::disk(self::SCENARIOS_DISK)->get($existingPath), true);
+            $existingCreatedAt = $existing['createdAt'] ?? null;
+        }
+
         $scenario = [
             'id'        => $id,
             'name'      => $request->input('name'),
-            'createdAt' => $request->input('createdAt') ?: now()->toIso8601String(),
+            'createdAt' => $existingCreatedAt ?? now()->toIso8601String(),
             'batches'   => array_map(fn ($b) => [
                 'storeId'      => (int) $b['storeId'],
                 'documentType' => strtoupper(trim($b['documentType'])),
@@ -182,6 +187,14 @@ class PruebasController extends Controller
         }
 
         $scenario = json_decode(Storage::disk(self::SCENARIOS_DISK)->get($path), true);
+
+        $totalJobs = array_sum(array_column($scenario['batches'] ?? [], 'count'));
+        if ($totalJobs > 200) {
+            return response()->json([
+                'error' => "El escenario totaliza {$totalJobs} trabajos. Máximo 200 por ejecución para garantizar el seguimiento en tiempo real.",
+            ], 422);
+        }
+
         $ts       = now()->format('YmdHis');
         $slug     = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $scenario['name'] ?? 'PRUEBA'));
         $slug     = substr($slug, 0, 20);
@@ -237,9 +250,14 @@ class PruebasController extends Controller
         ]);
     }
 
-    public function cancelAll(): JsonResponse
+    public function cancelAll(Request $request): JsonResponse
     {
-        $result = $this->api->post('api/sourceprintjobs/test/cancel-all', []);
+        $runId    = $request->input('runId');
+        $endpoint = 'api/sourceprintjobs/test/cancel-all';
+        if ($runId) {
+            $endpoint .= '?' . http_build_query(['runId' => $runId]);
+        }
+        $result = $this->api->post($endpoint, []);
         return response()->json($result);
     }
 
