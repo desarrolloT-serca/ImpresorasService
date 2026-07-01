@@ -90,6 +90,7 @@ class DashboardController extends Controller
         $jobs     = $batch2Result['jobs'];
         $printers = $batch2Result['printers'];
         $users    = $isAdminDashboard ? ($batch2Result['users'] ?? []) : [];
+        $overview = $this->overviewService->fetch($effectiveStore, $window);
 
         [$windowStart, $windowEnd] = $this->resolveWindowRange($window);
         $connWarnMin = (int) ($thresholds['connWarningFailuresMin'] ?? 2);
@@ -288,6 +289,10 @@ class DashboardController extends Controller
         }
         unset($row);
 
+        if ($overview !== null) {
+            $this->applyOverviewStores($storeStats, $overview, $storeNameById);
+        }
+
         $stores = array_values($storeStats);
         usort($stores, function (array $a, array $b) use ($storeSort): int {
             if ($storeSort === 'name') {
@@ -324,6 +329,10 @@ class DashboardController extends Controller
             'activePrinters' => array_sum(array_map(fn (array $row): int => (int) ($row['connectedPrinters'] ?? 0), $stores)),
             'activeStores' => count(array_filter($stores, fn (array $row): bool => (int) ($row['connectedPrinters'] ?? 0) > 0)),
         ];
+
+        if ($overview !== null) {
+            $kpis = $this->applyOverviewKpis($kpis, $overview);
+        }
 
         if (config('impresoras.dashboard_log_overview_diff')) {
             $this->overviewService->logKpiDiffIfAny($kpis, $effectiveStore, $window);
@@ -424,6 +433,72 @@ class DashboardController extends Controller
             'printers' => [],
             'unassignedQueueCurrent' => 0,
         ];
+    }
+
+    /**
+     * @param array<string, int> $kpis
+     * @param array<string, mixed> $overview
+     * @return array<string, int>
+     */
+    private function applyOverviewKpis(array $kpis, array $overview): array
+    {
+        $overviewKpis = $overview['kpis'] ?? $overview['Kpis'] ?? [];
+        if (!is_array($overviewKpis)) {
+            return $kpis;
+        }
+
+        foreach (['received', 'printed', 'failed', 'queueCurrent', 'failedWithoutRetryCurrent'] as $key) {
+            $kpis[$key] = $this->readInt($overviewKpis, $key, $kpis[$key] ?? 0);
+        }
+
+        return $kpis;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $storeStats
+     * @param array<string, mixed> $overview
+     * @param array<int, string> $storeNameById
+     */
+    private function applyOverviewStores(array &$storeStats, array $overview, array $storeNameById): void
+    {
+        $overviewStores = $overview['stores'] ?? $overview['Stores'] ?? [];
+        if (!is_array($overviewStores)) {
+            return;
+        }
+
+        foreach ($overviewStores as $overviewStore) {
+            if (!is_array($overviewStore)) {
+                continue;
+            }
+
+            $storeId = $this->readInt($overviewStore, 'storeId');
+            if ($storeId <= 0) {
+                continue;
+            }
+
+            if (!isset($storeStats[$storeId])) {
+                $storeStats[$storeId] = $this->makeEmptyStore($storeId, $storeNameById);
+            }
+
+            $storeStats[$storeId]['storeName'] = (string) ($overviewStore['storeName'] ?? $overviewStore['StoreName'] ?? $storeStats[$storeId]['storeName']);
+            $storeStats[$storeId]['received'] = $this->readInt($overviewStore, 'received', (int) $storeStats[$storeId]['received']);
+            $storeStats[$storeId]['printed'] = $this->readInt($overviewStore, 'printed', (int) $storeStats[$storeId]['printed']);
+            $storeStats[$storeId]['failed'] = $this->readInt($overviewStore, 'failed', (int) $storeStats[$storeId]['failed']);
+            $storeStats[$storeId]['queuedCurrent'] = $this->readInt($overviewStore, 'queuedCurrent', (int) $storeStats[$storeId]['queuedCurrent']);
+            $storeStats[$storeId]['failedWithoutRetryCurrent'] = $this->readInt($overviewStore, 'failedWithoutRetryCurrent', (int) $storeStats[$storeId]['failedWithoutRetryCurrent']);
+            $storeStats[$storeId]['health'] = (string) ($overviewStore['health'] ?? $overviewStore['Health'] ?? $storeStats[$storeId]['health']);
+            $storeStats[$storeId]['healthReason'] = (string) ($overviewStore['healthReason'] ?? $overviewStore['HealthReason'] ?? $storeStats[$storeId]['healthReason']);
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    private function readInt(array $row, string $key, int $fallback = 0): int
+    {
+        $pascalKey = ucfirst($key);
+
+        return (int) ($row[$key] ?? $row[$pascalKey] ?? $fallback);
     }
 
     /**

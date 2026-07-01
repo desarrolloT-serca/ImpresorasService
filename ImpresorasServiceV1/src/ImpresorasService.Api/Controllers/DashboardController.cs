@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using System.Security.Claims;
 using ImpresorasService.Application.Services;
 using ImpresorasService.Domain;
@@ -8,6 +9,18 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace ImpresorasService.Api.Controllers;
+
+public static class DashboardPrintJobPredicates
+{
+    public static readonly Expression<Func<PrintJob, bool>> FailedWithoutRetryCurrent =
+        x => x.Status == PrintJobStatus.ErrorFinal
+             || ((x.Status == PrintJobStatus.Pending
+                  || x.Status == PrintJobStatus.Routed
+                  || x.Status == PrintJobStatus.Printing
+                  || x.Status == PrintJobStatus.Cancelled
+                  || x.Status == PrintJobStatus.PrinterBlocked)
+                 && x.AttemptCount > 1);
+}
 
 [ApiController]
 [Authorize(Policy = "EmployeeOrAbove")]
@@ -27,11 +40,6 @@ public class DashboardController : ControllerBase
         PrintJobStatus.Routed,
         PrintJobStatus.Printing,
         PrintJobStatus.RetryScheduled
-    ];
-
-    private static readonly PrintJobStatus[] FailedWithoutRetryStatuses =
-    [
-        PrintJobStatus.ErrorFinal
     ];
 
     private readonly ImpresorasDbContext _dbContext;
@@ -85,12 +93,7 @@ public class DashboardController : ControllerBase
                      || (PrintedStatuses.Contains(x.Status) && x.AttemptCount > 1),
                 cancellationToken),
             queueCurrent = await jobs.CountAsync(x => QueueStatuses.Contains(x.Status), cancellationToken),
-            failedWithoutRetryCurrent = await jobsUpdatedInWindow.CountAsync(
-                x => FailedWithoutRetryStatuses.Contains(x.Status)
-                     || (x.Status != PrintJobStatus.RetryScheduled
-                         && !PrintedStatuses.Contains(x.Status)
-                         && x.AttemptCount > 1),
-                cancellationToken),
+            failedWithoutRetryCurrent = await jobsUpdatedInWindow.CountAsync(DashboardPrintJobPredicates.FailedWithoutRetryCurrent, cancellationToken),
             activePrinters = await printers.CountAsync(cancellationToken),
             activeStores = await stores.CountAsync(cancellationToken)
         };
@@ -245,15 +248,12 @@ public class DashboardController : ControllerBase
             .ToDictionaryAsync(x => x.StoreId, x => x.QueuedCurrent, cancellationToken);
 
         var failedWindowStats = await jobsUpdatedInWindow
+            .Where(DashboardPrintJobPredicates.FailedWithoutRetryCurrent)
             .GroupBy(x => x.StoreId)
             .Select(x => new
             {
                 StoreId = x.Key,
-                FailedWithoutRetryCurrent = x.Count(j =>
-                    FailedWithoutRetryStatuses.Contains(j.Status)
-                    || (j.Status != PrintJobStatus.RetryScheduled
-                        && !PrintedStatuses.Contains(j.Status)
-                        && j.AttemptCount > 1))
+                FailedWithoutRetryCurrent = x.Count()
             })
             .ToDictionaryAsync(x => x.StoreId, x => x.FailedWithoutRetryCurrent, cancellationToken);
 

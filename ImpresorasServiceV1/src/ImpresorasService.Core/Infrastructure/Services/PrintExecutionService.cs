@@ -282,7 +282,6 @@ public sealed class PrintExecutionService : IPrintExecutionService
         if (result.Success)
         {
             job2.Status = PrintJobStatus.SpoolAccepted;
-            job2.PdfBlob = null;
             job2.LastErrorCode = null;
             job2.LastErrorMessage = null;
             job2.NextRetryAtUtc = null;

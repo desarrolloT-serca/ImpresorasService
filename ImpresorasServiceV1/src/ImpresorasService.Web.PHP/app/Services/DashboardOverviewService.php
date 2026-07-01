@@ -6,7 +6,6 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Cliente del endpoint agregado GET /api/dashboard/overview.
- * Fase de migracion: solo lectura / comparacion; la UI sigue usando agregacion legacy.
  */
 class DashboardOverviewService
 {

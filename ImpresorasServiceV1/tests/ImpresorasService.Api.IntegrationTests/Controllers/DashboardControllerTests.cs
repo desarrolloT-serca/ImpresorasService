@@ -1,4 +1,6 @@
 using System.Net.Http.Json;
+using System.Reflection;
+using ImpresorasService.Api.Controllers;
 using ImpresorasService.Domain;
 using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure.Persistence;
@@ -54,6 +56,30 @@ public sealed class DashboardControllerTests : IntegrationTestBase
         Assert.Equal(3, body!.Kpis!.Received);
         Assert.Single(body.Stores!);
         Assert.Equal(DashboardTestStoreId, body.Stores![0].StoreId);
+    }
+
+    [Fact]
+    public void FailedWithoutRetryCurrentPredicate_TranslatesWithHanaProvider()
+    {
+        var options = new DbContextOptionsBuilder<ImpresorasDbContext>();
+        ConfigureHanaProvider(options, "ServerNode=localhost:30015;UID=test;PWD=test;Current Schema=TEST");
+
+        using var db = new ImpresorasDbContext(options.Options);
+
+        var sql = db.PrintJobs
+            .Where(DashboardPrintJobPredicates.FailedWithoutRetryCurrent)
+            .Select(x => x.JobId)
+            .ToQueryString();
+
+        Assert.Contains("printer_print_job", sql, StringComparison.OrdinalIgnoreCase);
+
+        var groupedSql = db.PrintJobs
+            .Where(DashboardPrintJobPredicates.FailedWithoutRetryCurrent)
+            .GroupBy(x => x.StoreId)
+            .Select(x => new { StoreId = x.Key, Count = x.Count() })
+            .ToQueryString();
+
+        Assert.Contains("GROUP BY", groupedSql, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -171,6 +197,43 @@ public sealed class DashboardControllerTests : IntegrationTestBase
             CreatedAtUtc = now,
             UpdatedAtUtc = now
         };
+    }
+
+    private static void ConfigureHanaProvider(DbContextOptionsBuilder options, string connectionString)
+    {
+        var hanaAssembly = Assembly.Load("Sap.EntityFrameworkCore.Hana.v8.0");
+        var extensionsType = hanaAssembly.GetType("Microsoft.EntityFrameworkCore.HanaDbContextOptionsBuilderExtensions")
+                             ?? hanaAssembly.GetType("Sap.EntityFrameworkCore.Hana.Infrastructure.HanaDbContextOptionsBuilderExtensions")
+                             ?? hanaAssembly.GetTypes().FirstOrDefault(t => t.Name == "HanaDbContextOptionsBuilderExtensions");
+
+        var useHana = extensionsType?.GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .Where(m => m.Name is "UseHana" or "AddHana")
+            .Where(m =>
+            {
+                var parameters = m.GetParameters();
+                return parameters.Length >= 1
+                       && typeof(DbContextOptionsBuilder).IsAssignableFrom(parameters[0].ParameterType);
+            })
+            .OrderByDescending(m => m.GetParameters().Any(p => p.ParameterType == typeof(string)))
+            .ThenByDescending(m => m.GetParameters().Length)
+            .FirstOrDefault();
+
+        Assert.NotNull(useHana);
+
+        var args = useHana.GetParameters()
+            .Select((p, index) =>
+            {
+                if (index == 0)
+                    return (object?)options;
+                if (p.ParameterType == typeof(string))
+                    return connectionString;
+                if (p.HasDefaultValue)
+                    return p.DefaultValue;
+                return p.ParameterType.IsValueType ? Activator.CreateInstance(p.ParameterType) : null;
+            })
+            .ToArray();
+
+        useHana.Invoke(null, args);
     }
 
     private sealed class DashboardOverviewResponse
