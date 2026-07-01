@@ -339,27 +339,53 @@ public sealed class PrintExecutionService : IPrintExecutionService
         var resolved = await _routingResolver.ResolvePrinterAsync(storeId, documentType, channel, ct);
 
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
-        var job = await _db.PrintJobs.FirstOrDefaultAsync(j => j.JobId == jobId, ct);
-        if (job is null) { await tx.CommitAsync(ct); return; }
 
-        if (!RowVersionSnapshotStillMatches(job.RowVersion, rowVersion))
-        {
-            await tx.CommitAsync(ct);
-            return;
-        }
+        // Solo RowVersion para el check de concurrencia; evitar cargar PdfBlob que no se necesita en el rescate.
+        var versionRow = await _db.PrintJobs.AsNoTracking()
+            .Where(j => j.JobId == jobId)
+            .Select(j => new { j.RowVersion })
+            .FirstOrDefaultAsync(ct);
+
+        if (versionRow is null) { await tx.CommitAsync(ct); return; }
+        if (!RowVersionSnapshotStillMatches(versionRow.RowVersion, rowVersion)) { await tx.CommitAsync(ct); return; }
+
+        var now = DateTimeOffset.UtcNow;
+        // Attach + mark-modified: no carga PdfBlob, no lo sobreescribe.
+        var entity = new PrintJob { JobId = jobId };
+        _db.PrintJobs.Attach(entity);
 
         if (resolved is null)
         {
-            await TransitionToErrorFinalAsync(job, PrintJobStatus.Pending, "ROUTE_NOT_FOUND",
-                "No existe regla activa aplicable para este trabajo.", ct);
+            entity.Status = PrintJobStatus.ErrorFinal;
+            entity.LastErrorCode = "ROUTE_NOT_FOUND";
+            entity.LastErrorMessage = "No existe regla activa aplicable para este trabajo.";
+            entity.NextRetryAtUtc = null;
+            entity.UpdatedAtUtc = now;
+            _db.Entry(entity).Property(x => x.Status).IsModified = true;
+            _db.Entry(entity).Property(x => x.LastErrorCode).IsModified = true;
+            _db.Entry(entity).Property(x => x.LastErrorMessage).IsModified = true;
+            _db.Entry(entity).Property(x => x.NextRetryAtUtc).IsModified = true;
+            _db.Entry(entity).Property(x => x.UpdatedAtUtc).IsModified = true;
+            await _db.PrintJobEvents.AddAsync(new PrintJobEvent
+            {
+                JobId = jobId,
+                EventType = "StatusChanged",
+                OldStatus = PrintJobStatus.Pending,
+                NewStatus = PrintJobStatus.ErrorFinal,
+                ErrorCode = "ROUTE_NOT_FOUND",
+                Message = "No existe regla activa aplicable para este trabajo.",
+                ActorType = "system",
+                OccurredAtUtc = now
+            }, ct);
         }
         else
         {
-            var now = DateTimeOffset.UtcNow;
-            job.Status = PrintJobStatus.Routed;
-            job.PrinterId = resolved;
-            job.UpdatedAtUtc = now;
-            _db.PrintJobs.Update(job);
+            entity.Status = PrintJobStatus.Routed;
+            entity.PrinterId = resolved;
+            entity.UpdatedAtUtc = now;
+            _db.Entry(entity).Property(x => x.Status).IsModified = true;
+            _db.Entry(entity).Property(x => x.PrinterId).IsModified = true;
+            _db.Entry(entity).Property(x => x.UpdatedAtUtc).IsModified = true;
             await _db.PrintJobEvents.AddAsync(new PrintJobEvent
             {
                 JobId = jobId,

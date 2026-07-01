@@ -236,6 +236,7 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
     private static bool IsFailedAfterRetry(PrintJobStatus status, int attemptCount)
         => status != PrintJobStatus.RetryScheduled
             && status != PrintJobStatus.SpoolAccepted
+            && status != PrintJobStatus.Printing
             && status != PrintJobStatus.PrintedConfirmed
             && status != PrintJobStatus.PrintedUnknown
             && attemptCount > 1;
