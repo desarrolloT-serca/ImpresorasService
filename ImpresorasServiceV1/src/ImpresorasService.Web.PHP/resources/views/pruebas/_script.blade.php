@@ -151,10 +151,34 @@
     // ── Lanzar escenario ─────────────────────────────────────────────────────
 
     document.getElementById('btn-lanzar-escenario')?.addEventListener('click', async () => {
-        if (pollTimer) return; // ya hay un run activo
-        const scenarioId = document.getElementById('form-escenario')?.dataset.id;
-        if (!scenarioId) { window.showToast?.('Guarda el escenario antes de lanzar.', 'error'); return; }
+        const btn = document.getElementById('btn-lanzar-escenario');
+        if (btn?.disabled || pollTimer) return;
         setRunning(true);
+
+        // Auto-guardar el estado actual del formulario antes de lanzar,
+        // para asegurar que la selección de PDF actual se usa en el run.
+        const form    = document.getElementById('form-escenario');
+        const name    = document.getElementById('sc-nombre')?.value?.trim();
+        const batches = buildBatches();
+        if (!name || batches.length === 0) {
+            setRunning(false);
+            window.showToast?.('Completa el nombre y al menos un lote.', 'error');
+            return;
+        }
+        const savePayload = { name, batches };
+        const existingId  = form?.dataset.id || '';
+        if (existingId) savePayload.id = existingId;
+
+        const { ok: saveOk, data: saveData } = await apiFetch('{{ route('pruebas.scenarios.save') }}', {
+            json: savePayload, method: 'POST',
+        });
+        if (!saveOk) {
+            setRunning(false);
+            window.showToast?.(saveData?.message || 'Error al guardar el escenario.', 'error');
+            return;
+        }
+        const scenarioId = saveData.id;
+        if (form && existingId !== scenarioId) form.dataset.id = scenarioId;
 
         const resultados = document.getElementById('pruebas-resultados');
         const tbody      = document.getElementById('pruebas-jobs-tbody');
