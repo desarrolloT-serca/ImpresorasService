@@ -19,6 +19,13 @@
     let activePdfTargetBtn = null;
     let pollTimer = null;
 
+    function setRunning(on) {
+        const btn = document.getElementById('btn-lanzar-escenario');
+        if (!btn) return;
+        btn.disabled = on;
+        btn.textContent = on ? '⏳ Ejecutando…' : '▶ Lanzar';
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     async function apiFetch(url, opts = {}) {
@@ -144,8 +151,10 @@
     // ── Lanzar escenario ─────────────────────────────────────────────────────
 
     document.getElementById('btn-lanzar-escenario')?.addEventListener('click', async () => {
+        if (pollTimer) return; // ya hay un run activo
         const scenarioId = document.getElementById('form-escenario')?.dataset.id;
         if (!scenarioId) { window.showToast?.('Guarda el escenario antes de lanzar.', 'error'); return; }
+        setRunning(true);
 
         const resultados = document.getElementById('pruebas-resultados');
         const tbody      = document.getElementById('pruebas-jobs-tbody');
@@ -156,7 +165,7 @@
         const { ok, data } = await apiFetch('{{ route('pruebas.run') }}', {
             method: 'POST', json: { scenarioId },
         });
-        if (!ok) { window.showToast?.(data?.error || 'Error al lanzar.', 'error'); return; }
+        if (!ok) { setRunning(false); window.showToast?.(data?.error || 'Error al lanzar.', 'error'); return; }
 
         const jobIds = data.jobIds || [];
         const runId  = data.runId  || '';
@@ -196,6 +205,7 @@
                 clearInterval(pollTimer);
                 pollTimer = null;
                 sessionStorage.removeItem('prueba_run');
+                setRunning(false);
                 document.getElementById('pruebas-resultado-resumen').textContent =
                     'Tiempo de espera agotado (5 min). Revisa la cola manualmente.';
                 return;
@@ -224,6 +234,7 @@
                 clearInterval(pollTimer);
                 pollTimer = null;
                 sessionStorage.removeItem('prueba_run');
+                setRunning(false);
                 const okCount  = jobIds.filter(id => ['SpoolAccepted','PrintedConfirmed','PrintedUnknown'].includes(byId[id]?.status)).length;
                 const errCount = jobIds.length - okCount;
                 document.getElementById('pruebas-resultado-resumen').textContent =
@@ -262,7 +273,7 @@
             tbody.appendChild(tr);
         });
         document.getElementById('pruebas-resultado-resumen').textContent = 'Retomando seguimiento…';
-
+        setRunning(true);
         startPolling(runId, jobIds);
     })();
 
