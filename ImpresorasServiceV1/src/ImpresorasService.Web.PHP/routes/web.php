@@ -8,6 +8,7 @@ use App\Http\Controllers\ImpresorasController;
 use App\Http\Controllers\ReglasController;
 use App\Http\Controllers\TiendasController;
 use App\Http\Controllers\UsuariosController;
+use App\Http\Controllers\PruebasController;
 use App\Http\Controllers\StoreFilterController;
 use Illuminate\Support\Facades\Route;
 
@@ -66,5 +67,14 @@ Route::middleware('auth.impresoras')->group(function () {
         Route::post('/alertas/chats', [AlertasController::class, 'addChat'])->name('alertas.chats.add');
         Route::post('/alertas/chats/{chatId}/delete', [AlertasController::class, 'deleteChat'])->name('alertas.chats.delete');
         Route::post('/alertas/test', [AlertasController::class, 'sendTest'])->name('alertas.test');
+    });
+    Route::middleware('admin.only')->group(function () {
+        Route::get('/pruebas', [PruebasController::class, 'index'])->name('pruebas.index');
+        Route::post('/pruebas/scenarios', [PruebasController::class, 'saveScenario'])->name('pruebas.scenarios.save');
+        Route::delete('/pruebas/scenarios/{id}', [PruebasController::class, 'deleteScenario'])->name('pruebas.scenarios.delete');
+        Route::post('/pruebas/pdfs', [PruebasController::class, 'uploadPdf'])->name('pruebas.pdfs.upload');
+        Route::delete('/pruebas/pdfs/{id}', [PruebasController::class, 'deletePdf'])->name('pruebas.pdfs.delete');
+        Route::post('/pruebas/run', [PruebasController::class, 'run'])->name('pruebas.run');
+        Route::get('/pruebas/jobs/status', [PruebasController::class, 'jobsStatus'])->name('pruebas.jobs.status');
     });
 });
