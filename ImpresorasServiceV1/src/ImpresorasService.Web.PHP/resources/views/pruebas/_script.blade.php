@@ -159,27 +159,51 @@
         if (!ok) { window.showToast?.(data?.error || 'Error al lanzar.', 'error'); return; }
 
         const jobIds = data.jobIds || [];
+        const runId  = data.runId  || '';
+
         tbody.innerHTML = '';
         jobIds.forEach(id => {
             const tr = document.createElement('tr');
             tr.dataset.jobId = id;
             tr.innerHTML = `<td class="text-col" style="font-size:.8rem;">${id}</td>
-                <td><span class="badge badge-neutral">Pendiente</span></td><td>-</td>`;
+                <td><span class="badge badge-warning">Pending</span></td><td>-</td>`;
             tbody.appendChild(tr);
         });
 
         if (data.errors?.length) window.showToast?.(`${data.errors.length} errores al inyectar.`, 'warning');
-        if (jobIds.length) startPolling(jobIds);
+
+        if (jobIds.length && runId) {
+            // Persistir estado para sobrevivir a un refresco de página
+            sessionStorage.setItem('prueba_run', JSON.stringify({
+                scenarioId, runId, jobIds, startedAt: Date.now(),
+            }));
+            startPolling(runId, jobIds);
+        }
     });
 
     // ── Polling ──────────────────────────────────────────────────────────────
 
-    function startPolling(jobIds) {
+    const POLL_INTERVAL_MS = 1500;
+    const POLL_TIMEOUT_MS  = 5 * 60 * 1000; // 5 minutos máximo
+
+    function startPolling(runId, jobIds) {
         if (pollTimer) clearInterval(pollTimer);
+        const startedAt = Date.now();
 
         async function tick() {
-            const qs = jobIds.map(id => 'ids[]=' + encodeURIComponent(id)).join('&');
-            const { ok, data } = await apiFetch('{{ route('pruebas.jobs.status') }}?' + qs);
+            // Timeout de seguridad: parar si lleva más de 5 minutos
+            if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
+                clearInterval(pollTimer);
+                pollTimer = null;
+                sessionStorage.removeItem('prueba_run');
+                document.getElementById('pruebas-resultado-resumen').textContent =
+                    'Tiempo de espera agotado (5 min). Revisa la cola manualmente.';
+                return;
+            }
+
+            const { ok, data } = await apiFetch(
+                '{{ route('pruebas.jobs.status') }}?runId=' + encodeURIComponent(runId)
+            );
             if (!ok) return;
 
             const byId = Object.fromEntries(data.map(j => [j.externalJobId, j]));
@@ -199,6 +223,7 @@
             if (resolved === jobIds.length) {
                 clearInterval(pollTimer);
                 pollTimer = null;
+                sessionStorage.removeItem('prueba_run');
                 const okCount  = jobIds.filter(id => ['SpoolAccepted','PrintedConfirmed','PrintedUnknown'].includes(byId[id]?.status)).length;
                 const errCount = jobIds.length - okCount;
                 document.getElementById('pruebas-resultado-resumen').textContent =
@@ -207,8 +232,39 @@
         }
 
         tick();
-        pollTimer = setInterval(tick, 2000);
+        pollTimer = setInterval(tick, POLL_INTERVAL_MS);
     }
+
+    // ── Restaurar run activo tras refresco de página ──────────────────────────
+
+    (function restoreActiveRun() {
+        const saved = sessionStorage.getItem('prueba_run');
+        if (!saved) return;
+        let state;
+        try { state = JSON.parse(saved); } catch { sessionStorage.removeItem('prueba_run'); return; }
+
+        const { runId, jobIds, startedAt } = state;
+        if (!runId || !jobIds?.length) { sessionStorage.removeItem('prueba_run'); return; }
+        // Caducar si lleva más de 5 min desde que se lanzó
+        if (Date.now() - startedAt > POLL_TIMEOUT_MS) { sessionStorage.removeItem('prueba_run'); return; }
+
+        const resultados = document.getElementById('pruebas-resultados');
+        const tbody      = document.getElementById('pruebas-jobs-tbody');
+        if (!resultados || !tbody) return;
+
+        resultados.style.display = 'block';
+        tbody.innerHTML = '';
+        jobIds.forEach(id => {
+            const tr = document.createElement('tr');
+            tr.dataset.jobId = id;
+            tr.innerHTML = `<td class="text-col" style="font-size:.8rem;">${id}</td>
+                <td><span class="badge badge-warning">…</span></td><td>-</td>`;
+            tbody.appendChild(tr);
+        });
+        document.getElementById('pruebas-resultado-resumen').textContent = 'Retomando seguimiento…';
+
+        startPolling(runId, jobIds);
+    })();
 
     // ── Modal PDFs ───────────────────────────────────────────────────────────
 

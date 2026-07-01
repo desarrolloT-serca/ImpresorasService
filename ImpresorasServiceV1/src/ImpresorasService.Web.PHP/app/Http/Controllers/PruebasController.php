@@ -179,9 +179,12 @@ class PruebasController extends Controller
         $ts       = now()->format('YmdHis');
         $slug     = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $scenario['name'] ?? 'PRUEBA'));
         $slug     = substr($slug, 0, 20);
+        // runId es el needle único que el endpoint de status usará para buscar via LIKE
+        $runId    = 'PRUEBA-' . $slug . '-' . $ts;
         $jobIds   = [];
         $injected = 0;
         $errors   = [];
+        $seq      = 0; // contador global entre todos los lotes para evitar IDs duplicados
 
         foreach ($scenario['batches'] ?? [] as $batch) {
             $pdfBase64 = null;
@@ -194,8 +197,9 @@ class PruebasController extends Controller
             }
 
             $count = max(1, (int) ($batch['count'] ?? 1));
-            for ($i = 1; $i <= $count; $i++) {
-                $externalJobId = sprintf('PRUEBA-%s-%03d-%s', $slug, $i, $ts);
+            for ($i = 0; $i < $count; $i++) {
+                $seq++;
+                $externalJobId = sprintf('%s-%03d', $runId, $seq);
                 try {
                     $this->api->post('api/sourceprintjobs/test', [
                         'sourceSystem'  => 'PRUEBA',
@@ -220,6 +224,7 @@ class PruebasController extends Controller
         }
 
         return response()->json([
+            'runId'    => $runId,
             'injected' => $injected,
             'jobIds'   => $jobIds,
             'errors'   => $errors,
@@ -228,13 +233,14 @@ class PruebasController extends Controller
 
     public function jobsStatus(Request $request): JsonResponse
     {
-        $ids = $request->input('ids', []);
-        if (empty($ids) || !is_array($ids)) {
+        $runId = $request->input('runId', '');
+        if ($runId === '') {
             return response()->json([]);
         }
 
-        $query  = implode('&', array_map(fn ($id) => 'externalJobId[]=' . urlencode($id), $ids));
-        $result = $this->api->get('api/printjobs?' . $query);
+        // El API .NET filtra con LIKE %needle% sobre ExternalJobId.
+        // runId es "PRUEBA-{SLUG}-{ts}", que coincide con todos los jobs del run.
+        $result = $this->api->get('api/printjobs?externalJobId=' . urlencode($runId) . '&limit=200');
 
         $mapped = array_map(fn ($j) => [
             'externalJobId' => $j['externalJobId'] ?? $j['ExternalJobId'] ?? '',
