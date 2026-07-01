@@ -99,7 +99,13 @@
         <div id="pruebas-resultados" style="display:none; margin-top:1.5rem;">
             <div class="dbx-title-row" style="margin-bottom:.75rem;">
                 <h3 class="dbx-title" style="font-size:1rem;">Resultados en vivo</h3>
-                <span id="pruebas-resultado-resumen" class="dbx-subtle"></span>
+                <div style="display:flex; align-items:center; gap:.75rem;">
+                    <span id="pruebas-resultado-resumen" class="dbx-subtle"></span>
+                    <button type="button" id="btn-cancelar-prueba"
+                            class="btn btn-danger btn-sm" style="display:none;">
+                        Cancelar prueba
+                    </button>
+                </div>
             </div>
             <x-ui.table>
                 <thead>

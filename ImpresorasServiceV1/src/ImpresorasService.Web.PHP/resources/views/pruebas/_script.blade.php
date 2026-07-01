@@ -20,10 +20,10 @@
     let pollTimer = null;
 
     function setRunning(on) {
-        const btn = document.getElementById('btn-lanzar-escenario');
-        if (!btn) return;
-        btn.disabled = on;
-        btn.textContent = on ? '⏳ Ejecutando…' : '▶ Lanzar';
+        const btn    = document.getElementById('btn-lanzar-escenario');
+        const btnCan = document.getElementById('btn-cancelar-prueba');
+        if (btn) { btn.disabled = on; btn.textContent = on ? '⏳ Ejecutando…' : '▶ Lanzar'; }
+        if (btnCan) btnCan.style.display = on ? 'inline-flex' : 'none';
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
@@ -300,6 +300,20 @@
         setRunning(true);
         startPolling(runId, jobIds);
     })();
+
+    // ── Cancelar prueba activa ───────────────────────────────────────────────
+
+    document.getElementById('btn-cancelar-prueba')?.addEventListener('click', async () => {
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+        sessionStorage.removeItem('prueba_run');
+        setRunning(false);
+        document.getElementById('pruebas-resultado-resumen').textContent = 'Cancelando…';
+
+        const { ok, data } = await apiFetch('{{ route('pruebas.cancel') }}', { method: 'POST' });
+        document.getElementById('pruebas-resultado-resumen').textContent = ok
+            ? `Cancelados ${data?.cancelled ?? 0} trabajos pendientes. Los ya enviados al spooler Windows siguen en su cola.`
+            : 'Error al cancelar.';
+    });
 
     // ── Modal PDFs ───────────────────────────────────────────────────────────
 

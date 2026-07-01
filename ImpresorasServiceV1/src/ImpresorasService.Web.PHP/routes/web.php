@@ -76,5 +76,6 @@ Route::middleware('auth.impresoras')->group(function () {
         Route::delete('/pruebas/pdfs/{id}', [PruebasController::class, 'deletePdf'])->name('pruebas.pdfs.delete');
         Route::post('/pruebas/run', [PruebasController::class, 'run'])->name('pruebas.run');
         Route::get('/pruebas/jobs/status', [PruebasController::class, 'jobsStatus'])->name('pruebas.jobs.status');
+        Route::post('/pruebas/cancel', [PruebasController::class, 'cancelAll'])->name('pruebas.cancel');
     });
 });

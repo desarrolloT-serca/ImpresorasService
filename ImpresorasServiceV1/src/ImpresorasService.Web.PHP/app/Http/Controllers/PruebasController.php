@@ -237,6 +237,12 @@ class PruebasController extends Controller
         ]);
     }
 
+    public function cancelAll(): JsonResponse
+    {
+        $result = $this->api->post('api/sourceprintjobs/test/cancel-all', []);
+        return response()->json($result);
+    }
+
     public function jobsStatus(Request $request): JsonResponse
     {
         $runId = $request->input('runId', '');
