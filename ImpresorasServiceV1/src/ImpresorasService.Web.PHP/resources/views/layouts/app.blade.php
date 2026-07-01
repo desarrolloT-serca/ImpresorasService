@@ -69,6 +69,11 @@
                         <span class="nav-label">Ajustes</span>
                         <span class="nav-tooltip" aria-hidden="true">Ajustes</span>
                     </a>
+                    <a href="{{ route('pruebas.index') }}" class="app-nav-link {{ request()->routeIs('pruebas.*') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('pruebas.*')) aria-current="page" @endif data-label="Pruebas">
+                        <svg class="nav-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/><line x1="9" y1="11" x2="15" y2="11"/></svg>
+                        <span class="nav-label">Pruebas</span>
+                        <span class="nav-tooltip" aria-hidden="true">Pruebas</span>
+                    </a>
                     <a href="{{ route('alertas.configuracion') }}" class="app-nav-link {{ request()->routeIs('alertas.configuracion') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('alertas.configuracion')) aria-current="page" @endif data-label="Telegram">
                         <svg class="nav-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                         <span class="nav-label">Telegram</span>
