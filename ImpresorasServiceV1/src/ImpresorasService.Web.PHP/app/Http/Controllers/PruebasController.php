@@ -24,6 +24,12 @@ class PruebasController extends Controller
         'SpoolAccepted', 'ErrorFinal', 'PrintedConfirmed', 'PrintedUnknown',
     ];
 
+    private const STATUS_NAMES = [
+        0 => 'Pending', 1 => 'Routed', 2 => 'Printing', 3 => 'SpoolAccepted',
+        4 => 'PrintedConfirmed', 5 => 'PrintedUnknown', 6 => 'RetryScheduled',
+        7 => 'Cancelled', 8 => 'ErrorFinal', 9 => 'PrinterBlocked',
+    ];
+
     public function __construct(private readonly ApiClient $api) {}
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -242,11 +248,17 @@ class PruebasController extends Controller
         // runId es "PRUEBA-{SLUG}-{ts}", que coincide con todos los jobs del run.
         $result = $this->api->get('api/printjobs?externalJobId=' . urlencode($runId) . '&limit=200');
 
-        $mapped = array_map(fn ($j) => [
-            'externalJobId' => $j['externalJobId'] ?? $j['ExternalJobId'] ?? '',
-            'status'        => $j['status'] ?? $j['Status'] ?? 'Unknown',
-            'printerId'     => $j['printerId'] ?? $j['PrinterId'] ?? null,
-        ], is_array($result) ? $result : []);
+        $mapped = array_map(function ($j) {
+            $raw    = $j['status'] ?? $j['Status'] ?? null;
+            $status = is_int($raw) || (is_string($raw) && ctype_digit($raw))
+                ? (self::STATUS_NAMES[(int) $raw] ?? "Status{$raw}")
+                : ($raw ?? 'Unknown');
+            return [
+                'externalJobId' => $j['externalJobId'] ?? $j['ExternalJobId'] ?? '',
+                'status'        => $status,
+                'printerId'     => $j['printerId'] ?? $j['PrinterId'] ?? null,
+            ];
+        }, is_array($result) ? $result : []);
 
         return response()->json($mapped);
     }
