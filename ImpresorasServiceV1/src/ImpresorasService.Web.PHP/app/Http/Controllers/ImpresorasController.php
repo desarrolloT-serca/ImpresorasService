@@ -16,7 +16,7 @@ class ImpresorasController extends Controller
     {
     }
 
-    public function index(Request $request): View
+    public function index(Request $request)
     {
         $effectiveStore = AuthHelper::getEffectiveStoreId();
         $selectedStoreId = $effectiveStore !== null
@@ -148,7 +148,7 @@ class ImpresorasController extends Controller
         $selectedStoreGroup = $selectedKey !== null ? ($printersByStore[$selectedKey] ?? null) : null;
         $selectedPrinters = is_array($selectedStoreGroup['printers'] ?? null) ? $selectedStoreGroup['printers'] : [];
 
-        return view('impresoras.index', [
+        $view = view('impresoras.index', [
             'printers' => $selectedPrinters,
             'printersByStore' => array_values($printersByStore),
             'selectedStoreGroup' => $selectedStoreGroup,
@@ -156,6 +156,8 @@ class ImpresorasController extends Controller
             'hasAnyPrinters' => count($printers) > 0,
             'pingIntervalSeconds' => config('impresoras.ping_interval_seconds', 30),
         ]);
+
+        return $request->ajax() ? $view->fragment('routing-layout') : $view;
     }
 
     private function nullableBool(mixed $value): ?bool
@@ -350,17 +352,6 @@ class ImpresorasController extends Controller
             return redirect()->route('impresoras.index', array_filter(['storeId' => $storeId]))->with('success', 'Impresora eliminada.');
         } catch (\GuzzleHttp\Exception\RequestException $e) {
             return back()->withErrors($this->extractApiErrors($e, 'form'));
-        }
-    }
-
-    public function ping(int $impresora): JsonResponse
-    {
-        try {
-            $result = $this->api->post("api/printers/{$impresora}/ping", []);
-            return response()->json($result);
-        } catch (\GuzzleHttp\Exception\RequestException $e) {
-            $body = $e->getResponse() ? json_decode((string) $e->getResponse()->getBody(), true) : [];
-            return response()->json(['reachable' => false, 'error' => $body['error'] ?? $e->getMessage()], 500);
         }
     }
 

@@ -91,6 +91,7 @@ public sealed class PrintExecutionServiceFlowTests
         Assert.Null(jobAfter.NextRetryAtUtc);
         Assert.Null(jobAfter.LastErrorCode);
         Assert.Null(jobAfter.LastErrorMessage);
+        Assert.Equal(MinimalPdf.Bytes, jobAfter.PdfBlob);
 
         var events = await db.PrintJobEvents.Where(e => e.JobId == job.JobId).OrderBy(e => e.EventId).ToListAsync();
         Assert.True(events.Count >= 2);

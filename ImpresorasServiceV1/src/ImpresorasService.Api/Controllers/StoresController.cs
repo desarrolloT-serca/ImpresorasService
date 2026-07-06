@@ -234,10 +234,10 @@ public class StoresController : ControllerBase
         await using var softDeleteTx = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
         var nowText = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss");
         var affectedPrinters = await _dbContext.Database.ExecuteSqlInterpolatedAsync(
-            $"UPDATE \"printer_printer\" SET \"is_active\" = FALSE, \"updated_at_utc\" = {nowText} WHERE \"store_id\" = {storeId} AND \"is_active\" = TRUE",
+            $"UPDATE \"printer_printer\" SET \"is_active\" = 0, \"updated_at_utc\" = {nowText} WHERE \"store_id\" = {storeId} AND \"is_active\" = 1",
             cancellationToken);
         await _dbContext.Database.ExecuteSqlInterpolatedAsync(
-            $"UPDATE \"printer_store\" SET \"is_active\" = FALSE, \"updated_at_utc\" = {nowText} WHERE \"store_id\" = {storeId}",
+            $"UPDATE \"printer_store\" SET \"is_active\" = 0, \"updated_at_utc\" = {nowText} WHERE \"store_id\" = {storeId}",
             cancellationToken);
         await softDeleteTx.CommitAsync(cancellationToken);
 

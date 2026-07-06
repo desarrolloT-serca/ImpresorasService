@@ -10,7 +10,7 @@ public class PrintJob
     public int StoreId { get; set; }
     public string DocumentType { get; set; } = string.Empty;
     public string Channel { get; set; } = "DEFAULT";
-    public byte[] PdfBlob { get; set; } = Array.Empty<byte>();
+    public byte[]? PdfBlob { get; set; }
     public string PdfSha256 { get; set; } = string.Empty;
     public PrintJobStatus Status { get; set; } = PrintJobStatus.Pending;
     public int? PrinterId { get; set; }

@@ -8,6 +8,7 @@ use App\Http\Controllers\ImpresorasController;
 use App\Http\Controllers\ReglasController;
 use App\Http\Controllers\TiendasController;
 use App\Http\Controllers\UsuariosController;
+use App\Http\Controllers\PruebasController;
 use App\Http\Controllers\StoreFilterController;
 use Illuminate\Support\Facades\Route;
 
@@ -25,7 +26,6 @@ Route::middleware('auth.impresoras')->group(function () {
         Route::post('/cola/reintentar-masivo', [ColaController::class, 'reintentarMasivo'])->name('cola.reintentar_masivo');
         Route::post('/cola/cancelar-masivo', [ColaController::class, 'cancelarMasivo'])->name('cola.cancelar_masivo');
         Route::get('/impresoras', [ImpresorasController::class, 'index'])->name('impresoras.index');
-        Route::post('/impresoras/{impresora}/ping', [ImpresorasController::class, 'ping'])->name('impresoras.ping');
         Route::post('/impresoras/{impresora}/netconnection', [ImpresorasController::class, 'netconnection'])->name('impresoras.netconnection');
     });
     Route::middleware('admin.only')->group(function () {
@@ -37,7 +37,6 @@ Route::middleware('auth.impresoras')->group(function () {
     });
     Route::middleware('admin.only')->group(function () {
         Route::get('/ajustes', [DashboardController::class, 'ajustes'])->name('ajustes.index');
-        Route::post('/dashboard/thresholds', [DashboardController::class, 'updateThresholds'])->name('dashboard.thresholds.update');
         Route::post('/ajustes/thresholds', [DashboardController::class, 'updateThresholds'])->name('ajustes.thresholds.update');
         Route::get('/reglas', [ReglasController::class, 'index'])->name('reglas.index');
         Route::get('/reglas/create', [ReglasController::class, 'create'])->name('reglas.create');
@@ -61,5 +60,22 @@ Route::middleware('auth.impresoras')->group(function () {
         Route::put('/usuarios/{usuario}', [UsuariosController::class, 'update'])->name('usuarios.update');
         Route::delete('/usuarios/{usuario}', [UsuariosController::class, 'destroy'])->name('usuarios.destroy');
     });
-    Route::get('/alertas', [AlertasController::class, 'index']);
+    Route::get('/alertas', [AlertasController::class, 'index'])->name('alertas.index');
+    Route::middleware('admin.only')->group(function () {
+        Route::get('/alertas/configuracion', [AlertasController::class, 'configuracion'])->name('alertas.configuracion');
+        Route::post('/alertas/configuracion', [AlertasController::class, 'saveConfig'])->name('alertas.config.save');
+        Route::post('/alertas/chats', [AlertasController::class, 'addChat'])->name('alertas.chats.add');
+        Route::post('/alertas/chats/{chatId}/delete', [AlertasController::class, 'deleteChat'])->name('alertas.chats.delete');
+        Route::post('/alertas/test', [AlertasController::class, 'sendTest'])->name('alertas.test');
+    });
+    Route::middleware('admin.only')->group(function () {
+        Route::get('/pruebas', [PruebasController::class, 'index'])->name('pruebas.index');
+        Route::post('/pruebas/scenarios', [PruebasController::class, 'saveScenario'])->name('pruebas.scenarios.save');
+        Route::delete('/pruebas/scenarios/{id}', [PruebasController::class, 'deleteScenario'])->name('pruebas.scenarios.delete');
+        Route::post('/pruebas/pdfs', [PruebasController::class, 'uploadPdf'])->name('pruebas.pdfs.upload');
+        Route::delete('/pruebas/pdfs/{id}', [PruebasController::class, 'deletePdf'])->name('pruebas.pdfs.delete');
+        Route::post('/pruebas/run', [PruebasController::class, 'run'])->name('pruebas.run');
+        Route::get('/pruebas/jobs/status', [PruebasController::class, 'jobsStatus'])->name('pruebas.jobs.status');
+        Route::post('/pruebas/cancel', [PruebasController::class, 'cancelAll'])->name('pruebas.cancel');
+    });
 });

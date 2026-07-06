@@ -7,9 +7,6 @@
 @section('title', 'Cola de impresión')
 
 @section('content')
-@if(session('success'))
-    <div class="mb-4 alert alert-success">{{ session('success') }}</div>
-@endif
 
 <div class="dbx-wrap">
 <x-ui.card>
@@ -41,6 +38,7 @@
                         <option value="6" {{ ($status ?? '') == '6' ? 'selected' : '' }}>Reintento programado</option>
                         <option value="7" {{ ($status ?? '') == '7' ? 'selected' : '' }}>Cancelado</option>
                         <option value="8" {{ ($status ?? '') == '8' ? 'selected' : '' }}>Error final</option>
+                        <option value="9" {{ ($status ?? '') == '9' ? 'selected' : '' }}>Bloqueado</option>
                     </select>
                 </div>
                 <div class="min-w-44">
@@ -65,21 +63,22 @@
 
         @if(($isAdmin ?? false) || ($isStoreManager ?? false))
             <div class="dbx-bulk-toolbar">
-                <span id="bulk-selected-count" class="dbx-selection-count bulk-action-control bulk-selected-counter" aria-live="polite">0 seleccionados</span>
-                <form id="bulk-reintentar-form" method="POST" action="{{ route('cola.reintentar_masivo') }}" class="inline">
+                <form id="bulk-reintentar-form" method="POST" action="{{ route('cola.reintentar_masivo') }}" class="inline"
+                    data-cola-action="reintentar-masivo"
+                    data-confirm="¿Reintentar masivamente los trabajos seleccionados?">
                     @csrf
                     <div id="bulk-reintentar-jobIds"></div>
-                    <button type="submit" id="bulk-reintentar-submit" class="btn btn-ghost bulk-action-control" disabled
-                        onclick="return confirm('¿Reintentar masivamente los trabajos seleccionados?')">
-                        Reintentar masivo
+                    <button type="submit" id="bulk-reintentar-submit" class="btn btn-ghost bulk-action-control" disabled>
+                        Reintentar
                     </button>
                 </form>
-                <form id="bulk-cancelar-form" method="POST" action="{{ route('cola.cancelar_masivo') }}" class="inline">
+                <form id="bulk-cancelar-form" method="POST" action="{{ route('cola.cancelar_masivo') }}" class="inline"
+                    data-cola-action="cancelar-masivo"
+                    data-confirm="¿Cancelar masivamente los trabajos seleccionados?">
                     @csrf
                     <div id="bulk-cancelar-jobIds"></div>
-                    <button type="submit" id="bulk-cancelar-submit" class="btn btn-danger bulk-action-control" disabled
-                        onclick="return confirm('¿Cancelar masivamente los trabajos seleccionados?')">
-                        Cancelar masivo
+                    <button type="submit" id="bulk-cancelar-submit" class="btn btn-danger bulk-action-control" disabled>
+                        Cancelar
                     </button>
                 </form>
             </div>
@@ -88,17 +87,22 @@
 </x-ui.card>
 
 <x-ui.card class="dbx-operational-card">
-<div class="dbx-table-meta">
-    <div>
+<div class="dbx-cola-section-header">
+    <div class="dbx-cola-section-header-top">
         <h2 class="dbx-title">Trabajos de cola</h2>
+        @if(($isAdmin ?? false) || ($isStoreManager ?? false))
+            <span id="bulk-selected-count" class="dbx-selection-count bulk-action-control bulk-selected-counter" aria-live="polite">0 seleccionados</span>
+        @endif
+    </div>
+    <div class="dbx-cola-section-header-bottom">
         <span class="dbx-subtle">
             {{ $total ?? count($jobs ?? []) }} resultado(s) con los filtros actuales
             @if(($total ?? count($jobs ?? [])) > 0)
                 - mostrando {{ $from ?? 1 }}-{{ $to ?? count($jobs ?? []) }}
             @endif
         </span>
+        <span class="dbx-subtle">Selecciona filas para acciones masivas</span>
     </div>
-    <span class="dbx-subtle">Selecciona filas para acciones masivas</span>
 </div>
 <x-ui.table class="dbx-actions-table">
         <caption class="sr-only">Listado operativo de trabajos de impresion en cola</caption>
@@ -119,13 +123,13 @@
         </thead>
         <tbody>
             @forelse($jobs as $job)
-            <tr class="dbx-selectable-row">
-                @php
-                    $rowJobId = $job['jobId'] ?? $job['JobId'] ?? null;
-                    $rowStatusRaw = $job['_status'] ?? $job['status'] ?? $job['Status'] ?? null;
-                    $rowStatusInt = is_numeric($rowStatusRaw) ? (int) $rowStatusRaw : null;
-                    $rowCanBulk = (($isAdmin ?? false) || ($isStoreManager ?? false)) && $rowJobId;
-                @endphp
+            @php
+                $rowJobId = $job['jobId'] ?? $job['JobId'] ?? null;
+                $rowStatusRaw = $job['_status'] ?? $job['status'] ?? $job['Status'] ?? null;
+                $rowStatusInt = \App\Helpers\StatusLabels::normalizeToInt($rowStatusRaw);
+                $rowCanBulk = (($isAdmin ?? false) || ($isStoreManager ?? false)) && $rowJobId;
+            @endphp
+            <tr class="dbx-selectable-row cola-job-row" data-job-id="{{ $rowJobId ?? '' }}" data-status="{{ $rowStatusInt ?? '' }}">
                 <td>
                     <input type="checkbox" class="bulk-row" value="{{ $rowJobId ?? '' }}" aria-label="Seleccionar trabajo {{ $rowJobId ?? '' }}" {{ $rowCanBulk ? '' : 'disabled' }} />
                 </td>
@@ -135,17 +139,18 @@
                 <td>{{ $job['documentType'] ?? $job['DocumentType'] ?? '-' }}</td>
                 @php
                     $stRaw = $job['_status'] ?? $job['status'] ?? $job['Status'] ?? null;
-                    $stInt = is_numeric($stRaw) ? (int) $stRaw : null;
+                    $stInt = \App\Helpers\StatusLabels::normalizeToInt($stRaw);
                     $statusClass = match ($stInt) {
-                        8 => 'critical', // Error final
-                        0, 2, 6 => 'warning', // Pendiente / Imprimiendo / Reintento
-                        1 => 'info', // Enrutado
-                        3, 4, 5 => 'healthy', // Aceptado / Impreso
-                        7 => 'neutral', // Cancelado
+                        8 => 'critical',
+                        0, 2, 6, 9 => 'warning',
+                        1 => 'info',
+                        3, 4, 5 => 'healthy',
+                        7 => 'neutral',
                         default => 'neutral',
                     };
+                    $pillTitle = $stInt === 9 ? ($job['lastErrorMessage'] ?? $job['LastErrorMessage'] ?? null) : null;
                 @endphp
-                <td class="status-col"><span class="dbx-pill {{ $statusClass }}">{{ \App\Helpers\StatusLabels::get($stRaw) }}</span></td>
+                <td class="status-col"><span class="dbx-pill {{ $statusClass }}"{!! $pillTitle ? ' title="'.e($pillTitle).'"' : '' !!}>{{ \App\Helpers\StatusLabels::get($stRaw) }}</span></td>
                 @php
                     $printerName = $job['printerName'] ?? $job['PrinterName'] ?? null;
                     $printerId = $job['printerId'] ?? $job['PrinterId'] ?? null;
@@ -154,14 +159,18 @@
                 <td class="number-col">{{ $job['attemptCount'] ?? $job['AttemptCount'] ?? 0 }}</td>
                 <td class="date-col">{{ DateTimeFormat::localDateTime($job['createdAtUtc'] ?? $job['CreatedAtUtc'] ?? $job['created_at_utc'] ?? null) }}</td>
                 <td class="actions-col">
-                    @php $jobId = $job['jobId'] ?? $job['JobId'] ?? null; $st = $job['_status'] ?? $job['status'] ?? $job['Status'] ?? null; @endphp
-                    @if(($isAdmin ?? false || $isStoreManager ?? false) && $jobId && in_array($st, [0, 8]))
+                    @php
+                        $jobId = $job['jobId'] ?? $job['JobId'] ?? null;
+                        $st = \App\Helpers\StatusLabels::normalizeToInt($job['_status'] ?? $job['status'] ?? $job['Status'] ?? null);
+                    @endphp
+                    @if(($isAdmin ?? false || $isStoreManager ?? false) && $jobId && in_array($st, [0, 8], true))
                     <x-ui.action-buttons>
-                    <form action="{{ url("/cola/{$jobId}/reintentar") }}" method="POST">
+                    <form action="{{ url("/cola/{$jobId}/reintentar") }}" method="POST" data-cola-action="reintentar">
                         @csrf
                         <button type="submit" class="btn btn-ghost">Reintentar</button>
                     </form>
-                    <form action="{{ url("/cola/{$jobId}/cancelar") }}" method="POST" class="inline" onsubmit="return confirm('¿Cancelar este trabajo?')">
+                    <form action="{{ url("/cola/{$jobId}/cancelar") }}" method="POST" class="inline"
+                        data-cola-action="cancelar" data-confirm="¿Cancelar este trabajo?">
                         @csrf
                         <button type="submit" class="btn btn-danger">Cancelar</button>
                     </form>
@@ -201,21 +210,55 @@
 
 <script>
 (function() {
+    const STATUS_LABELS = @json(\App\Helpers\StatusLabels::all());
+    const ACTIONABLE_STATUSES = [0, 8];
+    const canManageQueue = @json(($isAdmin ?? false) || ($isStoreManager ?? false));
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+    const colaReintentarBase = @json(url('/cola'));
+    const statusFilterEl = document.getElementById('cola-status');
+
     const headerCb = document.getElementById('bulk-select-all');
-    const rowCbs = Array.from(document.querySelectorAll('.bulk-row'));
     const retrySubmit = document.getElementById('bulk-reintentar-submit');
     const cancelSubmit = document.getElementById('bulk-cancelar-submit');
     const selectedCount = document.getElementById('bulk-selected-count');
 
+    function getRowCheckboxes() {
+        return Array.from(document.querySelectorAll('.bulk-row'));
+    }
+
     function getSelectedIds() {
-        return rowCbs.filter(cb => !cb.disabled && cb.checked).map(cb => cb.value).filter(v => v !== '');
+        return getRowCheckboxes().filter(cb => !cb.disabled && cb.checked).map(cb => cb.value).filter(v => v !== '');
+    }
+
+    function statusPillClass(statusInt) {
+        if (statusInt === 8) return 'critical';
+        if ([0, 2, 6, 9].includes(statusInt)) return 'warning';
+        if (statusInt === 1) return 'info';
+        if ([3, 4, 5].includes(statusInt)) return 'healthy';
+        return 'neutral';
+    }
+
+    function getActiveStatusFilter() {
+        const value = statusFilterEl?.value ?? '';
+        return value === '' ? null : parseInt(value, 10);
+    }
+
+    function findJobRow(jobId) {
+        return document.querySelector('.cola-job-row[data-job-id="' + CSS.escape(jobId) + '"]');
+    }
+
+    function isActionableStatus(statusInt) {
+        return ACTIONABLE_STATUSES.includes(statusInt);
     }
 
     function updateSubmitEnabled() {
+        const rowCbs = getRowCheckboxes();
         const count = getSelectedIds().length;
         if (retrySubmit) retrySubmit.disabled = count === 0;
         if (cancelSubmit) cancelSubmit.disabled = count === 0;
-        if (selectedCount) selectedCount.textContent = count + (count === 1 ? ' seleccionado' : ' seleccionados');
+        if (selectedCount) {
+            selectedCount.textContent = count + (count === 1 ? ' seleccionado' : ' seleccionados');
+        }
         if (headerCb) {
             const selectableCount = rowCbs.filter(cb => !cb.disabled).length;
             headerCb.checked = selectableCount > 0 && count === selectableCount;
@@ -223,41 +266,151 @@
         }
     }
 
-    if (headerCb) {
-        headerCb.addEventListener('change', function() {
-            rowCbs.forEach(cb => {
-                if (cb.disabled) return;
-                cb.checked = headerCb.checked;
-                setRowSelectedState(cb);
-            });
-            updateSubmitEnabled();
-        });
-    }
-
     function setRowSelectedState(cb) {
         const row = cb.closest('tr');
         if (row) row.classList.toggle('is-selected', cb.checked);
     }
 
-    function isInteractiveClick(target) {
-        return Boolean(target.closest('a, button, input, select, textarea, label, form, [role="button"]'));
+    function clearRowSelection(row) {
+        const cb = row.querySelector('.bulk-row');
+        if (!cb) return;
+        cb.checked = false;
+        row.classList.remove('is-selected');
     }
 
-    rowCbs.forEach(cb => cb.addEventListener('change', function() {
-        setRowSelectedState(cb);
-        updateSubmitEnabled();
-    }));
+    function renderActionsCell(row, jobId, statusInt) {
+        const td = row.querySelector('.actions-col');
+        if (!td || !canManageQueue) return;
 
-    document.querySelectorAll('.dbx-selectable-row').forEach(row => {
-        row.addEventListener('click', function(event) {
-            if (isInteractiveClick(event.target)) return;
-            const cb = row.querySelector('.bulk-row');
-            if (!cb || cb.disabled) return;
-            cb.checked = !cb.checked;
-            cb.dispatchEvent(new Event('change', { bubbles: true }));
+        if (!isActionableStatus(statusInt)) {
+            td.innerHTML = '';
+            return;
+        }
+
+        td.innerHTML =
+            '<div class="action-buttons">' +
+                '<form action="' + colaReintentarBase + '/' + encodeURIComponent(jobId) + '/reintentar" method="POST" data-cola-action="reintentar">' +
+                    '<input type="hidden" name="_token" value="' + csrfToken + '">' +
+                    '<button type="submit" class="btn btn-ghost">Reintentar</button>' +
+                '</form>' +
+                '<form action="' + colaReintentarBase + '/' + encodeURIComponent(jobId) + '/cancelar" method="POST" class="inline" data-cola-action="cancelar" data-confirm="¿Cancelar este trabajo?">' +
+                    '<input type="hidden" name="_token" value="' + csrfToken + '">' +
+                    '<button type="submit" class="btn btn-danger">Cancelar</button>' +
+                '</form>' +
+            '</div>';
+    }
+
+    function updateStatusPill(row, statusInt) {
+        const pill = row.querySelector('.status-col .dbx-pill');
+        if (!pill) return;
+
+        pill.className = 'dbx-pill ' + statusPillClass(statusInt);
+        pill.textContent = STATUS_LABELS[statusInt] ?? '-';
+    }
+
+    function hideRowIfFiltered(row, statusInt) {
+        const filter = getActiveStatusFilter();
+        if (filter === null || filter === statusInt) {
+            row.hidden = false;
+            return;
+        }
+
+        row.hidden = true;
+        clearRowSelection(row);
+    }
+
+    function applyJobResult(result) {
+        if (!result?.jobId) return;
+
+        const row = findJobRow(result.jobId);
+        if (!row) return;
+
+        if (!result.ok || result.newStatus === undefined) return;
+
+        const newStatus = parseInt(result.newStatus, 10);
+        row.dataset.status = String(newStatus);
+        updateStatusPill(row, newStatus);
+        renderActionsCell(row, result.jobId, newStatus);
+        hideRowIfFiltered(row, newStatus);
+    }
+
+    function setFormBusy(form, busy) {
+        form.classList.toggle('is-submitting', busy);
+        form.querySelectorAll('button[type="submit"]').forEach(btn => {
+            btn.disabled = busy;
         });
-    });
-    updateSubmitEnabled();
+    }
+
+    function showColaToast(message, type) {
+        if (typeof window.showToast === 'function') {
+            window.showToast(message, type);
+            return;
+        }
+        window.alert(message);
+    }
+
+    async function submitColaForm(form) {
+        if (!window.fetch) {
+            form.submit();
+            return;
+        }
+
+        const confirmMessage = form.dataset.confirm;
+        if (confirmMessage && !window.confirm(confirmMessage)) {
+            return;
+        }
+
+        const action = form.dataset.colaAction;
+        if (action === 'reintentar-masivo') {
+            fillJobIdsIntoForm(form, 'bulk-reintentar-jobIds');
+        } else if (action === 'cancelar-masivo') {
+            fillJobIdsIntoForm(form, 'bulk-cancelar-jobIds');
+        }
+
+        if (action === 'reintentar-masivo' || action === 'cancelar-masivo') {
+            const selected = getSelectedIds();
+            if (selected.length === 0) {
+                showColaToast('Selecciona al menos un trabajo.', 'error');
+                return;
+            }
+        }
+
+        setFormBusy(form, true);
+
+        try {
+            const response = await fetch(form.action, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN': csrfToken
+                },
+                body: new FormData(form)
+            });
+
+            let payload = {};
+            try {
+                payload = await response.json();
+            } catch (error) {
+                throw new Error('Respuesta no valida del servidor.');
+            }
+
+            const toastType = (payload.ok || (payload.processed > 0)) ? 'success' : 'error';
+            if (payload.message) {
+                showColaToast(payload.message, toastType);
+            }
+
+            (payload.results || []).forEach(applyJobResult);
+            updateSubmitEnabled();
+        } catch (error) {
+            showColaToast('No se pudo completar la operacion. Intentalo de nuevo.', 'error');
+        } finally {
+            setFormBusy(form, false);
+            if (action === 'reintentar-masivo' || action === 'cancelar-masivo') {
+                updateSubmitEnabled();
+            }
+        }
+    }
 
     function fillJobIdsIntoForm(formEl, containerId) {
         const selected = getSelectedIds();
@@ -274,29 +427,46 @@
         });
     }
 
-    const retryForm = document.getElementById('bulk-reintentar-form');
-    if (retryForm) {
-        retryForm.addEventListener('submit', function(e) {
-            const selected = getSelectedIds();
-            if (selected.length === 0) {
-                e.preventDefault();
-                return;
-            }
-            fillJobIdsIntoForm(retryForm, 'bulk-reintentar-jobIds');
+    function isInteractiveClick(target) {
+        return Boolean(target.closest('a, button, input, select, textarea, label, form, [role="button"]'));
+    }
+
+    if (headerCb) {
+        headerCb.addEventListener('change', function() {
+            getRowCheckboxes().forEach(cb => {
+                if (cb.disabled) return;
+                cb.checked = headerCb.checked;
+                setRowSelectedState(cb);
+            });
+            updateSubmitEnabled();
         });
     }
 
-    const cancelForm = document.getElementById('bulk-cancelar-form');
-    if (cancelForm) {
-        cancelForm.addEventListener('submit', function(e) {
-            const selected = getSelectedIds();
-            if (selected.length === 0) {
-                e.preventDefault();
-                return;
-            }
-            fillJobIdsIntoForm(cancelForm, 'bulk-cancelar-jobIds');
+    document.addEventListener('change', function(event) {
+        const cb = event.target.closest('.bulk-row');
+        if (!cb) return;
+        setRowSelectedState(cb);
+        updateSubmitEnabled();
+    });
+
+    document.querySelectorAll('.dbx-selectable-row').forEach(row => {
+        row.addEventListener('click', function(event) {
+            if (isInteractiveClick(event.target)) return;
+            const cb = row.querySelector('.bulk-row');
+            if (!cb || cb.disabled) return;
+            cb.checked = !cb.checked;
+            cb.dispatchEvent(new Event('change', { bubbles: true }));
         });
-    }
+    });
+
+    document.addEventListener('submit', function(event) {
+        const form = event.target.closest('form[data-cola-action]');
+        if (!form) return;
+        event.preventDefault();
+        submitColaForm(form);
+    });
+
+    updateSubmitEnabled();
 })();
 </script>
 @endsection

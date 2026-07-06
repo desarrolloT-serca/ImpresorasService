@@ -14,15 +14,39 @@ class StatusLabels
         6 => 'Reintento programado',
         7 => 'Cancelado',
         8 => 'Error final',
+        9 => 'Bloqueado',
     ];
 
     public static function get(int|string|null $status): string
     {
+        $key = self::normalizeToInt($status);
+
+        return $key === null ? '-' : (self::LABELS[$key] ?? '-');
+    }
+
+    public static function normalizeToInt(int|string|null $status): ?int
+    {
         if ($status === null || $status === '') {
-            return '-';
+            return null;
         }
-        $key = is_numeric($status) ? (int) $status : null;
-        return self::LABELS[$key] ?? '-';
+
+        if (is_numeric($status)) {
+            return (int) $status;
+        }
+
+        return match (strtolower(trim((string) $status))) {
+            'pending' => 0,
+            'routed' => 1,
+            'printing' => 2,
+            'spoolaccepted' => 3,
+            'printedconfirmed' => 4,
+            'printedunknown' => 5,
+            'retryscheduled' => 6,
+            'cancelled', 'canceled' => 7,
+            'errorfinal' => 8,
+            'printerblocked' => 9,
+            default => null,
+        };
     }
 
     public static function all(): array

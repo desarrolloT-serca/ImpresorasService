@@ -3,10 +3,6 @@
 @section('title', 'Tiendas')
 
 @section('content')
-@if(session('success'))
-    <div class="mb-4 alert alert-success">{{ session('success') }}</div>
-@endif
-
 <div class="dbx-wrap">
 <x-ui.card>
     <x-ui.toolbar>

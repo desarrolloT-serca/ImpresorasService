@@ -6,7 +6,7 @@
 @php
     $window = $window ?? 'today';
     $tab = $tab ?? 'global';
-    $storeView = request('storeView', 'estado');
+    $storeView = request('storeView', 'detalle');
     if ($tab === 'stores') {
         $tab = 'global';
         $storeView = 'estado';
@@ -120,7 +120,10 @@
     };
 @endphp
 
-<div class="dbx-dashboard-page">
+<span id="autoRefreshCountdown" class="dbx-auto-refresh-status" hidden aria-live="polite" title="Próximo refresco automático"></span>
+
+@fragment('dashboard-content')
+<div class="dbx-dashboard-page" data-dashboard-dynamic aria-live="polite">
 @include('dashboard.partials.filters')
 
 <section class="dbx-wrap">
@@ -200,6 +203,21 @@
     $criticalShare = max(0, 100 - $healthyShare - $warningShare);
     $healthyEnd = $healthyShare;
     $warningEnd = $healthyShare + $warningShare;
+
+    if ($criticalCount > 0) {
+        $donutStatusLabel = 'Crítico';
+        $donutStatusShare = $criticalShare;
+        $donutAriaLabel = 'Tiendas críticas: ' . $criticalShare . '%';
+    } elseif ($warningCount > 0) {
+        $donutStatusLabel = 'Warning';
+        $donutStatusShare = $warningShare;
+        $donutAriaLabel = 'Tiendas en warning: ' . $warningShare . '%';
+    } else {
+        $donutStatusLabel = 'OK';
+        $donutStatusShare = $healthyShare;
+        $donutAriaLabel = 'Tiendas saludables: ' . $healthyShare . '%';
+    }
+
     $topStores = $storesList;
     $hasStoreRisk = $warningCount > 0 || $criticalCount > 0;
 @endphp
@@ -287,42 +305,22 @@
             </div>
         </article>
 
-        <article class="dbx-card">
+        <article class="dbx-card dbx-store-status-card">
             <div class="dbx-card-body">
                 @if($isAdminView)
-                    <div class="dbx-title-row dbx-title-row-center">
-                        <h2 class="dbx-title dbx-title-center">Estado de las tiendas</h2>
+                    <div class="dbx-title-row">
+                        <h2 class="dbx-title">Estado de las tiendas</h2>
                     </div>
                     <div class="dbx-store-health-panel">
                         <div
                             class="dbx-health-ring"
                             style="--healthy-end: {{ $healthyEnd }}%; --warning-end: {{ $warningEnd }}%;"
-                            aria-label="Tiendas saludables: {{ $healthyShare }}%"
+                            aria-label="{{ $donutAriaLabel }}"
                         >
                             <div class="dbx-health-ring-core">
-                                <strong>{{ $healthyShare }}%</strong>
-                                <span>
-                                    @if($criticalCount > 0)
-                                        Cr&iacute;tico
-                                    @elseif($warningCount > 0)
-                                        Warning
-                                    @else
-                                        OK
-                                    @endif
-                                </span>
+                                <strong>{{ $donutStatusShare }}%</strong>
+                                <span>{{ $donutStatusLabel }}</span>
                             </div>
-                        </div>
-                        <div class="dbx-health-ring-copy">
-                            @if($criticalCount > 0)
-                                <strong>Atenci&oacute;n prioritaria</strong>
-                                <span>Hay incidencias cr&iacute;ticas activas.</span>
-                            @elseif($warningCount > 0)
-                                <strong>Seguimiento recomendado</strong>
-                                <span>Operativa estable con avisos abiertos.</span>
-                            @else
-                                <strong>Operativa estable</strong>
-                                <span>Sin alertas cr&iacute;ticas activas.</span>
-                            @endif
                         </div>
                         <div class="dbx-health-legend" aria-label="Resumen de estado por tiendas">
                             <div class="dbx-health-legend-row">
@@ -395,14 +393,14 @@
         @if(count($alerts) === 0)
             <p class="dbx-subtle">Sin alertas activas para el ambito y periodo seleccionados.</p>
         @else
-            <div class="dbx-table-wrap dbx-alerts-wrap" style="--dbx-visible-rows: {{ $alertsVisibleRows }};">
-                <table class="dbx-table">
+            <div class="dbx-table-wrap dbx-alerts-wrap table-alerts-wrap" style="--dbx-visible-rows: {{ $alertsVisibleRows }};">
+                <table class="dbx-table table-alerts">
                     <thead>
                         <tr>
-                            <th>Tienda</th>
+                            <th class="store-col">Tienda</th>
                             <th>Salud</th>
                             <th>Tipo</th>
-                            <th>Motivo</th>
+                            <th class="text-col">Motivo</th>
                             <th>En cola</th>
                             <th>Fallo sin reenviar (periodo)</th>
                         </tr>
@@ -469,17 +467,23 @@
                                             $href = '/cola?storeId=' . urlencode((string)$storeId) . '&status=0';
                                         }
                                     }
+
+                                    $alertRowClass = match ($status) {
+                                        'critical' => 'alert-row-critical',
+                                        'warning' => 'alert-row-warning',
+                                        default => 'alert-row-ok',
+                                    };
                                 @endphp
-                                <tr class="{{ $idx === 0 ? 'dbx-alert-group-start' : 'dbx-alert-group-cont' }} dbx-alert-row-{{ $status }}" @if($href) data-alert-href="{{ $href }}" @endif>
+                                <tr class="{{ $idx === 0 ? 'dbx-alert-group-start' : 'dbx-alert-group-cont' }} dbx-alert-row-{{ $status }} {{ $alertRowClass }}" @if($href) data-alert-href="{{ $href }}" @endif>
                                     @if($idx === 0)
-                                        <td rowspan="{{ $rowspan }}">{{ $formatStoreLabel($groupStoreId, $group['storeName'] ?? 'Sin nombre') }}</td>
+                                        <td class="store-col" rowspan="{{ $rowspan }}">{{ $formatStoreLabel($groupStoreId, $group['storeName'] ?? 'Sin nombre') }}</td>
                                     @endif
                                     <td><span class="dbx-pill {{ $status }}">{{ strtoupper($status) }}</span></td>
                                     <td>
                                         {{-- La columna "Tipo" usa el mismo color que la columna "Salud" para no confundir. --}}
                                         <span class="dbx-pill {{ $status === 'healthy' ? 'healthy' : $status }}">{{ $alertTypeLabel }}</span>
                                     </td>
-                                    <td>{{ $reason !== '' ? $reason : '-' }}</td>
+                                    <td class="text-col">{{ $reason !== '' ? $reason : '-' }}</td>
                                     <td>{{ $alert['queuedCurrent'] ?? 0 }}</td>
                                     <td>{{ $alert['failedWithoutRetryCurrent'] ?? 0 }}</td>
                                 </tr>
@@ -800,11 +804,11 @@
 @endif
 </section>
 </div>
+@endfragment
 
 <script>
 (function() {
     const STORAGE_KEY = 'dashboard.filters.v1';
-    const serverAutoRefreshSeconds = {{ (int) ($autoRefreshSeconds ?? 0) }};
 
     function readStoredPrefs() {
         try {
@@ -859,10 +863,6 @@
         return prefs;
     }
 
-    function applyPrefsToUrlIfMissing(prefs) {
-        return false;
-    }
-
     function syncControlsWithServerRender() {
         document.querySelectorAll('[data-current]').forEach(function(el) {
             const value = el.getAttribute('data-current');
@@ -886,19 +886,6 @@
                 const prefs = getCurrentPrefsFromDom();
                 if (prefs) writeStoredPrefs(prefs);
             });
-        }
-
-        // Si vuelves a entrar sin parámetros (por ejemplo usando navegación del navegador),
-        // recargamos la URL con lo guardado para que el servidor renderice igual (y el auto-refresh funcione).
-        // Programar auto-refresh (si ya viene en la URL). Si no viene, se aplicará tras el redirect anterior.
-        const url = new URL(window.location.href);
-        const params = url.searchParams;
-        const autoRefreshSeconds = Number(params.get('autoRefresh') ?? serverAutoRefreshSeconds ?? 0);
-
-        if (autoRefreshSeconds > 0) {
-            setTimeout(function() {
-                window.location.reload();
-            }, autoRefreshSeconds * 1000);
         }
     });
 })();
@@ -930,6 +917,275 @@
         mode = mode === 'number' ? 'percent' : 'number';
         applyMode();
     });
+})();
+
+(function() {
+    let dashboardAbortController = null;
+    let dashboardRequestId = 0;
+    let autoRefreshTimer = null;
+    let autoRefreshCountdownTimer = null;
+    let autoRefreshSecondsRemaining = 0;
+
+    function getAutoRefreshCountdownEl() {
+        return document.getElementById('autoRefreshCountdown');
+    }
+
+    function updateAutoRefreshIndicator(remaining, loading) {
+        const el = getAutoRefreshCountdownEl();
+        if (!el) return;
+
+        el.classList.remove('is-active', 'is-loading');
+
+        if (loading) {
+            el.hidden = false;
+            el.classList.add('is-loading');
+            el.textContent = '↻ …';
+            el.title = 'Actualizando dashboard';
+            return;
+        }
+
+        const seconds = Number(remaining) || 0;
+        if (seconds > 0) {
+            el.hidden = false;
+            el.classList.add('is-active');
+            el.textContent = '↻ ' + seconds + 's';
+            el.title = 'Próximo refresco automático en ' + seconds + ' segundos';
+            return;
+        }
+
+        el.hidden = true;
+        el.textContent = '';
+        el.title = 'Próximo refresco automático';
+    }
+
+    function stopAutoRefreshCountdown() {
+        if (autoRefreshCountdownTimer) {
+            window.clearInterval(autoRefreshCountdownTimer);
+            autoRefreshCountdownTimer = null;
+        }
+    }
+
+    function scheduleAutoRefresh(seconds) {
+        if (autoRefreshTimer) {
+            window.clearTimeout(autoRefreshTimer);
+            autoRefreshTimer = null;
+        }
+        stopAutoRefreshCountdown();
+
+        const interval = Number(seconds) || 0;
+        if (interval <= 0) {
+            updateAutoRefreshIndicator(0, false);
+            return;
+        }
+
+        autoRefreshSecondsRemaining = interval;
+        updateAutoRefreshIndicator(autoRefreshSecondsRemaining, false);
+
+        autoRefreshCountdownTimer = window.setInterval(function() {
+            autoRefreshSecondsRemaining -= 1;
+            if (autoRefreshSecondsRemaining <= 0) {
+                stopAutoRefreshCountdown();
+                updateAutoRefreshIndicator(0, true);
+                return;
+            }
+            updateAutoRefreshIndicator(autoRefreshSecondsRemaining, false);
+        }, 1000);
+
+        autoRefreshTimer = window.setTimeout(function() {
+            stopAutoRefreshCountdown();
+            loadDashboard(window.location.href, false);
+        }, interval * 1000);
+    }
+
+    function getDashboardRoot() {
+        return document.querySelector('[data-dashboard-dynamic]');
+    }
+
+    function initStatsToggle(root) {
+        const toggle = root.querySelector('#dbx-stats-toggle');
+        if (!toggle || toggle.dataset.dynamicBound === '1') return;
+
+        toggle.dataset.dynamicBound = '1';
+        let mode = 'number';
+
+        function applyMode() {
+            root.querySelectorAll('.dbx-bar-value').forEach(function(v) {
+                const num = v.querySelector('.dbx-bar-value-number');
+                const pct = v.querySelector('.dbx-bar-value-percent');
+                if (!num || !pct) return;
+                if (mode === 'number') {
+                    num.style.display = '';
+                    pct.style.display = 'none';
+                } else {
+                    num.style.display = 'none';
+                    pct.style.display = '';
+                }
+            });
+            toggle.textContent = mode === 'number' ? '%' : 'N';
+        }
+
+        toggle.addEventListener('click', function() {
+            mode = mode === 'number' ? 'percent' : 'number';
+            applyMode();
+        });
+    }
+
+    function prepareDynamicDashboard(root) {
+        const form = root.querySelector('form[data-dashboard-filter-form]');
+        if (form) {
+            form.dataset.dynamicOwned = '1';
+        }
+
+        initStatsToggle(root);
+        scheduleAutoRefresh(Number(root.querySelector('#autoRefresh')?.value || 0));
+    }
+
+    function showDashboardError(root, url) {
+        const previous = root.querySelector('.dynamic-panel-error');
+        if (previous) previous.remove();
+
+        const error = document.createElement('div');
+        error.className = 'dynamic-panel-error';
+        error.innerHTML = 'No se pudo actualizar el dashboard. <a class="btn btn-ghost btn-sm" href="' + url + '">Abrir vista completa</a>';
+        root.prepend(error);
+    }
+
+    function collectFormUrl(form) {
+        const formData = new FormData(form);
+        const url = new URL(form.action || window.location.href, window.location.href);
+        url.search = '';
+
+        formData.forEach(function(value, key) {
+            if (value !== null && value !== '') {
+                url.searchParams.append(key, value);
+            }
+        });
+
+        return url.toString();
+    }
+
+    function writeDynamicPrefs(form) {
+        try {
+            const prefs = {};
+            new FormData(form).forEach(function(value, key) {
+                prefs[key] = value;
+            });
+            localStorage.setItem('dashboard.filters.v1', JSON.stringify(prefs));
+        } catch {}
+    }
+
+    async function loadDashboard(url, pushState) {
+        const currentRoot = getDashboardRoot();
+        if (!currentRoot || !window.fetch || !window.DOMParser) {
+            window.location.href = url;
+            return;
+        }
+
+        if (dashboardAbortController) {
+            dashboardAbortController.abort();
+        }
+
+        dashboardAbortController = new AbortController();
+        const requestId = ++dashboardRequestId;
+        currentRoot.classList.add('is-dynamic-loading');
+        currentRoot.setAttribute('aria-busy', 'true');
+        stopAutoRefreshCountdown();
+        updateAutoRefreshIndicator(0, true);
+
+        try {
+            const response = await fetch(url, {
+                headers: {
+                    'Accept': 'text/html',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                signal: dashboardAbortController.signal
+            });
+
+            if (!response.ok) {
+                throw new Error('HTTP ' + response.status);
+            }
+
+            const html = await response.text();
+            if (requestId !== dashboardRequestId) return;
+
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+            const nextRoot = doc.querySelector('[data-dashboard-dynamic]');
+
+            if (!nextRoot) {
+                throw new Error('Dashboard no encontrado');
+            }
+
+            const prevToggle = currentRoot.querySelector('#dbx-stats-toggle');
+            const wasPercent = prevToggle?.textContent === 'N';
+
+            currentRoot.replaceWith(nextRoot);
+            prepareDynamicDashboard(nextRoot);
+
+            if (wasPercent) {
+                nextRoot.querySelector('#dbx-stats-toggle')?.click();
+            }
+
+            if (pushState) {
+                history.pushState({ dynamicPanel: 'dashboard' }, '', url);
+            }
+        } catch (error) {
+            if (error.name === 'AbortError') return;
+            const root = getDashboardRoot();
+            if (root) {
+                root.classList.remove('is-dynamic-loading');
+                root.removeAttribute('aria-busy');
+                showDashboardError(root, url);
+                scheduleAutoRefresh(Number(root.querySelector('#autoRefresh')?.value || 0));
+            }
+        }
+    }
+
+    document.addEventListener('click', function(event) {
+        const link = event.target.closest('a.dbx-store-view-tab');
+        if (!link || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+        event.preventDefault();
+        loadDashboard(link.href, true);
+    });
+
+    document.addEventListener('submit', function(event) {
+        const form = event.target.closest('form[data-dashboard-filter-form]');
+        if (!form) return;
+
+        event.preventDefault();
+        writeDynamicPrefs(form);
+        loadDashboard(collectFormUrl(form), true);
+    });
+
+    document.addEventListener('change', function(event) {
+        const form = event.target.closest('form[data-dashboard-filter-form][data-dynamic-owned="1"]');
+        const field = event.target.closest('select, input[type="checkbox"], input[type="radio"]');
+        if (!form || !field) return;
+
+        if (typeof form.requestSubmit === 'function') {
+            form.requestSubmit();
+        } else {
+            loadDashboard(collectFormUrl(form), true);
+        }
+    });
+
+    window.addEventListener('popstate', function() {
+        if (window.location.pathname === '/' || window.location.pathname === '') {
+            loadDashboard(window.location.href, false);
+        }
+    });
+
+    window.DashboardDynamic = {
+        refresh: function() {
+            return loadDashboard(window.location.href, false);
+        },
+        scheduleAutoRefresh: scheduleAutoRefresh
+    };
+
+    const initialDashboardRoot = getDashboardRoot();
+    if (initialDashboardRoot) {
+        prepareDynamicDashboard(initialDashboardRoot);
+    }
 })();
 </script>
 @endsection

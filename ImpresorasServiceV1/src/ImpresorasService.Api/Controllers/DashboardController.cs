@@ -1,4 +1,6 @@
+using System.Linq.Expressions;
 using System.Security.Claims;
+using ImpresorasService.Application.Services;
 using ImpresorasService.Domain;
 using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure.Persistence;
@@ -7,6 +9,18 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace ImpresorasService.Api.Controllers;
+
+public static class DashboardPrintJobPredicates
+{
+    public static readonly Expression<Func<PrintJob, bool>> FailedWithoutRetryCurrent =
+        x => x.Status == PrintJobStatus.ErrorFinal
+             || ((x.Status == PrintJobStatus.Pending
+                  || x.Status == PrintJobStatus.Routed
+                  || x.Status == PrintJobStatus.Printing
+                  || x.Status == PrintJobStatus.Cancelled
+                  || x.Status == PrintJobStatus.PrinterBlocked)
+                 && x.AttemptCount > 1);
+}
 
 [ApiController]
 [Authorize(Policy = "EmployeeOrAbove")]
@@ -26,11 +40,6 @@ public class DashboardController : ControllerBase
         PrintJobStatus.Routed,
         PrintJobStatus.Printing,
         PrintJobStatus.RetryScheduled
-    ];
-
-    private static readonly PrintJobStatus[] FailedWithoutRetryStatuses =
-    [
-        PrintJobStatus.ErrorFinal
     ];
 
     private readonly ImpresorasDbContext _dbContext;
@@ -58,8 +67,9 @@ public class DashboardController : ControllerBase
         var fromUtc = ResolveWindowStartUtc(window);
 
         var jobs = _dbContext.PrintJobs.AsNoTracking();
-        var stores = _dbContext.Stores.AsNoTracking().Where(x => x.IsActive == true);
-        var printers = _dbContext.Printers.AsNoTracking().Where(x => x.IsActive == true);
+        var activeOnly = true;
+        var stores = _dbContext.Stores.AsNoTracking().Where(x => x.IsActive == activeOnly);
+        var printers = _dbContext.Printers.AsNoTracking().Where(x => x.IsActive == activeOnly);
 
         if (effectiveStoreId.HasValue)
         {
@@ -69,6 +79,9 @@ public class DashboardController : ControllerBase
         }
 
         var jobsInWindow = jobs.Where(x => x.CreatedAtUtc >= fromUtc);
+        // failedWithoutRetryCurrent usa UpdatedAtUtc para reflejar trabajos que
+        // entraron en error durante la ventana, no solo los creados en ella.
+        var jobsUpdatedInWindow = jobs.Where(x => x.UpdatedAtUtc >= fromUtc);
 
         var kpis = new
         {
@@ -80,17 +93,12 @@ public class DashboardController : ControllerBase
                      || (PrintedStatuses.Contains(x.Status) && x.AttemptCount > 1),
                 cancellationToken),
             queueCurrent = await jobs.CountAsync(x => QueueStatuses.Contains(x.Status), cancellationToken),
-            failedWithoutRetryCurrent = await jobsInWindow.CountAsync(
-                x => FailedWithoutRetryStatuses.Contains(x.Status)
-                     || (x.Status != PrintJobStatus.RetryScheduled
-                         && !PrintedStatuses.Contains(x.Status)
-                         && x.AttemptCount > 1),
-                cancellationToken),
+            failedWithoutRetryCurrent = await jobsUpdatedInWindow.CountAsync(DashboardPrintJobPredicates.FailedWithoutRetryCurrent, cancellationToken),
             activePrinters = await printers.CountAsync(cancellationToken),
             activeStores = await stores.CountAsync(cancellationToken)
         };
 
-        var storeRows = await BuildStoreRowsAsync(stores, printers, jobsInWindow, jobs, thresholds, cancellationToken);
+        var storeRows = await BuildStoreRowsAsync(stores, printers, jobsInWindow, jobsUpdatedInWindow, jobs, thresholds, cancellationToken);
         var alerts = storeRows
             .Where(x => x.Health != "healthy")
             .OrderByDescending(x => x.FailedWithoutRetryCurrent)
@@ -190,6 +198,7 @@ public class DashboardController : ControllerBase
         IQueryable<Domain.Entities.Store> stores,
         IQueryable<Domain.Entities.Printer> printers,
         IQueryable<Domain.Entities.PrintJob> jobsInWindow,
+        IQueryable<Domain.Entities.PrintJob> jobsUpdatedInWindow,
         IQueryable<Domain.Entities.PrintJob> allJobs,
         DashboardThresholds thresholds,
         CancellationToken cancellationToken)
@@ -238,16 +247,13 @@ public class DashboardController : ControllerBase
             })
             .ToDictionaryAsync(x => x.StoreId, x => x.QueuedCurrent, cancellationToken);
 
-        var failedWindowStats = await jobsInWindow
+        var failedWindowStats = await jobsUpdatedInWindow
+            .Where(DashboardPrintJobPredicates.FailedWithoutRetryCurrent)
             .GroupBy(x => x.StoreId)
             .Select(x => new
             {
                 StoreId = x.Key,
-                FailedWithoutRetryCurrent = x.Count(j =>
-                    FailedWithoutRetryStatuses.Contains(j.Status)
-                    || (j.Status != PrintJobStatus.RetryScheduled
-                        && !PrintedStatuses.Contains(j.Status)
-                        && j.AttemptCount > 1))
+                FailedWithoutRetryCurrent = x.Count()
             })
             .ToDictionaryAsync(x => x.StoreId, x => x.FailedWithoutRetryCurrent, cancellationToken);
 
@@ -294,37 +300,15 @@ public class DashboardController : ControllerBase
         int missingHost,
         int connWarn,
         int connCrit,
-        DashboardThresholds thresholds)
-    {
-        // Prioridad: conectividad crítica
-        if (connCrit > 0)
-            return (ToHealth(thresholds.ConnCriticalSeverity), "Impresora(s) sin conexion (conectividad)");
-
-        if (connectedPrinters == 0 && queuedCurrent > 0)
-            return ("critical", "Hay cola pero no hay impresoras activas");
-
-        if (failedWithoutRetryCurrent >= thresholds.CriticalFailedWithoutRetryMin || queuedCurrent >= thresholds.CriticalQueueMin)
-        {
-            if (failedWithoutRetryCurrent >= thresholds.CriticalFailedWithoutRetryMin)
-                return (ToHealth(thresholds.FailedCriticalSeverity), $"Acumula {thresholds.CriticalFailedWithoutRetryMin} o mas fallos sin reenviar");
-            return (ToHealth(thresholds.QueueCriticalSeverity), $"Cola actual mayor o igual a {thresholds.CriticalQueueMin} trabajos");
-        }
-        if (connectedPrinters == 0)
-            return ("warning", "Sin impresoras activas en la tienda");
-
-        if (connWarn > 0)
-            return (ToHealth(thresholds.ConnWarningSeverity), "Impresora(s) con fallos de conexion (conectividad)");
-        if (missingHost >= thresholds.MissingHostMin && missingHost > 0)
-            return (ToHealth(thresholds.MissingHostSeverity), "Impresora(s) sin host configurado");
-
-        if (failedWithoutRetryCurrent >= thresholds.WarningFailedWithoutRetryMin || queuedCurrent >= thresholds.WarningQueueMin)
-        {
-            if (failedWithoutRetryCurrent >= thresholds.WarningFailedWithoutRetryMin)
-                return (ToHealth(thresholds.FailedWarningSeverity), "Tiene fallos recientes sin reenviar");
-            return (ToHealth(thresholds.QueueWarningSeverity), $"Cola actual entre {thresholds.WarningQueueMin} y {thresholds.CriticalQueueMin - 1} trabajos");
-        }
-        return ("healthy", "Operacion dentro de umbrales");
-    }
+        DashboardThresholds t)
+        => StoreHealthEvaluator.Compute(
+            connectedPrinters, queuedCurrent, failedWithoutRetryCurrent,
+            missingHost, connWarn, connCrit,
+            t.WarningQueueMin, t.CriticalQueueMin,
+            t.WarningFailedWithoutRetryMin, t.CriticalFailedWithoutRetryMin,
+            t.MissingHostMin, t.ConnWarningFailuresMin, t.ConnCriticalFailuresMin,
+            t.ConnCriticalSeverity, t.FailedCriticalSeverity, t.QueueCriticalSeverity,
+            t.ConnWarningSeverity, t.MissingHostSeverity, t.FailedWarningSeverity, t.QueueWarningSeverity);
 
     private async Task<DashboardThresholds> GetThresholdsAsync(CancellationToken cancellationToken)
     {
@@ -333,23 +317,7 @@ public class DashboardController : ControllerBase
             .SingleOrDefaultAsync(x => x.Id == 1, cancellationToken);
 
         if (row is not null)
-        {
-            return new DashboardThresholds(
-                row.WarningQueueMin,
-                row.CriticalQueueMin,
-                row.QueueWarningSeverity,
-                row.QueueCriticalSeverity,
-                row.WarningFailedWithoutRetryMin,
-                row.CriticalFailedWithoutRetryMin,
-                row.FailedWarningSeverity,
-                row.FailedCriticalSeverity,
-                row.MissingHostMin,
-                row.MissingHostSeverity,
-                row.ConnWarningFailuresMin,
-                row.ConnCriticalFailuresMin,
-                row.ConnWarningSeverity,
-                row.ConnCriticalSeverity);
-        }
+            return MapThresholdRow(row);
 
         var defaults = new DashboardThresholds(
             DefaultWarningQueueMin,
@@ -387,10 +355,41 @@ public class DashboardController : ControllerBase
             UpdatedAtUtc = DateTimeOffset.UtcNow
         };
 
-        await _dbContext.DashboardThresholds.AddAsync(defaultRow, cancellationToken);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _dbContext.DashboardThresholds.AddAsync(defaultRow, cancellationToken);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            // Concurrent request inserted the singleton first; reload what it wrote.
+            _dbContext.ChangeTracker.Clear();
+            var concurrent = await _dbContext.DashboardThresholds
+                .AsNoTracking()
+                .SingleOrDefaultAsync(x => x.Id == 1, cancellationToken);
+            if (concurrent is not null)
+                return MapThresholdRow(concurrent);
+            throw;
+        }
+
         return defaults;
     }
+
+    private static DashboardThresholds MapThresholdRow(DashboardThreshold row) =>
+        new(row.WarningQueueMin,
+            row.CriticalQueueMin,
+            row.QueueWarningSeverity,
+            row.QueueCriticalSeverity,
+            row.WarningFailedWithoutRetryMin,
+            row.CriticalFailedWithoutRetryMin,
+            row.FailedWarningSeverity,
+            row.FailedCriticalSeverity,
+            row.MissingHostMin,
+            row.MissingHostSeverity,
+            row.ConnWarningFailuresMin,
+            row.ConnCriticalFailuresMin,
+            row.ConnWarningSeverity,
+            row.ConnCriticalSeverity);
 
     private static string NormalizeSeverity(string? value)
     {
@@ -398,22 +397,18 @@ public class DashboardController : ControllerBase
         return v is "info" or "warning" or "critical" ? v : "warning";
     }
 
-    private static string ToHealth(string severity)
-    {
-        // El dashboard actual solo distingue healthy/warning/critical.
-        // "info" no debe elevar el estado, pero sí puede mostrarse en reason.
-        var s = NormalizeSeverity(severity);
-        return s == "critical" ? "critical" : (s == "warning" ? "warning" : "healthy");
-    }
-
     private static DateTimeOffset ResolveWindowStartUtc(string? window)
     {
         var now = DateTimeOffset.UtcNow;
+        // ponytail: DateTime.Today es medianoche local; igual que el frontend PHP que usa config('app.timezone').
+        // now.Date es medianoche UTC — difiere hasta 2h en CEST, haciendo que C# devuelva received=0
+        // para trabajos creados entre 00:00-02:00 hora local, vaciando el dashboard.
+        var todayLocal = new DateTimeOffset(DateTime.Today, TimeZoneInfo.Local.GetUtcOffset(DateTime.Today));
         return NormalizeWindow(window) switch
         {
             "7d" => now.AddDays(-7),
             "30d" => now.AddDays(-30),
-            _ => now.Date
+            _ => todayLocal
         };
     }
 
