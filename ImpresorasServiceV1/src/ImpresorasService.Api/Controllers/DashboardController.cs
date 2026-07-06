@@ -400,11 +400,15 @@ public class DashboardController : ControllerBase
     private static DateTimeOffset ResolveWindowStartUtc(string? window)
     {
         var now = DateTimeOffset.UtcNow;
+        // ponytail: DateTime.Today es medianoche local; igual que el frontend PHP que usa config('app.timezone').
+        // now.Date es medianoche UTC — difiere hasta 2h en CEST, haciendo que C# devuelva received=0
+        // para trabajos creados entre 00:00-02:00 hora local, vaciando el dashboard.
+        var todayLocal = new DateTimeOffset(DateTime.Today, TimeZoneInfo.Local.GetUtcOffset(DateTime.Today));
         return NormalizeWindow(window) switch
         {
             "7d" => now.AddDays(-7),
             "30d" => now.AddDays(-30),
-            _ => now.Date
+            _ => todayLocal
         };
     }
 

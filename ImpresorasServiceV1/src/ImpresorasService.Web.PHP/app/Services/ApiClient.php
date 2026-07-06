@@ -90,6 +90,28 @@ class ApiClient
         }
     }
 
+    /**
+     * GET silencioso: no afecta al estado de error de sesión.
+     * Para endpoints opcionales/suplementarios que no deben bloquear la UI.
+     */
+    public function getQuiet(string $path): array
+    {
+        $normalizedPath = ltrim($path, '/');
+        $token = Session::get('impresoras_token');
+        $cacheKey = sha1(($token ? 'auth:' . $token : 'guest') . '|' . $normalizedPath);
+
+        if (array_key_exists($cacheKey, $this->requestGetCache)) {
+            return $this->requestGetCache[$cacheKey];
+        }
+
+        try {
+            $decoded = $this->request('GET', $normalizedPath);
+            return $this->requestGetCache[$cacheKey] = $decoded;
+        } catch (\Throwable) {
+            return [];
+        }
+    }
+
     public function post(string $path, array $body = []): array
     {
         return $this->mutate('POST', $path, $body);

@@ -36,17 +36,12 @@ class DashboardOverviewService
         $query = http_build_query($params);
         $path = 'api/dashboard/overview' . ($query !== '' ? '?' . $query : '');
 
-        try {
-            $response = $this->api->get($path);
-            return is_array($response) && $response !== [] ? $response : null;
-        } catch (\Throwable $e) {
-            Log::warning('Dashboard overview no disponible', [
-                'path' => $path,
-                'error' => $e->getMessage(),
-            ]);
-
+        $response = $this->api->getQuiet($path);
+        if (!is_array($response) || $response === []) {
             return null;
         }
+
+        return $response;
     }
 
     /**
