@@ -54,3 +54,6 @@ templates/
 
 # Local IDE settings
 .cursor/
+
+# .NET dev overrides — pueden contener secretos locales; usar Telegram__BotToken como env var
+**/appsettings.Development.json

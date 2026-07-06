@@ -1,3 +1,5 @@
+using ImpresorasService.Domain;
+using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure;
 using ImpresorasService.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
@@ -16,6 +18,56 @@ public class SourcePrintJobsController : ControllerBase
     public SourcePrintJobsController(ImpresorasDbContext dbContext)
     {
         _dbContext = dbContext;
+    }
+
+    // Cancela todos los PrintJobs de prueba que aún no hayan llegado al spooler.
+    // Los que ya están en SpoolAccepted ya fueron enviados a Windows; no los toca.
+    [HttpPost("test/cancel-all")]
+    public async Task<IActionResult> CancelAllTestJobs(
+        [FromQuery] string? runId,
+        CancellationToken cancellationToken)
+    {
+        var activeStates = new[]
+        {
+            PrintJobStatus.Pending, PrintJobStatus.Routed,
+            PrintJobStatus.RetryScheduled, PrintJobStatus.Printing,
+            PrintJobStatus.PrinterBlocked
+        };
+
+        var query = _dbContext.PrintJobs
+            .Where(j => j.SourceSystem == "PRUEBA" && activeStates.Contains(j.Status));
+
+        if (!string.IsNullOrWhiteSpace(runId))
+            query = query.Where(j => EF.Functions.Like(j.ExternalJobId, $"%{runId}%"));
+
+        var jobs = await query.ToListAsync(cancellationToken);
+
+        if (jobs.Count == 0)
+            return Ok(new { cancelled = 0 });
+
+        var now = DateTimeOffset.UtcNow;
+        var events = new List<PrintJobEvent>();
+        foreach (var job in jobs)
+        {
+            var old = job.Status;
+            job.Status = PrintJobStatus.Cancelled;
+            job.NextRetryAtUtc = null;
+            job.UpdatedAtUtc = now;
+            events.Add(new PrintJobEvent
+            {
+                JobId = job.JobId,
+                EventType = "CANCELLED_BY_USER",
+                OldStatus = old,
+                NewStatus = PrintJobStatus.Cancelled,
+                ActorType = "system",
+                Message = "Cancelación masiva de trabajos de prueba desde UI.",
+                OccurredAtUtc = now
+            });
+        }
+
+        _dbContext.PrintJobEvents.AddRange(events);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { cancelled = jobs.Count });
     }
 
     [HttpPost("test")]

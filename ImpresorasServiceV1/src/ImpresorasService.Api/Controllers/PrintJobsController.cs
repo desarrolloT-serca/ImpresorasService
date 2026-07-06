@@ -73,6 +73,7 @@ public class PrintJobsController : ControllerBase
                 job.Status,
                 job.AttemptCount,
                 job.LastErrorCode,
+                job.LastErrorMessage,
                 job.CreatedAtUtc,
                 job.UpdatedAtUtc
             };

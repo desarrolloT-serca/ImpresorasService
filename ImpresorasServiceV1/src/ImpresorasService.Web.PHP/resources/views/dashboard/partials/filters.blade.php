@@ -1,5 +1,5 @@
 <x-ui.card>
-    <form method="GET" class="filters-row" autocomplete="off">
+    <form method="GET" class="filters-row" autocomplete="off" data-dashboard-filter-form>
         <x-ui.toolbar>
         <div class="dbx-filters">
             <div class="dbx-filter-item">

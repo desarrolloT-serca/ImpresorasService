@@ -3,10 +3,6 @@
 @section('title', 'Ajustes')
 
 @section('content')
-    @if(session('success'))
-        <div class="mb-4 alert alert-success">{{ session('success') }}</div>
-    @endif
-
     @php
         $thresholds = is_array($thresholds ?? null) ? $thresholds : [];
         $severityOptions = [

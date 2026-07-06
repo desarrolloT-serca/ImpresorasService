@@ -27,7 +27,7 @@ cp .env.example .env
 2) Ajusta la URL de API en `.env`:
 
 ```env
-IMPRESORAS_API_URL=http://localhost:5105
+API_URL=http://localhost:5105
 ```
 
 ## Arranque local
@@ -93,8 +93,25 @@ npm run dev
 Asegura en `.env`:
 
 ```env
-IMPRESORAS_API_URL=http://localhost:5105
+API_URL=http://localhost:5105
 ```
+
+## Producción (checklist mínimo)
+
+```env
+APP_ENV=production
+APP_DEBUG=false
+APP_URL=https://tu-dominio
+
+API_URL=http://127.0.0.1:5105
+
+SESSION_ENCRYPT=true
+SESSION_SECURE_COOKIE=true
+```
+
+- `API_URL` apunta a Kestrel en la misma máquina (no al proxy Nginx `/api`).
+- Health de la API: `curl http://127.0.0.1:5105/health`
+- Guía completa: `ImpresorasServiceV1/docs/DESPLIEGUE-PHP.md`
 
 ### 4) Verificacion rapida post-despliegue
 
@@ -105,7 +122,7 @@ IMPRESORAS_API_URL=http://localhost:5105
 
 ## Flujos principales
 
-- Login contra `POST /api/auth/login`
+- Login contra `POST /api/auth/token` (JWT en sesión)
 - Dashboard/cola/impresoras/reglas consumiendo endpoints de la API con token Bearer en sesion
 - Middleware propio para:
   - `auth.impresoras`

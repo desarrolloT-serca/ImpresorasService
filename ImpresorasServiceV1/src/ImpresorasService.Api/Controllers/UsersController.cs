@@ -218,9 +218,10 @@ public class UsersController : ControllerBase
             if (storeIdValue <= 0)
                 return "La tienda seleccionada no existe o esta inactiva.";
 
+            var activeStoreOnly = true;
             var storeIsActive = (await _dbContext.Stores
                 .AsNoTracking()
-                .Where(x => x.StoreId == storeIdValue && x.IsActive)
+                .Where(x => x.StoreId == storeIdValue && x.IsActive == activeStoreOnly)
                 .Select(x => x.StoreId)
                 .Take(1)
                 .ToListAsync(ct))

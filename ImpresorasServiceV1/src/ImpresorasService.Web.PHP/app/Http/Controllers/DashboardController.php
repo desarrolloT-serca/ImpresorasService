@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Helpers\AuthHelper;
 use App\Services\ApiClient;
+use App\Services\DashboardOverviewService;
 use GuzzleHttp\Exception\RequestException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,11 +18,14 @@ class DashboardController extends Controller
     private const SEVERITIES = ['info', 'warning', 'critical'];
     private const RULE_METRICS = ['queue', 'failed', 'missingHost', 'conn'];
 
-    public function __construct(private readonly ApiClient $api)
+    public function __construct(
+        private readonly ApiClient $api,
+        private readonly DashboardOverviewService $overviewService,
+    )
     {
     }
 
-    public function index(): View
+    public function index(Request $request)
     {
         $isAdminUser = AuthHelper::isAdmin();
         $effectiveStore = AuthHelper::getEffectiveStoreId();
@@ -35,10 +39,13 @@ class DashboardController extends Controller
         $autoRefreshSecondsRaw = (int) request()->query('autoRefresh', 30);
         $allowedRefresh = [0, 15, 30, 60, 120];
         $autoRefreshSeconds = in_array($autoRefreshSecondsRaw, $allowedRefresh, true) ? $autoRefreshSecondsRaw : 0;
-        $thresholds = $this->resolveHealthThresholds();
+        ['stores' => $storesRaw, 'thr' => $rawThresholdsResponse] =
+            \GuzzleHttp\Promise\Utils::unwrap([
+                'stores' => $this->api->getAsync('api/stores?isActive=true'),
+                'thr'    => $this->api->getAsync('api/dashboard/thresholds'),
+            ]);
 
-        $storesPath = 'api/stores?isActive=true';
-        $storesRaw = $this->safeApiGetList($storesPath);
+        $thresholds = $this->resolveHealthThresholds($rawThresholdsResponse);
         $activeStoreIds = [];
         $storeNameById = [];
         foreach ($storesRaw as $storeRow) {
@@ -69,14 +76,21 @@ class DashboardController extends Controller
             $storeSort = 'severity';
         }
 
-        $jobsPath = 'api/printjobs?limit=5000' . ($effectiveStore !== null ? '&storeId=' . $effectiveStore : '');
-        $jobs = $this->safeApiGetList($jobsPath);
-
+        $jobsPath     = 'api/printjobs?limit=5000' . ($effectiveStore !== null ? '&storeId=' . $effectiveStore : '');
         $printersPath = 'api/printers?isActive=true' . ($effectiveStore !== null ? '&storeId=' . $effectiveStore : '');
-        $printers = $this->safeApiGetList($printersPath);
 
-        // Usuarios solo aporta en el resumen global de administrador.
-        $users = $isAdminDashboard ? $this->safeApiGetList('api/users') : [];
+        $batch2 = [
+            'jobs'     => $this->api->getAsync($jobsPath),
+            'printers' => $this->api->getAsync($printersPath),
+        ];
+        if ($isAdminDashboard) {
+            $batch2['users'] = $this->api->getAsync('api/users');
+        }
+        $batch2Result = \GuzzleHttp\Promise\Utils::unwrap($batch2);
+        $jobs     = $batch2Result['jobs'];
+        $printers = $batch2Result['printers'];
+        $users    = $isAdminDashboard ? ($batch2Result['users'] ?? []) : [];
+        $overview = $this->overviewService->fetch($effectiveStore, $window);
 
         [$windowStart, $windowEnd] = $this->resolveWindowRange($window);
         $connWarnMin = (int) ($thresholds['connWarningFailuresMin'] ?? 2);
@@ -275,6 +289,10 @@ class DashboardController extends Controller
         }
         unset($row);
 
+        if ($overview !== null) {
+            $this->applyOverviewStores($storeStats, $overview, $storeNameById);
+        }
+
         $stores = array_values($storeStats);
         usort($stores, function (array $a, array $b) use ($storeSort): int {
             if ($storeSort === 'name') {
@@ -292,11 +310,15 @@ class DashboardController extends Controller
                 ?: (($b['queuedCurrent'] ?? 0) <=> ($a['queuedCurrent'] ?? 0));
         });
 
-        $alerts = $this->buildPrioritizedAlerts($stores, $thresholds);
-
         if (!$showHealthy) {
             $stores = array_values(array_filter($stores, fn (array $row): bool => ($row['health'] ?? 'healthy') !== 'healthy'));
         }
+
+        if (in_array($health, ['healthy', 'warning', 'critical'], true)) {
+            $stores = array_values(array_filter($stores, fn (array $row): bool => ($row['health'] ?? '') === $health));
+        }
+
+        $alerts = $this->buildPrioritizedAlerts($stores, $thresholds);
 
         $kpis = [
             'received' => $received,
@@ -307,6 +329,15 @@ class DashboardController extends Controller
             'activePrinters' => array_sum(array_map(fn (array $row): int => (int) ($row['connectedPrinters'] ?? 0), $stores)),
             'activeStores' => count(array_filter($stores, fn (array $row): bool => (int) ($row['connectedPrinters'] ?? 0) > 0)),
         ];
+
+        if ($overview !== null) {
+            $kpis = $this->applyOverviewKpis($kpis, $overview);
+        }
+
+        if (config('impresoras.dashboard_log_overview_diff')) {
+            $this->overviewService->logKpiDiffIfAny($kpis, $effectiveStore, $window);
+        }
+
         $summary = [
             'storesTotal' => count($storeStats),
             'storesActive' => $kpis['activeStores'],
@@ -315,23 +346,9 @@ class DashboardController extends Controller
             'usersTotal' => is_array($users) ? count($users) : 0,
         ];
         $generatedAtUtc = gmdate('c');
-
-        if (!is_array($kpis)) {
-            $kpis = [];
-        }
-        if (!is_array($alerts)) {
-            $alerts = [];
-        }
-        if (!is_array($stores)) {
-            $stores = [];
-        }
-
-        if (in_array($health, ['healthy', 'warning', 'critical'], true)) {
-            $stores = array_values(array_filter($stores, fn (array $row): bool => ($row['health'] ?? '') === $health));
-        }
         $viewName = $isAdminDashboard ? 'dashboard' : 'dashboard-local';
 
-        return view($viewName, [
+        $view = view($viewName, [
             'isAdminUser' => $isAdminUser,
             'isAdminDashboard' => $isAdminDashboard,
             'window' => $window,
@@ -348,6 +365,10 @@ class DashboardController extends Controller
             'alerts' => $alerts,
             'stores' => $stores,
         ]);
+
+        return $request->ajax() && $viewName === 'dashboard'
+            ? $view->fragment('dashboard-content')
+            : $view;
     }
 
     public function ajustes(): View
@@ -412,6 +433,72 @@ class DashboardController extends Controller
             'printers' => [],
             'unassignedQueueCurrent' => 0,
         ];
+    }
+
+    /**
+     * @param array<string, int> $kpis
+     * @param array<string, mixed> $overview
+     * @return array<string, int>
+     */
+    private function applyOverviewKpis(array $kpis, array $overview): array
+    {
+        $overviewKpis = $overview['kpis'] ?? $overview['Kpis'] ?? [];
+        if (!is_array($overviewKpis)) {
+            return $kpis;
+        }
+
+        foreach (['received', 'printed', 'failed', 'queueCurrent', 'failedWithoutRetryCurrent'] as $key) {
+            $kpis[$key] = $this->readInt($overviewKpis, $key, $kpis[$key] ?? 0);
+        }
+
+        return $kpis;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $storeStats
+     * @param array<string, mixed> $overview
+     * @param array<int, string> $storeNameById
+     */
+    private function applyOverviewStores(array &$storeStats, array $overview, array $storeNameById): void
+    {
+        $overviewStores = $overview['stores'] ?? $overview['Stores'] ?? [];
+        if (!is_array($overviewStores)) {
+            return;
+        }
+
+        foreach ($overviewStores as $overviewStore) {
+            if (!is_array($overviewStore)) {
+                continue;
+            }
+
+            $storeId = $this->readInt($overviewStore, 'storeId');
+            if ($storeId <= 0) {
+                continue;
+            }
+
+            if (!isset($storeStats[$storeId])) {
+                $storeStats[$storeId] = $this->makeEmptyStore($storeId, $storeNameById);
+            }
+
+            $storeStats[$storeId]['storeName'] = (string) ($overviewStore['storeName'] ?? $overviewStore['StoreName'] ?? $storeStats[$storeId]['storeName']);
+            $storeStats[$storeId]['received'] = $this->readInt($overviewStore, 'received', (int) $storeStats[$storeId]['received']);
+            $storeStats[$storeId]['printed'] = $this->readInt($overviewStore, 'printed', (int) $storeStats[$storeId]['printed']);
+            $storeStats[$storeId]['failed'] = $this->readInt($overviewStore, 'failed', (int) $storeStats[$storeId]['failed']);
+            $storeStats[$storeId]['queuedCurrent'] = $this->readInt($overviewStore, 'queuedCurrent', (int) $storeStats[$storeId]['queuedCurrent']);
+            $storeStats[$storeId]['failedWithoutRetryCurrent'] = $this->readInt($overviewStore, 'failedWithoutRetryCurrent', (int) $storeStats[$storeId]['failedWithoutRetryCurrent']);
+            $storeStats[$storeId]['health'] = (string) ($overviewStore['health'] ?? $overviewStore['Health'] ?? $storeStats[$storeId]['health']);
+            $storeStats[$storeId]['healthReason'] = (string) ($overviewStore['healthReason'] ?? $overviewStore['HealthReason'] ?? $storeStats[$storeId]['healthReason']);
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    private function readInt(array $row, string $key, int $fallback = 0): int
+    {
+        $pascalKey = ucfirst($key);
+
+        return (int) ($row[$key] ?? $row[$pascalKey] ?? $fallback);
     }
 
     /**
@@ -638,7 +725,7 @@ class DashboardController extends Controller
         return ['healthy', 'Operacion dentro de umbrales'];
     }
 
-    private function resolveHealthThresholds(): array
+    private function resolveHealthThresholds(?array $rawApiResponse = null): array
     {
         $defaults = [
             'warningQueueMin' => 10,
@@ -659,7 +746,7 @@ class DashboardController extends Controller
         $defaults['thresholdRules'] = $this->legacyRulesFromThresholds($defaults);
 
         try {
-            $thresholds = $this->api->get('api/dashboard/thresholds');
+            $thresholds = $rawApiResponse ?? $this->api->get('api/dashboard/thresholds');
             if (!is_array($thresholds)) {
                 return $defaults;
             }
@@ -889,43 +976,6 @@ class DashboardController extends Controller
     private function storeDynamicThresholdRules(array $rules): void
     {
         Storage::disk('local')->put(self::THRESHOLD_RULES_FILE, json_encode($rules, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-    }
-
-    /**
-     * Fetch list endpoints defensively so a 4xx/5xx does not break dashboard rendering.
-     */
-    private function safeApiGetList(string $path): array
-    {
-        try {
-            $data = $this->api->get($path);
-            if (!is_array($data)) {
-                return [];
-            }
-
-            // La API puede responder como lista plana o como envoltorio { value, Count }.
-            if (array_key_exists('value', $data) && is_array($data['value'])) {
-                return $data['value'];
-            }
-
-            if (array_key_exists('Value', $data) && is_array($data['Value'])) {
-                return $data['Value'];
-            }
-
-            return $data;
-        } catch (RequestException $e) {
-            $status = $e->getResponse()?->getStatusCode();
-            Log::warning('Dashboard API list fallback', [
-                'path' => $path,
-                'status' => $status,
-            ]);
-            return [];
-        } catch (\Throwable $e) {
-            Log::warning('Dashboard API unexpected fallback', [
-                'path' => $path,
-                'error' => $e->getMessage(),
-            ]);
-            return [];
-        }
     }
 
     /**

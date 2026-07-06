@@ -4,6 +4,7 @@ namespace App\View\Composers;
 
 use App\Helpers\AuthHelper;
 use App\Services\ApiClient;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\View\View;
 
 class LayoutComposer
@@ -32,9 +33,11 @@ class LayoutComposer
         $stores = [];
         if (session()->has('impresoras_token')) {
             try {
-                $stores = $this->api->get('api/stores?isActive=true');
+                $stores = Cache::store('file')->remember('layout_stores_active', 30, function () {
+                    return $this->api->get('api/stores?isActive=true');
+                });
             } catch (\Throwable) {
-                $stores = [];
+                try { $stores = $this->api->get('api/stores?isActive=true'); } catch (\Throwable) {}
             }
         }
 
@@ -67,6 +70,7 @@ class LayoutComposer
             'effectiveStoreId' => $effectiveStoreId,
             'selectedStoreId' => $selectedStoreId,
             'storeOptions' => $storeOptions,
+            'apiError' => session(ApiClient::SESSION_API_ERROR_KEY),
         ]);
     }
 }

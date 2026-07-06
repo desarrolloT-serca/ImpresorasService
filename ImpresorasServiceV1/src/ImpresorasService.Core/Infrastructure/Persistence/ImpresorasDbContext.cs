@@ -126,6 +126,9 @@ public class ImpresorasDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<Store> Stores => Set<Store>();
     public DbSet<DashboardThreshold> DashboardThresholds => Set<DashboardThreshold>();
+    public DbSet<TelegramConfig> TelegramConfigs => Set<TelegramConfig>();
+    public DbSet<TelegramChat> TelegramChats => Set<TelegramChat>();
+    public DbSet<StoreAlertState> StoreAlertStates => Set<StoreAlertState>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -257,6 +260,7 @@ public class ImpresorasDbContext : DbContext
             entity.Property(x => x.LastConnectionCheckAtUtc);
             entity.Property(x => x.LastConnectionTransport).HasMaxLength(40);
             entity.Property(x => x.LastConnectionError).HasMaxLength(400);
+            entity.Property(x => x.IppSupported).HasColumnName("ipp_supported");
 
             entity.HasIndex(x => new { x.StoreId, x.SpoolQueue }).IsUnique();
         });
@@ -361,6 +365,39 @@ public class ImpresorasDbContext : DbContext
             entity.Property(x => x.ConnWarningSeverity).HasMaxLength(20).HasDefaultValue("warning").IsRequired();
             entity.Property(x => x.ConnCriticalSeverity).HasMaxLength(20).HasDefaultValue("critical").IsRequired();
             entity.Property(x => x.UpdatedAtUtc).IsRequired();
+        });
+
+        modelBuilder.Entity<TelegramConfig>(entity =>
+        {
+            entity.ToTable("printer_telegram_config");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(x => x.MinSeverity).HasColumnName("min_severity").HasMaxLength(20).HasDefaultValue("critical").IsRequired();
+            entity.Property(x => x.NotifyOnRecovery).HasColumnName("notify_on_recovery").HasDefaultValue(true).IsRequired();
+            entity.Property(x => x.CheckIntervalMinutes).HasColumnName("check_interval_minutes").HasDefaultValue(5).IsRequired();
+            entity.Property(x => x.UpdatedAtUtc).HasColumnName("updated_at_utc").IsRequired();
+        });
+
+        modelBuilder.Entity<TelegramChat>(entity =>
+        {
+            entity.ToTable("printer_telegram_chat");
+            entity.HasKey(x => x.ChatId);
+            entity.Property(x => x.ChatId).HasColumnName("chat_id").ValueGeneratedNever();
+            entity.Property(x => x.Description).HasColumnName("description").HasMaxLength(120);
+            entity.Property(x => x.IsActive).HasColumnName("is_active").HasDefaultValue(true).IsRequired();
+            entity.Property(x => x.StoreId).HasColumnName("store_id");
+            entity.Property(x => x.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
+        });
+
+        modelBuilder.Entity<StoreAlertState>(entity =>
+        {
+            entity.ToTable("printer_alert_state");
+            entity.HasKey(x => x.StoreId);
+            entity.Property(x => x.StoreId).HasColumnName("store_id").ValueGeneratedNever();
+            entity.Property(x => x.LastHealth).HasColumnName("last_health").HasMaxLength(20).HasDefaultValue("healthy").IsRequired();
+            entity.Property(x => x.NotifiedHealth).HasColumnName("notified_health").HasMaxLength(20);
+            entity.Property(x => x.NotifiedAtUtc).HasColumnName("notified_at_utc");
+            entity.Property(x => x.CheckedAtUtc).HasColumnName("checked_at_utc").IsRequired();
         });
 
         // HANA está persistiendo fechas históricas en formato string no homogéneo (legacy).

@@ -57,10 +57,11 @@ jobs:
 
       - name: Check for build output directories
         run: |
-          BUILD=$(git ls-files | grep -E '/(bin|obj)/' | head -1 || true)
+          # Solo .NET: bin/obj bajo ImpresorasServiceV1 (OpenSpec/bin es fuente del CLI Node)
+          BUILD=$(git ls-files -- 'ImpresorasServiceV1/**' | grep -E '/(bin|obj)/' | head -1 || true)
           if [ -n "$BUILD" ]; then
             echo "::error::Build output directories (bin/obj) found in git index"
-            git ls-files | grep -E '/(bin|obj)/' | head -10
+            git ls-files -- 'ImpresorasServiceV1/**' | grep -E '/(bin|obj)/' | head -10
             exit 1
           fi
           echo "OK: No bin/obj directories tracked"

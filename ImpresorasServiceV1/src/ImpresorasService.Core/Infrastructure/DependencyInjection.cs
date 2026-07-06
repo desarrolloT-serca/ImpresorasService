@@ -56,6 +56,10 @@ public static class DependencyInjection
             services.AddSingleton<IPrinterSpooler>(new NoOpPrintSpooler(simulateSuccess: true));
 
         services.AddScoped<IPrintExecutionService, PrintExecutionService>();
+        services.AddSingleton<IIppConfirmationService, IppConfirmationService>();
+
+        services.Configure<TelegramOptions>(configuration.GetSection(TelegramOptions.SectionName));
+        services.AddSingleton<ITelegramNotifier, TelegramNotifierService>();
 
         return services;
     }

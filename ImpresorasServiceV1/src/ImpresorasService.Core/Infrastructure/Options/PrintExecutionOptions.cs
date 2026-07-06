@@ -42,4 +42,13 @@ public sealed class PrintExecutionOptions
 
     /// <summary>Tamaño de lote máximo por ciclo del watchdog.</summary>
     public int SpoolAcceptedWatchBatchSize { get; set; } = 50;
+
+    /// <summary>
+    /// Si true, el watchdog consulta IPP antes de marcar un job como <c>PrintedUnknown</c>.
+    /// Requiere que la impresora sea accesible en el puerto 631.
+    /// </summary>
+    public bool IppConfirmationEnabled { get; set; } = true;
+
+    /// <summary>Timeout en milisegundos para cada consulta IPP por impresora.</summary>
+    public int IppTimeoutMs { get; set; } = 3000;
 }

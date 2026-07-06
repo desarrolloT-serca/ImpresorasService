@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use GuzzleHttp\Exception\RequestException;
+use Illuminate\Support\Facades\Log;
 
 abstract class Controller
 {
@@ -69,41 +70,62 @@ abstract class Controller
     {
         $response = $e->getResponse();
         if (! $response) {
-            return [$fallbackField => ['No se pudo conectar con el servicio. Intentalo de nuevo en unos segundos.']];
+            return [$fallbackField => ['No se pudo conectar con el servicio. Comprueba que la API esté en marcha.']];
         }
 
-        $payload = json_decode((string) $response->getBody(), true);
-        if (! is_array($payload)) {
-            return [$fallbackField => ['Error inesperado al procesar la solicitud.']];
-        }
+        $status = $response->getStatusCode();
+        $body = (string) $response->getBody();
+        $payload = json_decode($body, true);
 
-        $result = [];
+        Log::warning('API error response', [
+            'status' => $status,
+            'body'   => mb_substr($body, 0, 1000),
+            'url'    => (string) $e->getRequest()->getUri(),
+            'method' => $e->getRequest()->getMethod(),
+        ]);
 
-        if (isset($payload['errors']) && is_array($payload['errors'])) {
-            foreach ($payload['errors'] as $field => $messages) {
-                $fieldKey = is_string($field) && $field !== ''
-                    ? lcfirst($field)
-                    : $fallbackField;
-                if (is_array($messages)) {
-                    $result[$fieldKey] = array_values(array_map(
-                        fn ($message): string => $this->humanizeApiMessage((string) $message),
-                        $messages
-                    ));
-                } elseif (is_string($messages)) {
-                    $result[$fieldKey] = [$this->humanizeApiMessage($messages)];
+        if (is_array($payload)) {
+            $result = [];
+
+            if (isset($payload['errors']) && is_array($payload['errors'])) {
+                foreach ($payload['errors'] as $field => $messages) {
+                    $fieldKey = is_string($field) && $field !== ''
+                        ? lcfirst($field)
+                        : $fallbackField;
+                    if (is_array($messages)) {
+                        $result[$fieldKey] = array_values(array_map(
+                            fn ($message): string => $this->humanizeApiMessage((string) $message),
+                            $messages
+                        ));
+                    } elseif (is_string($messages)) {
+                        $result[$fieldKey] = [$this->humanizeApiMessage($messages)];
+                    }
                 }
+            }
+
+            if (! empty($result)) {
+                return $result;
+            }
+
+            $message = $payload['error']
+                ?? $payload['message']
+                ?? $payload['title']
+                ?? null;
+
+            if ($message !== null) {
+                return [$fallbackField => [$this->humanizeApiMessage((string) $message)]];
             }
         }
 
-        if (! empty($result)) {
-            return $result;
-        }
+        $fallback = match (true) {
+            $status === 400 => 'Solicitud incorrecta. Revisa los datos introducidos.',
+            $status === 404 => 'El recurso solicitado no existe.',
+            $status === 409 => 'Conflicto: ya existe un registro con esos datos.',
+            $status === 422 => 'Los datos enviados no son válidos.',
+            $status >= 500 => "Error del servidor (HTTP {$status}). Inténtalo de nuevo más tarde.",
+            default        => "Error al procesar la solicitud (HTTP {$status}).",
+        };
 
-        $message = $payload['error']
-            ?? $payload['message']
-            ?? $payload['title']
-            ?? 'Error al procesar la solicitud.';
-
-        return [$fallbackField => [$this->humanizeApiMessage((string) $message)]];
+        return [$fallbackField => [$fallback]];
     }
 }

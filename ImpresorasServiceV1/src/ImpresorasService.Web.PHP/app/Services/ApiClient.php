@@ -4,10 +4,14 @@ namespace App\Services;
 
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
 
 class ApiClient
 {
+    public const SESSION_API_ERROR_KEY = 'impresoras_api_error';
+
     /** @var array<string, array> */
     private array $requestGetCache = [];
 
@@ -30,6 +34,38 @@ class ApiClient
         return new self($client, $baseUrl);
     }
 
+    public function getAsync(string $path): \GuzzleHttp\Promise\PromiseInterface
+    {
+        $normalizedPath = ltrim($path, '/');
+        $token = Session::get('impresoras_token');
+        $cacheKey = sha1(($token ? 'auth:' . $token : 'guest') . '|' . $normalizedPath);
+
+        if (array_key_exists($cacheKey, $this->requestGetCache)) {
+            return \GuzzleHttp\Promise\Create::promiseFor($this->requestGetCache[$cacheKey]);
+        }
+
+        $options = $token ? ['headers' => ['Authorization' => 'Bearer ' . $token]] : [];
+
+        return $this->client->getAsync($normalizedPath, $options)->then(
+            function ($response) use ($cacheKey) {
+                $decoded = json_decode((string) $response->getBody(), true) ?? [];
+                if (array_key_exists('value', $decoded) && is_array($decoded['value'])) {
+                    $decoded = $decoded['value'];
+                } elseif (array_key_exists('Value', $decoded) && is_array($decoded['Value'])) {
+                    $decoded = $decoded['Value'];
+                }
+                $this->clearApiFailure();
+
+                return $this->requestGetCache[$cacheKey] = $decoded;
+            },
+            function (\Throwable $e) use ($normalizedPath) {
+                $this->markApiFailure($normalizedPath, $e->getMessage());
+
+                return [];
+            }
+        );
+    }
+
     public function get(string $path): array
     {
         $normalizedPath = ltrim($path, '/');
@@ -40,22 +76,83 @@ class ApiClient
             return $this->requestGetCache[$cacheKey];
         }
 
-        return $this->requestGetCache[$cacheKey] = $this->request('GET', $normalizedPath);
+        try {
+            $decoded = $this->request('GET', $normalizedPath);
+            $this->clearApiFailure();
+
+            return $this->requestGetCache[$cacheKey] = $decoded;
+        } catch (\Throwable $e) {
+            if (! $e instanceof \Illuminate\Http\Exceptions\HttpResponseException) {
+                $this->markApiFailure($normalizedPath, $e->getMessage());
+            }
+
+            return [];
+        }
+    }
+
+    /**
+     * GET silencioso: no afecta al estado de error de sesión.
+     * Para endpoints opcionales/suplementarios que no deben bloquear la UI.
+     */
+    public function getQuiet(string $path): array
+    {
+        $normalizedPath = ltrim($path, '/');
+        $token = Session::get('impresoras_token');
+        $cacheKey = sha1(($token ? 'auth:' . $token : 'guest') . '|' . $normalizedPath);
+
+        if (array_key_exists($cacheKey, $this->requestGetCache)) {
+            return $this->requestGetCache[$cacheKey];
+        }
+
+        try {
+            $decoded = $this->request('GET', $normalizedPath);
+            return $this->requestGetCache[$cacheKey] = $decoded;
+        } catch (\Throwable) {
+            return [];
+        }
     }
 
     public function post(string $path, array $body = []): array
     {
-        return $this->request('POST', $path, $body);
+        return $this->mutate('POST', $path, $body);
     }
 
     public function put(string $path, array $body = []): array
     {
-        return $this->request('PUT', $path, $body);
+        return $this->mutate('PUT', $path, $body);
     }
 
     public function delete(string $path): array
     {
-        return $this->request('DELETE', $path);
+        return $this->mutate('DELETE', $path);
+    }
+
+    private function mutate(string $method, string $path, array $body = []): array
+    {
+        $result = $this->request($method, $path, $body);
+        $this->invalidateCaches();
+
+        return $result;
+    }
+
+    private function invalidateCaches(): void
+    {
+        $this->requestGetCache = [];
+        Cache::store('file')->forget('layout_stores_active');
+    }
+
+    private function markApiFailure(string $path, string $message): void
+    {
+        Session::put(self::SESSION_API_ERROR_KEY, 'No se pudo conectar con la API. Algunos datos pueden estar incompletos.');
+        Log::warning('ApiClient GET falló', [
+            'path' => $path,
+            'error' => $message,
+        ]);
+    }
+
+    private function clearApiFailure(): void
+    {
+        Session::forget(self::SESSION_API_ERROR_KEY);
     }
 
     private function request(string $method, string $path, array $body = []): array

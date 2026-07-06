@@ -49,8 +49,9 @@ public class SapHanaJobSourceAdapter : IJobSourceAdapter
 
         await using var tx = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
 
+        var pendingOnly = false;
         var preCandidates = await _dbContext.SourcePrintJobs
-            .Where(x => !x.IsProcessed)
+            .Where(x => x.IsProcessed == pendingOnly)
             .OrderBy(x => x.Id)
             .Take(batchSize * 5)
             .ToListAsync(cancellationToken);
@@ -70,7 +71,7 @@ public class SapHanaJobSourceAdapter : IJobSourceAdapter
         }
 
         var claimedRows = (await _dbContext.SourcePrintJobs
-            .Where(x => candidateIds.Contains(x.Id) && !x.IsProcessed)
+            .Where(x => candidateIds.Contains(x.Id) && x.IsProcessed == pendingOnly)
             .ToListAsync(cancellationToken))
             .Where(x => x.ClaimedUntilUtc == null || x.ClaimedUntilUtc <= now)
             .ToList();
