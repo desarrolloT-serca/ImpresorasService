@@ -36,7 +36,7 @@ class TiendasController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $request->validate([
-            'storeId' => 'required|integer|min:1',
+            'storeId' => 'required|integer|min:0',
             'name' => 'required|string|max:120',
             'isActive' => 'boolean',
         ]);

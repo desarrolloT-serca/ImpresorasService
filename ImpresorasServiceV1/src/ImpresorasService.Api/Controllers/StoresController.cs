@@ -85,8 +85,8 @@ public class StoresController : ControllerBase
     [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> Create([FromBody] CreateStoreRequest request, CancellationToken cancellationToken)
     {
-        if (request.StoreId <= 0)
-            return BadRequest(new { error = "El numero de tienda debe ser mayor que 0." });
+        if (request.StoreId < 0)
+            return BadRequest(new { error = "El numero de tienda no puede ser negativo." });
         if (string.IsNullOrWhiteSpace(request.Name))
             return BadRequest(new { error = "El nombre de tienda es obligatorio." });
 
