@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using System.Globalization;
 
 var builder = Host.CreateApplicationBuilder(args);
+builder.Services.AddWindowsService(options => options.ServiceName = "ImpresorasService.Worker");
 var appCultureName = builder.Configuration["Globalization:Culture"] ?? "es-ES";
 var appCulture = CultureInfo.GetCultureInfo(appCultureName);
 CultureInfo.DefaultThreadCurrentCulture = appCulture;
