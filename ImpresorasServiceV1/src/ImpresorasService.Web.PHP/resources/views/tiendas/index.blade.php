@@ -47,7 +47,7 @@
                     </span>
                 </td>
                 <td class="actions-col">
-                    @if($id)
+                    @if($id !== null && $id !== '')
                     <x-ui.action-buttons>
                         <a href="{{ route('tiendas.edit', $id) }}" class="btn btn-ghost">Editar</a>
                         @if($isActive)
