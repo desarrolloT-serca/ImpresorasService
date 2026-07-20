@@ -64,7 +64,8 @@ public sealed class PrintExecutionServiceTests
                 BackoffSeconds = [15, 30, 60, 90],
                 TimeoutSeconds = 30
             }),
-            new NullRoutingResolver());
+            new NullRoutingResolver(),
+            TimeProvider.System);
 
         var processed = await service.ExecuteBatchAsync(10);
 

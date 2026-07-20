@@ -16,24 +16,27 @@ public sealed class PrintExecutionService : IPrintExecutionService
     private readonly ILogger<PrintExecutionService> _logger;
     private readonly PrintExecutionOptions _options;
     private readonly IRoutingResolver _routingResolver;
+    private readonly TimeProvider _timeProvider;
 
     public PrintExecutionService(
         ImpresorasDbContext db,
         IPrinterSpooler spooler,
         ILogger<PrintExecutionService> logger,
         IOptions<PrintExecutionOptions> options,
-        IRoutingResolver routingResolver)
+        IRoutingResolver routingResolver,
+        TimeProvider timeProvider)
     {
         _db = db;
         _spooler = spooler;
         _logger = logger;
         _options = options.Value;
         _routingResolver = routingResolver;
+        _timeProvider = timeProvider;
     }
 
     public async Task<int> ExecuteBatchAsync(int batchSize, CancellationToken cancellationToken = default)
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = _timeProvider.GetUtcNow();
         // Nota de decisión: tratamos "Printing" como recuperable si lleva más que el timeout configurado + buffer.
         // Buffer evita que jobs válidos se reintenten mientras el spooler todavía está procesando.
         var stalePrintingAfter = TimeSpan.FromSeconds(_options.TimeoutSeconds + 10);
@@ -167,7 +170,7 @@ public sealed class PrintExecutionService : IPrintExecutionService
         // fisico esté apagado/no alcanzable.
         if (printer.LastConnectionOk == false && printer.LastConnectionCheckAtUtc.HasValue)
         {
-            var lastCheckAge = DateTimeOffset.UtcNow - printer.LastConnectionCheckAtUtc.Value;
+            var lastCheckAge = _timeProvider.GetUtcNow() - printer.LastConnectionCheckAtUtc.Value;
             if (lastCheckAge <= TimeSpan.FromSeconds(90))
             {
                 var nextAttempt = job.AttemptCount + 1;
@@ -177,10 +180,10 @@ public sealed class PrintExecutionService : IPrintExecutionService
                     var old = job.Status;
                     job.Status = PrintJobStatus.RetryScheduled;
                     job.AttemptCount = nextAttempt;
-                    job.NextRetryAtUtc = DateTimeOffset.UtcNow.AddSeconds(delaySec);
+                    job.NextRetryAtUtc = _timeProvider.GetUtcNow().AddSeconds(delaySec);
                     job.LastErrorCode = "PRINTER_UNREACHABLE";
                     job.LastErrorMessage = printer.LastConnectionError ?? "Impresora no alcanzable (monitor de conectividad).";
-                    job.UpdatedAtUtc = DateTimeOffset.UtcNow;
+                    job.UpdatedAtUtc = _timeProvider.GetUtcNow();
                     _db.PrintJobs.Update(job);
                     await _db.PrintJobEvents.AddAsync(new PrintJobEvent
                     {
@@ -191,7 +194,7 @@ public sealed class PrintExecutionService : IPrintExecutionService
                         ErrorCode = "PRINTER_UNREACHABLE",
                         Message = job.LastErrorMessage,
                         ActorType = "system",
-                        OccurredAtUtc = DateTimeOffset.UtcNow
+                        OccurredAtUtc = _timeProvider.GetUtcNow()
                     }, ct);
                     await _db.SaveChangesAsync(ct);
                     await tx.CommitAsync(ct);
@@ -215,7 +218,7 @@ public sealed class PrintExecutionService : IPrintExecutionService
         if (job.Status == PrintJobStatus.Printing)
         {
             // Solo reintenta si el job está "stale". Si está fresco, no hacemos override.
-            if (job.UpdatedAtUtc > DateTimeOffset.UtcNow - stalePrintingAfter)
+            if (job.UpdatedAtUtc > _timeProvider.GetUtcNow() - stalePrintingAfter)
                 return false;
         }
         else if (job.Status != PrintJobStatus.Routed && job.Status != PrintJobStatus.RetryScheduled)
@@ -223,7 +226,7 @@ public sealed class PrintExecutionService : IPrintExecutionService
             return false;
         }
 
-        if (job.Status == PrintJobStatus.RetryScheduled && job.NextRetryAtUtc > DateTimeOffset.UtcNow)
+        if (job.Status == PrintJobStatus.RetryScheduled && job.NextRetryAtUtc > _timeProvider.GetUtcNow())
             return false;
 
         if (job.AttemptCount >= _options.MaxAttempts)
@@ -237,7 +240,7 @@ public sealed class PrintExecutionService : IPrintExecutionService
         var oldStatus = job.Status;
         job.Status = PrintJobStatus.Printing;
         job.AttemptCount++;
-        job.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        job.UpdatedAtUtc = _timeProvider.GetUtcNow();
         _db.PrintJobs.Update(job);
 
         await _db.PrintJobEvents.AddAsync(new PrintJobEvent
@@ -247,7 +250,7 @@ public sealed class PrintExecutionService : IPrintExecutionService
             OldStatus = oldStatus,
             NewStatus = PrintJobStatus.Printing,
             ActorType = "system",
-            OccurredAtUtc = DateTimeOffset.UtcNow
+            OccurredAtUtc = _timeProvider.GetUtcNow()
         }, ct);
 
         var rows = await _db.SaveChangesAsync(ct);
@@ -285,7 +288,7 @@ public sealed class PrintExecutionService : IPrintExecutionService
             job2.LastErrorCode = null;
             job2.LastErrorMessage = null;
             job2.NextRetryAtUtc = null;
-            job2.UpdatedAtUtc = DateTimeOffset.UtcNow;
+            job2.UpdatedAtUtc = _timeProvider.GetUtcNow();
             _db.PrintJobs.Update(job2);
             await _db.PrintJobEvents.AddAsync(new PrintJobEvent
             {
@@ -295,17 +298,17 @@ public sealed class PrintExecutionService : IPrintExecutionService
                 NewStatus = PrintJobStatus.SpoolAccepted,
                 ActorType = "system",
                 Message = "Spooler aceptó el trabajo",
-                OccurredAtUtc = DateTimeOffset.UtcNow
+                OccurredAtUtc = _timeProvider.GetUtcNow()
             }, ct);
         }
         else if (result.IsTransient && job2.AttemptCount < _options.MaxAttempts)
         {
             var delaySec = _options.BackoffSeconds[Math.Min(job2.AttemptCount - 1, _options.BackoffSeconds.Length - 1)];
             job2.Status = PrintJobStatus.RetryScheduled;
-            job2.NextRetryAtUtc = DateTimeOffset.UtcNow.AddSeconds(delaySec);
+            job2.NextRetryAtUtc = _timeProvider.GetUtcNow().AddSeconds(delaySec);
             job2.LastErrorCode = result.ErrorCode;
             job2.LastErrorMessage = result.ErrorMessage;
-            job2.UpdatedAtUtc = DateTimeOffset.UtcNow;
+            job2.UpdatedAtUtc = _timeProvider.GetUtcNow();
             _db.PrintJobs.Update(job2);
             await _db.PrintJobEvents.AddAsync(new PrintJobEvent
             {
@@ -316,7 +319,7 @@ public sealed class PrintExecutionService : IPrintExecutionService
                 ErrorCode = result.ErrorCode,
                 Message = result.ErrorMessage,
                 ActorType = "system",
-                OccurredAtUtc = DateTimeOffset.UtcNow
+                OccurredAtUtc = _timeProvider.GetUtcNow()
             }, ct);
         }
         else
@@ -348,7 +351,7 @@ public sealed class PrintExecutionService : IPrintExecutionService
         if (versionRow is null) { await tx.CommitAsync(ct); return; }
         if (!RowVersionSnapshotStillMatches(versionRow.RowVersion, rowVersion)) { await tx.CommitAsync(ct); return; }
 
-        var now = DateTimeOffset.UtcNow;
+        var now = _timeProvider.GetUtcNow();
         // Attach + mark-modified: no carga PdfBlob, no lo sobreescribe.
         var entity = new PrintJob { JobId = jobId };
         _db.PrintJobs.Attach(entity);
@@ -408,7 +411,7 @@ public sealed class PrintExecutionService : IPrintExecutionService
         job.LastErrorCode = errorCode;
         job.LastErrorMessage = message;
         job.NextRetryAtUtc = null;
-        job.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        job.UpdatedAtUtc = _timeProvider.GetUtcNow();
         _db.PrintJobs.Update(job);
         await _db.PrintJobEvents.AddAsync(new PrintJobEvent
         {
@@ -419,7 +422,7 @@ public sealed class PrintExecutionService : IPrintExecutionService
             ErrorCode = errorCode,
             Message = message,
             ActorType = "system",
-            OccurredAtUtc = DateTimeOffset.UtcNow
+            OccurredAtUtc = _timeProvider.GetUtcNow()
         }, ct);
     }
 

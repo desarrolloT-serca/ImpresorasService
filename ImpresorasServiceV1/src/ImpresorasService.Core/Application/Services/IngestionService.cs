@@ -3,6 +3,7 @@ using ImpresorasService.Application.Abstractions;
 using ImpresorasService.Application.Models;
 using ImpresorasService.Domain;
 using ImpresorasService.Domain.Entities;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace ImpresorasService.Application.Services;
@@ -13,17 +14,20 @@ public class IngestionService
     private readonly IPrintJobRepository _printJobRepository;
     private readonly IRoutingService _routingService;
     private readonly ILogger<IngestionService> _logger;
+    private readonly TimeProvider _timeProvider;
 
     public IngestionService(
         IJobSourceAdapter jobSourceAdapter,
         IPrintJobRepository printJobRepository,
         IRoutingService routingService,
-        ILogger<IngestionService> logger)
+        ILogger<IngestionService> logger,
+        TimeProvider timeProvider)
     {
         _jobSourceAdapter = jobSourceAdapter;
         _printJobRepository = printJobRepository;
         _routingService = routingService;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     public async Task<int> IngestBatchAsync(int batchSize, CancellationToken cancellationToken)
@@ -56,7 +60,7 @@ public class IngestionService
             }
 
             var jobId = Guid.NewGuid();
-            var now = DateTimeOffset.UtcNow;
+            var now = _timeProvider.GetUtcNow();
 
             var printJob = new PrintJob
             {
@@ -88,14 +92,30 @@ public class IngestionService
 
             await _printJobRepository.AddAsync(printJob, cancellationToken);
             await _printJobRepository.AddEventAsync(createdEvent, cancellationToken);
-            insertedJobIds.Add(jobId);
-            insertedCount++;
+
+            try
+            {
+                // Fase 1.4: guardar por job, no en un único SaveChanges de lote. Dos jobs del
+                // mismo fetch con igual (SourceSystem, ExternalJobId) pasan ambos el chequeo
+                // ExistsBySourceExternalIdAsync porque ninguno está aún persistido; con guardado
+                // en lote, la violación del índice único abortaba el lote entero.
+                await _printJobRepository.SaveChangesAsync(cancellationToken);
+                insertedJobIds.Add(jobId);
+                insertedCount++;
+            }
+            catch (DbUpdateException ex)
+            {
+                _printJobRepository.ClearTracking();
+                duplicatesCount++;
+                _logger.LogWarning(ex,
+                    "Duplicado intra-lote descartado tras violar restricción única. SourceSystem={SourceSystem} ExternalJobId={ExternalJobId}",
+                    sourceJob.SourceSystem,
+                    sourceJob.ExternalJobId);
+            }
         }
 
         if (sourceJobIdsToMarkProcessed.Count > 0)
             await _jobSourceAdapter.RenewJobLeasesAsync(sourceJobIdsToMarkProcessed, cancellationToken);
-
-        await _printJobRepository.SaveChangesAsync(cancellationToken);
 
         // Nota de decisión: el "ack" en el origen (remoto o local) se delega al adapter y
         // se ejecuta solo cuando el caller ha persistido la cola local con éxito.

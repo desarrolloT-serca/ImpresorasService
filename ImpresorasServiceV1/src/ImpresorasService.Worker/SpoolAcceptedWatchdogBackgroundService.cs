@@ -17,17 +17,20 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
     private readonly IOptions<PrintExecutionOptions> _options;
     private readonly IIppConfirmationService _ippService;
     private readonly ILogger<SpoolAcceptedWatchdogBackgroundService> _logger;
+    private readonly TimeProvider _timeProvider;
 
     public SpoolAcceptedWatchdogBackgroundService(
         IServiceScopeFactory scopeFactory,
         IOptions<PrintExecutionOptions> options,
         IIppConfirmationService ippService,
-        ILogger<SpoolAcceptedWatchdogBackgroundService> logger)
+        ILogger<SpoolAcceptedWatchdogBackgroundService> logger,
+        TimeProvider timeProvider)
     {
         _scopeFactory = scopeFactory;
         _options = options;
         _ippService = ippService;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -57,19 +60,23 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
 
     private async Task RunOnceAsync(CancellationToken ct)
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = _timeProvider.GetUtcNow();
         var maxAgeSeconds = Math.Max(1, _options.Value.SpoolAcceptedMaxAgeSeconds);
         var thresholdUtc = now - TimeSpan.FromSeconds(maxAgeSeconds);
 
         await using var scope = _scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
 
-        var windowLimit = Math.Max(200, _options.Value.SpoolAcceptedWatchBatchSize * 50);
+        var batchSize = Math.Max(1, _options.Value.SpoolAcceptedWatchBatchSize);
 
+        // Filtro de threshold y orden por antigüedad empujados a SQL (Fase 1.1): un Take en
+        // memoria sin orden dejaba trabajos antiguos sin confirmar bajo backlog sostenido.
         // Proyectar solo campos escalares: PdfBlob se excluye deliberadamente para evitar OOM.
-        var windowCandidates = await db.PrintJobs
+        var candidates = await db.PrintJobs
             .AsNoTracking()
-            .Where(j => j.Status == PrintJobStatus.SpoolAccepted || j.Status == PrintJobStatus.PrinterBlocked)
+            .Where(j => (j.Status == PrintJobStatus.SpoolAccepted || j.Status == PrintJobStatus.PrinterBlocked)
+                && j.UpdatedAtUtc <= thresholdUtc)
+            .OrderBy(j => j.UpdatedAtUtc)
             .Select(j => new WatchdogJob
             {
                 JobId          = j.JobId,
@@ -80,14 +87,8 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
                 LastErrorMessage = j.LastErrorMessage,
                 NextRetryAtUtc = j.NextRetryAtUtc,
             })
-            .Take(windowLimit)
+            .Take(batchSize)
             .ToListAsync(ct);
-
-        var candidates = windowCandidates
-            .Where(j => j.UpdatedAtUtc <= thresholdUtc)
-            .OrderBy(j => j.UpdatedAtUtc)
-            .Take(Math.Max(1, _options.Value.SpoolAcceptedWatchBatchSize))
-            .ToList();
 
         if (candidates.Count == 0)
             return;
