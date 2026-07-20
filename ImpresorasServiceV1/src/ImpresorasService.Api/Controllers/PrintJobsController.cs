@@ -16,11 +16,13 @@ public class PrintJobsController : ControllerBase
 {
     private readonly ImpresorasDbContext _dbContext;
     private readonly IRoutingService _routingService;
+    private readonly TimeProvider _timeProvider;
 
-    public PrintJobsController(ImpresorasDbContext dbContext, IRoutingService routingService)
+    public PrintJobsController(ImpresorasDbContext dbContext, IRoutingService routingService, TimeProvider timeProvider)
     {
         _dbContext = dbContext;
         _routingService = routingService;
+        _timeProvider = timeProvider;
     }
 
     [HttpGet]
@@ -178,10 +180,11 @@ public class PrintJobsController : ControllerBase
             });
         }
 
+        var now = _timeProvider.GetUtcNow();
         var oldStatus = job.Status;
         job.Status = PrintJobStatus.Cancelled;
         job.NextRetryAtUtc = null;
-        job.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        job.UpdatedAtUtc = now;
 
         _dbContext.PrintJobEvents.Add(new PrintJobEvent
         {
@@ -192,7 +195,7 @@ public class PrintJobsController : ControllerBase
             ActorType = "user",
             ActorId = User.Identity?.Name ?? User.FindFirstValue("Login") ?? User.FindFirstValue(ClaimTypes.NameIdentifier),
             Message = "Trabajo cancelado manualmente desde interfaz operativa.",
-            OccurredAtUtc = DateTimeOffset.UtcNow
+            OccurredAtUtc = now
         });
 
         await _dbContext.SaveChangesAsync(cancellationToken);
