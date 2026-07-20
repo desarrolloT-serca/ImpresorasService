@@ -89,7 +89,7 @@ public sealed class PrintJobsControllerRouteFlowTests
 
         var resolver = new RoutingResolver(db);
         var routingService = new RoutingService(db, resolver);
-        var controller = new PrintJobsController(db, routingService);
+        var controller = new PrintJobsController(db, routingService, TimeProvider.System);
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext
@@ -165,7 +165,7 @@ public sealed class PrintJobsControllerRouteFlowTests
 
         var resolver = new RoutingResolver(db);
         var routingService = new RoutingService(db, resolver);
-        var controller = new PrintJobsController(db, routingService);
+        var controller = new PrintJobsController(db, routingService, TimeProvider.System);
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext
@@ -242,7 +242,7 @@ public sealed class PrintJobsControllerRouteFlowTests
 
         var resolver = new RoutingResolver(db);
         var routingService = new RoutingService(db, resolver);
-        var controller = new PrintJobsController(db, routingService);
+        var controller = new PrintJobsController(db, routingService, TimeProvider.System);
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext
