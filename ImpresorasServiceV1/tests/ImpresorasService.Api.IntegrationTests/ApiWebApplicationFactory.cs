@@ -18,7 +18,7 @@ namespace ImpresorasService.Api.IntegrationTests;
 /// Factory para tests de integración. Usa SQLite en memoria con conexión compartida
 /// para mantener el esquema entre requests. Cada instancia usa una BD aislada.
 /// </summary>
-public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
+public class ApiWebApplicationFactory : WebApplicationFactory<Program>
 {
     private static int _instanceId;
     private SqliteConnection? _connection;
