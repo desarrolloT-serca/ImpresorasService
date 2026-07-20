@@ -18,4 +18,10 @@ public interface IPrintJobRepository
         IReadOnlyList<long> sourceJobIds,
         CancellationToken cancellationToken);
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Descarta el tracking de cambios pendientes tras un SaveChangesAsync fallido (p.ej. violación
+    /// de índice único), para poder seguir insertando el resto del lote sin arrastrar la entidad rota.
+    /// </summary>
+    void ClearTracking();
 }

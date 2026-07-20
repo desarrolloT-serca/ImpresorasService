@@ -149,7 +149,8 @@ public sealed class IngestionServiceFlowTests
             jobSourceAdapter: adapter,
             printJobRepository: printJobRepository,
             routingService: routingService,
-            logger: NullLogger<IngestionService>.Instance);
+            logger: NullLogger<IngestionService>.Instance,
+            timeProvider: TimeProvider.System);
 
         // Act
         var insertedCount = await ingestion.IngestBatchAsync(batchSize: 10, CancellationToken.None);
@@ -244,7 +245,8 @@ public sealed class IngestionServiceFlowTests
             jobSourceAdapter: adapter,
             printJobRepository: printJobRepository,
             routingService: routingService,
-            logger: NullLogger<IngestionService>.Instance);
+            logger: NullLogger<IngestionService>.Instance,
+            timeProvider: TimeProvider.System);
 
         // Act
         var insertedCount = await ingestion.IngestBatchAsync(batchSize: 10, CancellationToken.None);
@@ -307,7 +309,8 @@ public sealed class IngestionServiceFlowTests
             jobSourceAdapter: adapter,
             printJobRepository: printJobRepository,
             routingService: routingService,
-            logger: NullLogger<IngestionService>.Instance);
+            logger: NullLogger<IngestionService>.Instance,
+            timeProvider: TimeProvider.System);
 
         // Act
         var insertedCount = await ingestion.IngestBatchAsync(batchSize: 10, CancellationToken.None);

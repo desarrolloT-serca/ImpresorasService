@@ -18,6 +18,7 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
     private readonly ITelegramNotifier _telegram;
     private readonly IOptions<TelegramOptions> _telegramOptions;
     private readonly ILogger<StoreHealthAlertBackgroundService> _logger;
+    private readonly TimeProvider _timeProvider;
 
     private static readonly TimeZoneInfo _spainTz =
         TimeZoneInfo.FindSystemTimeZoneById(
@@ -34,12 +35,14 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
         IServiceScopeFactory scopeFactory,
         ITelegramNotifier telegram,
         IOptions<TelegramOptions> telegramOptions,
-        ILogger<StoreHealthAlertBackgroundService> logger)
+        ILogger<StoreHealthAlertBackgroundService> logger,
+        TimeProvider timeProvider)
     {
         _scopeFactory = scopeFactory;
         _telegram = telegram;
         _telegramOptions = telegramOptions;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -99,7 +102,7 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
             .Select(s => new { s.StoreId, s.Name })
             .ToListAsync(ct);
 
-        var now = DateTimeOffset.UtcNow;
+        var now = _timeProvider.GetUtcNow();
         var windowStart = now.Date;
 
         foreach (var store in stores)
@@ -145,8 +148,6 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
             await ProcessStoreAlertAsync(db, store.StoreId, store.Name,
                 health, reason, queued, failed, minSeverity, notifyOnRecovery, now, ct);
         }
-
-        await db.SaveChangesAsync(ct);
     }
 
     private async Task ProcessStoreAlertAsync(
@@ -211,11 +212,21 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
 
         if (message is not null)
         {
-            await _telegram.SendAlertAsync(message, ct, storeId);
+            // Fase 1.7: persistir el nuevo NotifiedHealth ANTES de enviar. Un crash entre el
+            // envío y el guardado reenviaba la misma alerta en el siguiente ciclo (spam); con
+            // este orden, en el peor caso una notificación no llega a enviarse pero el estado
+            // queda consistente (no hay reenvío duplicado).
             alertState.NotifiedHealth = currentHealth;
             alertState.NotifiedAtUtc = now;
+            await db.SaveChangesAsync(ct);
+
+            await _telegram.SendAlertAsync(message, ct, storeId);
             _logger.LogInformation("Alerta Telegram enviada para tienda {StoreId} ({Name}): {Health}.",
                 storeId, storeName, currentHealth);
+        }
+        else
+        {
+            await db.SaveChangesAsync(ct);
         }
     }
 
