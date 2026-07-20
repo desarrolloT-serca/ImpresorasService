@@ -76,7 +76,9 @@ class DashboardController extends Controller
             $storeSort = 'severity';
         }
 
-        $jobsPath     = 'api/printjobs?limit=5000' . ($effectiveStore !== null ? '&storeId=' . $effectiveStore : '');
+        // limit=500: coincide con el clamp real de la Api (PrintJobsController); usado solo como
+        // fallback si el overview no responde (ver F2.2, docs/roadmap-kpi-dashboard.md).
+        $jobsPath     = 'api/printjobs?limit=500' . ($effectiveStore !== null ? '&storeId=' . $effectiveStore : '');
         $printersPath = 'api/printers?isActive=true' . ($effectiveStore !== null ? '&storeId=' . $effectiveStore : '');
 
         $batch2 = [
@@ -157,66 +159,79 @@ class DashboardController extends Controller
             ];
         }
 
-        foreach ($jobs as $job) {
-            $status = $job['status'] ?? $job['Status'] ?? null;
-            $attemptCount = (int) ($job['attemptCount'] ?? $job['AttemptCount'] ?? 0);
-            $statusInt = $this->normalizePrintJobStatus($status);
-            $isPrintedStatus = in_array($statusInt, [3, 4, 5], true);
-            // Documento con señal de fallo: fallo final, reintento programado o impreso tras reintentos.
-            $hasFailureSignal = $statusInt === 8 || $statusInt === 6 || ($isPrintedStatus && $attemptCount > 1);
-            $storeId = (int) ($job['storeId'] ?? $job['StoreId'] ?? 0);
-            $printerId = (int) ($job['printerId'] ?? $job['PrinterId'] ?? 0);
-            $createdAtRaw = $job['createdAtUtc'] ?? $job['CreatedAtUtc'] ?? $job['created_at_utc'] ?? null;
-            $updatedAtRaw = $job['updatedAtUtc'] ?? $job['UpdatedAtUtc'] ?? $job['updated_at_utc'] ?? $createdAtRaw;
-            $createdAtTs = $this->parseUtcTimestamp($createdAtRaw);
-            $updatedAtTs = $this->parseUtcTimestamp($updatedAtRaw);
-            $createdInWindow = $this->isTimestampInWindow($createdAtTs, $windowStart, $windowEnd);
-            $updatedInWindow = $this->isTimestampInWindow($updatedAtTs, $windowStart, $windowEnd);
+        // F2.2: si el overview responde, sus valores sustituyen íntegramente a este cálculo
+        // (applyOverviewStores/applyOverviewPrinters/applyOverviewKpis más abajo), así que agregar
+        // sobre $jobs aquí sería trabajo desechado. Solo se calcula como fallback ante caída de la Api,
+        // y en ese caso limit=500 (arriba) puede truncar tiendas con mucha cola: ver $partialData.
+        $partialData = false;
+        if ($overview === null) {
+            $partialData = count($jobs) >= 500;
 
-            // El dashboard operativo solo debe mostrar tiendas activas.
-            // Excluimos jobs historicos de tiendas inactivas/eliminadas.
-            if (!isset($activeStoreIds[$storeId])) {
-                continue;
-            }
+            foreach ($jobs as $job) {
+                $status = $job['status'] ?? $job['Status'] ?? null;
+                $attemptCount = (int) ($job['attemptCount'] ?? $job['AttemptCount'] ?? 0);
+                $statusInt = $this->normalizePrintJobStatus($status);
+                $isPrintedStatus = in_array($statusInt, [3, 4, 5], true);
+                // Documento con señal de fallo: fallo final, reintento programado o impreso tras reintentos.
+                $hasFailureSignal = $statusInt === 8 || $statusInt === 6 || ($isPrintedStatus && $attemptCount > 1);
+                // Contrato (docs/contrato-kpi-dashboard.md): ErrorFinal, o no-terminal/Cancelled/PrinterBlocked
+                // con reintentos ya consumidos. Independiente de hasFailureSignal (VAL-P2-006).
+                $isFailedWithoutRetryStatus = $statusInt === 8
+                    || (in_array($statusInt, [0, 1, 2, 7, 9], true) && $attemptCount > 1);
+                $storeId = (int) ($job['storeId'] ?? $job['StoreId'] ?? 0);
+                $printerId = (int) ($job['printerId'] ?? $job['PrinterId'] ?? 0);
+                $createdAtRaw = $job['createdAtUtc'] ?? $job['CreatedAtUtc'] ?? $job['created_at_utc'] ?? null;
+                $updatedAtRaw = $job['updatedAtUtc'] ?? $job['UpdatedAtUtc'] ?? $job['updated_at_utc'] ?? $createdAtRaw;
+                $createdAtTs = $this->parseUtcTimestamp($createdAtRaw);
+                $updatedAtTs = $this->parseUtcTimestamp($updatedAtRaw);
+                $createdInWindow = $this->isTimestampInWindow($createdAtTs, $windowStart, $windowEnd);
+                $updatedInWindow = $this->isTimestampInWindow($updatedAtTs, $windowStart, $windowEnd);
 
-            if (!isset($storeStats[$storeId])) {
-                $storeStats[$storeId] = $this->makeEmptyStore($storeId, $storeNameById);
-            }
-
-            if ($createdInWindow) {
-                $received++;
-                $storeStats[$storeId]['received']++;
-                if ($printerId > 0) {
-                    if (!isset($printerStatsByStore[$storeId][$printerId])) {
-                        $printerStatsByStore[$storeId][$printerId] = [
-                            'printerId' => $printerId,
-                            'printerName' => 'Impresora ' . $printerId,
-                            'spoolQueue' => '-',
-                            'isActive' => false,
-                            'lastConnectionOk' => null,
-                            'lastConnectionCheckAtUtc' => '',
-                            'lastConnectionTransport' => '',
-                            'lastConnectionError' => '',
-                            'connectionFailuresStreak' => 0,
-                            'queueCurrent' => 0,
-                            'failedWindow' => 0,
-                            'totalWindow' => 0,
-                        ];
-                    }
-                    $printerStatsByStore[$storeId][$printerId]['totalWindow'] = ($printerStatsByStore[$storeId][$printerId]['totalWindow'] ?? 0) + 1;
+                // El dashboard operativo solo debe mostrar tiendas activas.
+                // Excluimos jobs historicos de tiendas inactivas/eliminadas.
+                if (!isset($activeStoreIds[$storeId])) {
+                    continue;
                 }
-            }
 
-            if ($isPrintedStatus && $updatedInWindow) {
-                $printed++;
-                $storeStats[$storeId]['printed']++;
-            }
+                if (!isset($storeStats[$storeId])) {
+                    $storeStats[$storeId] = $this->makeEmptyStore($storeId, $storeNameById);
+                }
 
-            if ($hasFailureSignal && $updatedInWindow) {
-                $failed++;
-                $storeStats[$storeId]['failed']++;
-                // "Sin reenviar": fallidos que siguen sin terminar impresos.
-                if (!$isPrintedStatus && $statusInt !== 6) {
+                if ($createdInWindow) {
+                    $received++;
+                    $storeStats[$storeId]['received']++;
+                    if ($printerId > 0) {
+                        if (!isset($printerStatsByStore[$storeId][$printerId])) {
+                            $printerStatsByStore[$storeId][$printerId] = [
+                                'printerId' => $printerId,
+                                'printerName' => 'Impresora ' . $printerId,
+                                'spoolQueue' => '-',
+                                'isActive' => false,
+                                'lastConnectionOk' => null,
+                                'lastConnectionCheckAtUtc' => '',
+                                'lastConnectionTransport' => '',
+                                'lastConnectionError' => '',
+                                'connectionFailuresStreak' => 0,
+                                'queueCurrent' => 0,
+                                'failedWindow' => 0,
+                                'totalWindow' => 0,
+                            ];
+                        }
+                        $printerStatsByStore[$storeId][$printerId]['totalWindow'] = ($printerStatsByStore[$storeId][$printerId]['totalWindow'] ?? 0) + 1;
+                    }
+                }
+
+                if ($isPrintedStatus && $updatedInWindow) {
+                    $printed++;
+                    $storeStats[$storeId]['printed']++;
+                }
+
+                if ($hasFailureSignal && $updatedInWindow) {
+                    $failed++;
+                    $storeStats[$storeId]['failed']++;
+                }
+
+                if ($isFailedWithoutRetryStatus && $updatedInWindow) {
                     $failedWithoutRetryCurrent++;
                     $storeStats[$storeId]['failedWithoutRetryCurrent']++;
                     if ($printerId > 0) {
@@ -239,31 +254,31 @@ class DashboardController extends Controller
                         $printerStatsByStore[$storeId][$printerId]['failedWindow'] = ($printerStatsByStore[$storeId][$printerId]['failedWindow'] ?? 0) + 1;
                     }
                 }
-            }
 
-            if (in_array($statusInt, [0, 1, 2, 6], true)) {
-                $queueCurrent++;
-                $storeStats[$storeId]['queuedCurrent']++;
-                if ($printerId > 0) {
-                    if (!isset($printerStatsByStore[$storeId][$printerId])) {
-                        $printerStatsByStore[$storeId][$printerId] = [
-                            'printerId' => $printerId,
-                            'printerName' => 'Impresora ' . $printerId,
-                            'spoolQueue' => '-',
-                            'isActive' => false,
-                            'lastConnectionOk' => null,
-                            'lastConnectionCheckAtUtc' => '',
-                            'lastConnectionTransport' => '',
-                            'lastConnectionError' => '',
-                            'connectionFailuresStreak' => 0,
-                            'queueCurrent' => 0,
-                            'failedWindow' => 0,
-                            'totalWindow' => 0,
-                        ];
+                if (in_array($statusInt, [0, 1, 2, 6], true)) {
+                    $queueCurrent++;
+                    $storeStats[$storeId]['queuedCurrent']++;
+                    if ($printerId > 0) {
+                        if (!isset($printerStatsByStore[$storeId][$printerId])) {
+                            $printerStatsByStore[$storeId][$printerId] = [
+                                'printerId' => $printerId,
+                                'printerName' => 'Impresora ' . $printerId,
+                                'spoolQueue' => '-',
+                                'isActive' => false,
+                                'lastConnectionOk' => null,
+                                'lastConnectionCheckAtUtc' => '',
+                                'lastConnectionTransport' => '',
+                                'lastConnectionError' => '',
+                                'connectionFailuresStreak' => 0,
+                                'queueCurrent' => 0,
+                                'failedWindow' => 0,
+                                'totalWindow' => 0,
+                            ];
+                        }
+                        $printerStatsByStore[$storeId][$printerId]['queueCurrent'] = ($printerStatsByStore[$storeId][$printerId]['queueCurrent'] ?? 0) + 1;
+                    } else {
+                        $unassignedQueueByStore[$storeId] = ($unassignedQueueByStore[$storeId] ?? 0) + 1;
                     }
-                    $printerStatsByStore[$storeId][$printerId]['queueCurrent'] = ($printerStatsByStore[$storeId][$printerId]['queueCurrent'] ?? 0) + 1;
-                } else {
-                    $unassignedQueueByStore[$storeId] = ($unassignedQueueByStore[$storeId] ?? 0) + 1;
                 }
             }
         }
@@ -364,6 +379,7 @@ class DashboardController extends Controller
             'summary' => $summary,
             'alerts' => $alerts,
             'stores' => $stores,
+            'partialData' => $partialData,
         ]);
 
         return $request->ajax() && $viewName === 'dashboard'
@@ -488,7 +504,63 @@ class DashboardController extends Controller
             $storeStats[$storeId]['failedWithoutRetryCurrent'] = $this->readInt($overviewStore, 'failedWithoutRetryCurrent', (int) $storeStats[$storeId]['failedWithoutRetryCurrent']);
             $storeStats[$storeId]['health'] = (string) ($overviewStore['health'] ?? $overviewStore['Health'] ?? $storeStats[$storeId]['health']);
             $storeStats[$storeId]['healthReason'] = (string) ($overviewStore['healthReason'] ?? $overviewStore['HealthReason'] ?? $storeStats[$storeId]['healthReason']);
+            $storeStats[$storeId]['unassignedQueueCurrent'] = $this->readInt($overviewStore, 'unassignedQueueCurrent', (int) ($storeStats[$storeId]['unassignedQueueCurrent'] ?? 0));
+
+            $this->applyOverviewPrinters($storeStats[$storeId], $overviewStore);
         }
+    }
+
+    /**
+     * Sustituye los chips por impresora (queueCurrent/failedWindow/totalWindow) por los del
+     * overview, que no dependen del limit=5000 truncado a 500 del fallback legacy (VAL-P1-004).
+     *
+     * @param array<string, mixed> $storeRow
+     * @param array<string, mixed> $overviewStore
+     */
+    private function applyOverviewPrinters(array &$storeRow, array $overviewStore): void
+    {
+        $overviewPrinters = $overviewStore['printers'] ?? $overviewStore['Printers'] ?? null;
+        if (!is_array($overviewPrinters)) {
+            return;
+        }
+
+        $byPrinterId = [];
+        foreach ((array) ($storeRow['printers'] ?? []) as $printerRow) {
+            $pid = (int) ($printerRow['printerId'] ?? 0);
+            if ($pid > 0) {
+                $byPrinterId[$pid] = $printerRow;
+            }
+        }
+
+        foreach ($overviewPrinters as $overviewPrinter) {
+            if (!is_array($overviewPrinter)) {
+                continue;
+            }
+            $printerId = $this->readInt($overviewPrinter, 'printerId');
+            if ($printerId <= 0) {
+                continue;
+            }
+            if (!isset($byPrinterId[$printerId])) {
+                $byPrinterId[$printerId] = [
+                    'printerId' => $printerId,
+                    'printerName' => 'Impresora ' . $printerId,
+                    'spoolQueue' => '-',
+                    'isActive' => false,
+                    'lastConnectionOk' => null,
+                    'lastConnectionCheckAtUtc' => '',
+                    'lastConnectionTransport' => '',
+                    'lastConnectionError' => '',
+                    'connectionFailuresStreak' => 0,
+                ];
+            }
+            $byPrinterId[$printerId]['queueCurrent'] = $this->readInt($overviewPrinter, 'queueCurrent');
+            $byPrinterId[$printerId]['failedWindow'] = $this->readInt($overviewPrinter, 'failedWindow');
+            $byPrinterId[$printerId]['totalWindow'] = $this->readInt($overviewPrinter, 'totalWindow');
+        }
+
+        $printersForStore = array_values($byPrinterId);
+        usort($printersForStore, fn (array $a, array $b): int => ($b['queueCurrent'] <=> $a['queueCurrent']) ?: strcmp((string) ($a['printerName'] ?? ''), (string) ($b['printerName'] ?? '')));
+        $storeRow['printers'] = $printersForStore;
     }
 
     /**
@@ -547,6 +619,7 @@ class DashboardController extends Controller
             'retryscheduled' => 6,
             'cancelled', 'canceled' => 7,
             'errorfinal' => 8,
+            'printerblocked' => 9,
             default => -1,
         };
     }

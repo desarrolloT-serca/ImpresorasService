@@ -59,6 +59,48 @@ public sealed class DashboardControllerTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task GetOverview_ReturnsPerPrinterBreakdown()
+    {
+        const int storeId = 985;
+        const int printerId = 5985;
+        var now = DateTimeOffset.UtcNow;
+
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
+
+            if (!await db.Stores.AnyAsync(s => s.StoreId == storeId))
+            {
+                db.Stores.Add(new Store { StoreId = storeId, Name = "Printer Breakdown Store", IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now });
+            }
+            if (!await db.Printers.AnyAsync(p => p.PrinterId == printerId))
+            {
+                db.Printers.Add(new Printer { PrinterId = printerId, StoreId = storeId, PrinterName = "Breakdown Printer", SpoolQueue = @"\\host\q985", Host = "host", IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now });
+            }
+            db.PrintJobs.RemoveRange(await db.PrintJobs.Where(j => j.StoreId == storeId).ToListAsync());
+            db.PrintJobs.AddRange(
+                MakeJob(now, PrintJobStatus.Pending, storeId: storeId, printerId: printerId),
+                MakeJob(now, PrintJobStatus.Routed, storeId: storeId, printerId: printerId),
+                MakeJob(now, PrintJobStatus.ErrorFinal, storeId: storeId, printerId: printerId, attemptCount: 2),
+                MakeJob(now, PrintJobStatus.Pending, storeId: storeId, printerId: null));
+            await db.SaveChangesAsync();
+        }
+
+        var response = await Client.GetAsync($"/api/dashboard/overview?window=today&storeId={storeId}");
+
+        response.EnsureSuccessStatusCode();
+        var body = await ReadAsJsonAsync<DashboardOverviewResponse>(response);
+        var store = Assert.Single(body!.Stores!);
+        Assert.Equal(3, store.QueuedCurrent);           // 2 en printer 5985 (Pending+Routed) + 1 sin asignar
+        Assert.Equal(1, store.UnassignedQueueCurrent);
+        var printer = Assert.Single(store.Printers!);
+        Assert.Equal(printerId, printer.PrinterId);
+        Assert.Equal(2, printer.QueueCurrent);   // Pending + Routed
+        Assert.Equal(1, printer.FailedWindow);   // ErrorFinal
+        Assert.Equal(3, printer.TotalWindow);    // los 3 jobs asignados a esta impresora, creados hoy
+    }
+
+    [Fact]
     public void FailedWithoutRetryCurrentPredicate_TranslatesWithHanaProvider()
     {
         var options = new DbContextOptionsBuilder<ImpresorasDbContext>();
@@ -174,11 +216,14 @@ public sealed class DashboardControllerTests : IntegrationTestBase
         await db.SaveChangesAsync();
     }
 
+    private const int UnspecifiedPrinterId = -1;
+
     private static PrintJob MakeJob(
         DateTimeOffset now,
         PrintJobStatus status,
         int attemptCount = 0,
-        int storeId = DashboardTestStoreId)
+        int storeId = DashboardTestStoreId,
+        int? printerId = UnspecifiedPrinterId)
     {
         return new PrintJob
         {
@@ -191,7 +236,9 @@ public sealed class DashboardControllerTests : IntegrationTestBase
             PdfBlob = [0x25, 0x50, 0x44, 0x46],
             PdfSha256 = Guid.NewGuid().ToString("N"),
             Status = status,
-            PrinterId = status is PrintJobStatus.Pending or PrintJobStatus.Routed ? 5880 : null,
+            PrinterId = printerId != UnspecifiedPrinterId
+                ? printerId
+                : (status is PrintJobStatus.Pending or PrintJobStatus.Routed ? 5880 : null),
             AttemptCount = attemptCount,
             CorrelationId = Guid.NewGuid(),
             CreatedAtUtc = now,
@@ -257,6 +304,17 @@ public sealed class DashboardControllerTests : IntegrationTestBase
     {
         public int StoreId { get; set; }
         public string? Health { get; set; }
+        public int QueuedCurrent { get; set; }
+        public int UnassignedQueueCurrent { get; set; }
+        public List<PrinterRow>? Printers { get; set; }
+    }
+
+    private sealed class PrinterRow
+    {
+        public int PrinterId { get; set; }
+        public int QueueCurrent { get; set; }
+        public int FailedWindow { get; set; }
+        public int TotalWindow { get; set; }
     }
 
     private sealed class DashboardThresholdsResponse

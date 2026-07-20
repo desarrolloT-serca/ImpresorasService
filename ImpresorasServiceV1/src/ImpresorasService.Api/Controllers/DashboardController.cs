@@ -43,6 +43,8 @@ public class DashboardController : ControllerBase
     ];
 
     private readonly ImpresorasDbContext _dbContext;
+    private readonly TimeProvider _timeProvider;
+    private readonly TimeZoneInfo _businessTimeZone;
     private const int DefaultWarningQueueMin = 10;
     private const int DefaultCriticalQueueMin = 30;
     private const int DefaultWarningFailedWithoutRetryMin = 1;
@@ -51,9 +53,14 @@ public class DashboardController : ControllerBase
     private const int DefaultConnWarningFailuresMin = 2;
     private const int DefaultConnCriticalFailuresMin = 3;
 
-    public DashboardController(ImpresorasDbContext dbContext)
+    public DashboardController(ImpresorasDbContext dbContext, TimeProvider timeProvider, IConfiguration configuration)
     {
         _dbContext = dbContext;
+        _timeProvider = timeProvider;
+        var tzId = configuration["Dashboard:BusinessTimeZone"];
+        _businessTimeZone = string.IsNullOrWhiteSpace(tzId)
+            ? TimeZoneInfo.Utc
+            : TimeZoneInfo.FindSystemTimeZoneById(tzId);
     }
 
     [HttpGet("overview")]
@@ -64,12 +71,15 @@ public class DashboardController : ControllerBase
     {
         var thresholds = await GetThresholdsAsync(cancellationToken);
         var effectiveStoreId = IsAdmin() ? storeId : GetCurrentUserStoreId();
-        var fromUtc = ResolveWindowStartUtc(window);
+        var now = _timeProvider.GetUtcNow();
+        var fromUtc = ResolveWindowStartUtc(window, now);
 
-        var jobs = _dbContext.PrintJobs.AsNoTracking();
         var activeOnly = true;
         var stores = _dbContext.Stores.AsNoTracking().Where(x => x.IsActive == activeOnly);
         var printers = _dbContext.Printers.AsNoTracking().Where(x => x.IsActive == activeOnly);
+        // El dashboard operativo solo muestra tiendas activas; excluye histórico de tiendas dadas de baja.
+        var jobs = _dbContext.PrintJobs.AsNoTracking()
+            .Where(x => _dbContext.Stores.Any(s => s.StoreId == x.StoreId && s.IsActive == activeOnly));
 
         if (effectiveStoreId.HasValue)
         {
@@ -78,16 +88,17 @@ public class DashboardController : ControllerBase
             printers = printers.Where(x => x.StoreId == effectiveStoreId.Value);
         }
 
-        var jobsInWindow = jobs.Where(x => x.CreatedAtUtc >= fromUtc);
-        // failedWithoutRetryCurrent usa UpdatedAtUtc para reflejar trabajos que
-        // entraron en error durante la ventana, no solo los creados en ella.
-        var jobsUpdatedInWindow = jobs.Where(x => x.UpdatedAtUtc >= fromUtc);
+        // received: cohorte de creados en la ventana. printed/failed/failedWithoutRetryCurrent:
+        // eventos ocurridos en la ventana (throughput), no cohorte — contrato en docs/contrato-kpi-dashboard.md.
+        // Acotada también por arriba (<= now), igual que PHP (resolveWindowRange) — VAL-P3-009.
+        var jobsInWindow = jobs.Where(x => x.CreatedAtUtc >= fromUtc && x.CreatedAtUtc <= now);
+        var jobsUpdatedInWindow = jobs.Where(x => x.UpdatedAtUtc >= fromUtc && x.UpdatedAtUtc <= now);
 
         var kpis = new
         {
             received = await jobsInWindow.CountAsync(cancellationToken),
-            printed = await jobsInWindow.CountAsync(x => PrintedStatuses.Contains(x.Status), cancellationToken),
-            failed = await jobsInWindow.CountAsync(
+            printed = await jobsUpdatedInWindow.CountAsync(x => PrintedStatuses.Contains(x.Status), cancellationToken),
+            failed = await jobsUpdatedInWindow.CountAsync(
                 x => x.Status == PrintJobStatus.ErrorFinal
                      || x.Status == PrintJobStatus.RetryScheduled
                      || (PrintedStatuses.Contains(x.Status) && x.AttemptCount > 1),
@@ -116,7 +127,7 @@ public class DashboardController : ControllerBase
 
         return Ok(new
         {
-            generatedAtUtc = DateTimeOffset.UtcNow,
+            generatedAtUtc = now,
             appliedFilters = new
             {
                 window = NormalizeWindow(window),
@@ -186,7 +197,7 @@ public class DashboardController : ControllerBase
         thresholdsRow.ConnCriticalFailuresMin = request.ConnCriticalFailuresMin;
         thresholdsRow.ConnWarningSeverity = NormalizeSeverity(request.ConnWarningSeverity);
         thresholdsRow.ConnCriticalSeverity = NormalizeSeverity(request.ConnCriticalSeverity);
-        thresholdsRow.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        thresholdsRow.UpdatedAtUtc = _timeProvider.GetUtcNow();
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -224,19 +235,23 @@ public class DashboardController : ControllerBase
             })
             .ToDictionaryAsync(x => x.StoreId, x => new { x.MissingHost, x.ConnWarn, x.ConnCrit }, cancellationToken);
 
-        var jobsWindowStats = await jobsInWindow
+        var receivedStats = await jobsInWindow
+            .GroupBy(x => x.StoreId)
+            .Select(x => new { StoreId = x.Key, Received = x.Count() })
+            .ToDictionaryAsync(x => x.StoreId, x => x.Received, cancellationToken);
+
+        var printedFailedStats = await jobsUpdatedInWindow
             .GroupBy(x => x.StoreId)
             .Select(x => new
             {
                 StoreId = x.Key,
-                Received = x.Count(),
                 Printed = x.Count(j => PrintedStatuses.Contains(j.Status)),
                 Failed = x.Count(j =>
                     j.Status == PrintJobStatus.ErrorFinal
                     || j.Status == PrintJobStatus.RetryScheduled
                     || (PrintedStatuses.Contains(j.Status) && j.AttemptCount > 1))
             })
-            .ToDictionaryAsync(x => x.StoreId, x => new { x.Received, x.Printed, x.Failed }, cancellationToken);
+            .ToDictionaryAsync(x => x.StoreId, x => new { x.Printed, x.Failed }, cancellationToken);
 
         var queueCurrentStats = await allJobs
             .GroupBy(x => x.StoreId)
@@ -257,18 +272,67 @@ public class DashboardController : ControllerBase
             })
             .ToDictionaryAsync(x => x.StoreId, x => x.FailedWithoutRetryCurrent, cancellationToken);
 
+        // Breakdown por impresora: evita que el fallback PHP tenga que pedir jobs crudos
+        // (api/printjobs?limit=5000, truncado a 500 por la API) solo para calcular estos chips.
+        var printerQueueCurrent = await allJobs
+            .Where(j => QueueStatuses.Contains(j.Status) && j.PrinterId != null)
+            .GroupBy(j => new { j.StoreId, PrinterId = j.PrinterId!.Value })
+            .Select(g => new { g.Key.StoreId, g.Key.PrinterId, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+
+        var printerFailedWindow = await jobsUpdatedInWindow
+            .Where(DashboardPrintJobPredicates.FailedWithoutRetryCurrent)
+            .Where(j => j.PrinterId != null)
+            .GroupBy(j => new { j.StoreId, PrinterId = j.PrinterId!.Value })
+            .Select(g => new { g.Key.StoreId, g.Key.PrinterId, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+
+        var printerTotalWindow = await jobsInWindow
+            .Where(j => j.PrinterId != null)
+            .GroupBy(j => new { j.StoreId, PrinterId = j.PrinterId!.Value })
+            .Select(g => new { g.Key.StoreId, g.Key.PrinterId, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+
+        var unassignedQueueStats = await allJobs
+            .Where(j => QueueStatuses.Contains(j.Status) && j.PrinterId == null)
+            .GroupBy(j => j.StoreId)
+            .Select(g => new { StoreId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.StoreId, x => x.Count, cancellationToken);
+
+        var printerAcc = new Dictionary<(int StoreId, int PrinterId), (int Queue, int Failed, int Total)>();
+        foreach (var r in printerQueueCurrent)
+            printerAcc[(r.StoreId, r.PrinterId)] = printerAcc.TryGetValue((r.StoreId, r.PrinterId), out var q)
+                ? (q.Queue + r.Count, q.Failed, q.Total) : (r.Count, 0, 0);
+        foreach (var r in printerFailedWindow)
+            printerAcc[(r.StoreId, r.PrinterId)] = printerAcc.TryGetValue((r.StoreId, r.PrinterId), out var f)
+                ? (f.Queue, f.Failed + r.Count, f.Total) : (0, r.Count, 0);
+        foreach (var r in printerTotalWindow)
+            printerAcc[(r.StoreId, r.PrinterId)] = printerAcc.TryGetValue((r.StoreId, r.PrinterId), out var t)
+                ? (t.Queue, t.Failed, t.Total + r.Count) : (0, 0, r.Count);
+
+        var printersByStore = printerAcc
+            .GroupBy(kv => kv.Key.StoreId)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<PrinterDashboardRow>)g
+                    .Select(kv => new PrinterDashboardRow(kv.Key.PrinterId, kv.Value.Queue, kv.Value.Failed, kv.Value.Total))
+                    .OrderByDescending(p => p.QueueCurrent)
+                    .ToList());
+
         var rows = new List<StoreDashboardRow>(baseStores.Count);
         foreach (var store in baseStores)
         {
             connectedPrinters.TryGetValue(store.StoreId, out var connected);
             printersConnStats.TryGetValue(store.StoreId, out var connStats);
-            jobsWindowStats.TryGetValue(store.StoreId, out var windowStats);
+            receivedStats.TryGetValue(store.StoreId, out var received);
+            printedFailedStats.TryGetValue(store.StoreId, out var printedFailed);
             queueCurrentStats.TryGetValue(store.StoreId, out var queuedCurrentValue);
             failedWindowStats.TryGetValue(store.StoreId, out var failedWithoutRetryCurrentValue);
+            unassignedQueueStats.TryGetValue(store.StoreId, out var unassignedQueueCurrent);
+            printersByStore.TryGetValue(store.StoreId, out var storePrinters);
 
-            var received = windowStats?.Received ?? 0;
-            var printed = windowStats?.Printed ?? 0;
-            var failed = windowStats?.Failed ?? 0;
+            var printed = printedFailed?.Printed ?? 0;
+            var failed = printedFailed?.Failed ?? 0;
             var queuedCurrent = queuedCurrentValue;
             var failedWithoutRetryCurrent = failedWithoutRetryCurrentValue;
 
@@ -287,7 +351,9 @@ public class DashboardController : ControllerBase
                 QueuedCurrent: queuedCurrent,
                 FailedWithoutRetryCurrent: failedWithoutRetryCurrent,
                 Health: health,
-                HealthReason: healthReason));
+                HealthReason: healthReason,
+                UnassignedQueueCurrent: unassignedQueueCurrent,
+                Printers: storePrinters ?? []));
         }
 
         return rows;
@@ -352,7 +418,7 @@ public class DashboardController : ControllerBase
             ConnCriticalFailuresMin = defaults.ConnCriticalFailuresMin,
             ConnWarningSeverity = defaults.ConnWarningSeverity,
             ConnCriticalSeverity = defaults.ConnCriticalSeverity,
-            UpdatedAtUtc = DateTimeOffset.UtcNow
+            UpdatedAtUtc = _timeProvider.GetUtcNow()
         };
 
         try
@@ -397,19 +463,21 @@ public class DashboardController : ControllerBase
         return v is "info" or "warning" or "critical" ? v : "warning";
     }
 
-    private static DateTimeOffset ResolveWindowStartUtc(string? window)
+    private DateTimeOffset ResolveWindowStartUtc(string? window, DateTimeOffset now)
     {
-        var now = DateTimeOffset.UtcNow;
-        // ponytail: DateTime.Today es medianoche local; igual que el frontend PHP que usa config('app.timezone').
-        // now.Date es medianoche UTC — difiere hasta 2h en CEST, haciendo que C# devuelva received=0
-        // para trabajos creados entre 00:00-02:00 hora local, vaciando el dashboard.
-        var todayLocal = new DateTimeOffset(DateTime.Today, TimeZoneInfo.Local.GetUtcOffset(DateTime.Today));
         return NormalizeWindow(window) switch
         {
             "7d" => now.AddDays(-7),
             "30d" => now.AddDays(-30),
-            _ => todayLocal
+            // "today" en la timezone de negocio (Dashboard:BusinessTimeZone), no en la del servidor.
+            _ => ResolveTodayStart(now)
         };
+    }
+
+    private DateTimeOffset ResolveTodayStart(DateTimeOffset nowUtc)
+    {
+        var todayDate = TimeZoneInfo.ConvertTime(nowUtc, _businessTimeZone).Date;
+        return new DateTimeOffset(todayDate, _businessTimeZone.GetUtcOffset(todayDate));
     }
 
     private static string NormalizeWindow(string? window)
@@ -436,7 +504,15 @@ public class DashboardController : ControllerBase
         int QueuedCurrent,
         int FailedWithoutRetryCurrent,
         string Health,
-        string HealthReason);
+        string HealthReason,
+        int UnassignedQueueCurrent,
+        IReadOnlyList<PrinterDashboardRow> Printers);
+
+    private sealed record PrinterDashboardRow(
+        int PrinterId,
+        int QueueCurrent,
+        int FailedWindow,
+        int TotalWindow);
 
     private sealed record DashboardThresholds(
         int WarningQueueMin,

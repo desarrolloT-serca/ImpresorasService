@@ -120,6 +120,12 @@
     };
 @endphp
 
+@if(!empty($partialData))
+    <div style="margin-bottom:12px;padding:10px 14px;border:1px solid var(--ui-warning);border-radius:8px;background:color-mix(in srgb, var(--ui-warning) 12%, transparent);font-size:0.9rem;">
+        Datos parciales: el resumen agregado no esta disponible; se muestran como maximo 500 trabajos recientes por tienda.
+    </div>
+@endif
+
 <span id="autoRefreshCountdown" class="dbx-auto-refresh-status" hidden aria-hidden="true" title="Próximo refresco automático"></span>
 <span id="dashboardLiveStatus" class="sr-only" aria-live="polite" aria-atomic="true"></span>
 
