@@ -13,7 +13,9 @@
             </div>
         </form>
         <div class="dbx-form-actions">
-            <a href="{{ route('tiendas.create') }}" class="btn btn-primary">Nueva tienda</a>
+            <a href="{{ route('tiendas.create') }}" class="btn btn-primary btn-icon btn-action-icon" aria-label="Nueva tienda" title="Nueva tienda">
+                <x-ui.action-icon name="plus" label="Nueva tienda" />
+            </a>
         </div>
     </x-ui.toolbar>
 <x-ui.table class="dbx-actions-table">
@@ -49,17 +51,23 @@
                 <td class="actions-col">
                     @if($id !== null && $id !== '')
                     <x-ui.action-buttons>
-                        <a href="{{ route('tiendas.edit', $id) }}" class="btn btn-ghost">Editar</a>
+                        <a href="{{ route('tiendas.edit', $id) }}" class="btn btn-ghost btn-icon btn-action-icon" aria-label="Editar tienda" title="Editar tienda">
+                            <x-ui.action-icon name="edit" label="Editar tienda" />
+                        </a>
                         @if($isActive)
                             <form action="{{ route('tiendas.destroy', $id) }}" method="POST" onsubmit="return confirm('¿Desactivar tienda? Se mantendran logs e historico, y las impresoras de esta tienda quedaran inactivas.')">
                                 @csrf
                                 @method('DELETE')
-                                <button type="submit" class="btn btn-warning">Desactivar</button>
+                                <button type="submit" class="btn btn-warning btn-icon btn-action-icon" aria-label="Desactivar tienda" title="Desactivar tienda">
+                                    <x-ui.action-icon name="power" label="Desactivar tienda" />
+                                </button>
                             </form>
                         @else
                             <form action="{{ route('tiendas.activate', $id) }}" method="POST" onsubmit="return confirm('¿Activar tienda de nuevo?')">
                                 @csrf
-                                <button type="submit" class="btn btn-primary">Activar</button>
+                                <button type="submit" class="btn btn-primary btn-icon btn-action-icon" aria-label="Activar tienda" title="Activar tienda">
+                                    <x-ui.action-icon name="check" label="Activar tienda" />
+                                </button>
                             </form>
                         @endif
                         <form action="{{ route('tiendas.destroy', $id) }}" method="POST" onsubmit="return confirm('¿ELIMINAR DEFINITIVAMENTE la tienda {{ $name }} ({{ $id }})? Esta acci&oacute;n borrar&aacute; tambi&eacute;n hist&oacute;rico de impresi&oacute;n y no se puede deshacer.')">
@@ -67,7 +75,9 @@
                             @method('DELETE')
                             <input type="hidden" name="hardDelete" value="1">
                             <input type="hidden" name="purgeHistory" value="1">
-                            <button type="submit" class="btn btn-danger">Eliminar definitivo</button>
+                            <button type="submit" class="btn btn-danger btn-icon btn-action-icon" aria-label="Eliminar definitivamente tienda" title="Eliminar definitivamente tienda">
+                                <x-ui.action-icon name="trash" label="Eliminar definitivamente tienda" />
+                            </button>
                         </form>
                     </x-ui.action-buttons>
                     @endif

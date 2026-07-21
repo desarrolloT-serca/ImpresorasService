@@ -84,7 +84,9 @@
             </div>
             <div class="dbx-printer-panel-tools">
                 @if($isAdmin ?? false)
-                    <a href="{{ $createUrl }}" class="btn btn-primary dbx-routing-create-btn" title="Crear impresora para esta tienda" aria-label="Crear impresora para esta tienda">+ Nueva impresora</a>
+                    <a href="{{ $createUrl }}" class="btn btn-primary btn-icon btn-action-icon dbx-routing-create-btn" title="Crear impresora para esta tienda" aria-label="Crear impresora para esta tienda">
+                        <x-ui.action-icon name="plus" label="Crear impresora para esta tienda" />
+                    </a>
                 @endif
             </div>
         </div>
@@ -212,14 +214,18 @@
                             <td class="actions-col">
                                 @if(($isAdmin ?? false) && $id)
                                     <x-ui.action-buttons>
-                                        <a href="{{ $editUrl }}" class="btn btn-ghost">Editar</a>
+                                        <a href="{{ $editUrl }}" class="btn btn-ghost btn-icon btn-action-icon" aria-label="Editar impresora" title="Editar impresora">
+                                            <x-ui.action-icon name="edit" label="Editar impresora" />
+                                        </a>
                                         <form action="{{ route('impresoras.destroy', $id) }}" method="POST" onsubmit="return confirm('&iquest;Eliminar?')">
                                             @csrf
                                             @method('DELETE')
                                             @if($pageStoreId !== null)
                                                 <input type="hidden" name="storeId" value="{{ $pageStoreId }}">
                                             @endif
-                                            <button type="submit" class="btn btn-danger">Eliminar</button>
+                                            <button type="submit" class="btn btn-danger btn-icon btn-action-icon" aria-label="Eliminar impresora" title="Eliminar impresora">
+                                                <x-ui.action-icon name="trash" label="Eliminar impresora" />
+                                            </button>
                                         </form>
                                     </x-ui.action-buttons>
                                 @else

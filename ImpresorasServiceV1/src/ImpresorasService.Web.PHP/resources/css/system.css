@@ -5861,3 +5861,90 @@ html.dark .app-toast {
 .dbx-store-status-card .dbx-health-legend {
     align-self: center !important;
 }
+
+/* Detalle compacto: alinear el chip de estado de impresora al borde derecho real. */
+.dbx-store-grid .dbx-printers:not(.dbx-diagnostic-printers) .dbx-printers-head,
+.dbx-store-grid .dbx-printers:not(.dbx-diagnostic-printers) .dbx-printer-row:not(.dbx-diagnostic-printer-row) {
+    grid-template-columns: minmax(0, 1fr) max-content !important;
+}
+
+.dbx-store-grid .dbx-printers:not(.dbx-diagnostic-printers) .dbx-printers-head > span:nth-child(2),
+.dbx-store-grid .dbx-printers:not(.dbx-diagnostic-printers) .dbx-printer-row:not(.dbx-diagnostic-printer-row) > .dbx-printer-state {
+    grid-column: 2 !important;
+    justify-self: end !important;
+    margin-left: auto !important;
+}
+
+.dbx-store-grid .dbx-printers:not(.dbx-diagnostic-printers) .dbx-printer-row:not(.dbx-diagnostic-printer-row) > .dbx-printer-state {
+    box-sizing: border-box !important;
+    max-width: 3.2rem !important;
+    min-width: 3.2rem !important;
+    text-align: center !important;
+    width: 3.2rem !important;
+}
+
+.dbx-store-grid .dbx-printers:not(.dbx-diagnostic-printers) .dbx-printers-head > span:nth-child(3),
+.dbx-store-grid .dbx-printers:not(.dbx-diagnostic-printers) .dbx-printer-row:not(.dbx-diagnostic-printer-row) > span:nth-child(3) {
+    display: none !important;
+}
+
+/* Detalle compacto diagnostico: eliminar la columna de cola vacia que separaba el estado del borde derecho. */
+.dbx-store-grid .dbx-diagnostic-printers .dbx-diagnostic-printer-row {
+    grid-template-columns: minmax(0, 1fr) max-content !important;
+}
+
+.dbx-store-grid .dbx-diagnostic-printers .dbx-diagnostic-printer-row > .dbx-printer-state {
+    box-sizing: border-box !important;
+    grid-column: 2 !important;
+    justify-self: end !important;
+    margin-left: auto !important;
+    max-width: 3.2rem !important;
+    min-width: 3.2rem !important;
+    text-align: center !important;
+    width: 3.2rem !important;
+}
+
+.dbx-store-grid .dbx-diagnostic-printers .dbx-diagnostic-printer-row > .dbx-printer-queue-slot {
+    display: none !important;
+}
+
+/* CRUD de entidades: acciones por icono, compactas y accesibles por aria-label/title. */
+.btn.btn-action-icon {
+    align-items: center !important;
+    display: inline-flex !important;
+    justify-content: center !important;
+    min-height: 32px !important;
+    min-width: 32px !important;
+    padding: 0 !important;
+    width: 32px !important;
+}
+
+.btn.btn-action-icon .dbx-action-icon {
+    display: grid;
+    height: 100%;
+    place-items: center;
+    pointer-events: none;
+    width: 100%;
+}
+
+.dbx-action-icon svg {
+    display: block;
+    fill: none;
+    height: 16px;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 2;
+    width: 16px;
+}
+
+.dbx-actions-table .dbx-table td:last-child,
+.dbx-actions-table .table td:last-child {
+    min-width: 112px !important;
+    padding-right: 10px !important;
+}
+
+.dbx-actions-table .dbx-table td:last-child .action-buttons,
+.dbx-actions-table .table td:last-child .action-buttons {
+    gap: 6px !important;
+}

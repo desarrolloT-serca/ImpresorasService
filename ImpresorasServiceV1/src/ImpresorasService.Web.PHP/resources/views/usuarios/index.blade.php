@@ -22,7 +22,9 @@
             </div>
         </form>
         <div class="dbx-form-actions">
-            <a href="{{ route('usuarios.create') }}" class="btn btn-primary">Nuevo usuario</a>
+            <a href="{{ route('usuarios.create') }}" class="btn btn-primary btn-icon btn-action-icon" aria-label="Nuevo usuario" title="Nuevo usuario">
+                <x-ui.action-icon name="plus" label="Nuevo usuario" />
+            </a>
         </div>
     </x-ui.toolbar>
 <x-ui.table class="dbx-actions-table">
@@ -52,11 +54,15 @@
                 <td>
                     @if($id)
                     <x-ui.action-buttons>
-                        <a href="{{ route('usuarios.edit', $id) }}" class="btn btn-ghost">Editar</a>
+                        <a href="{{ route('usuarios.edit', $id) }}" class="btn btn-ghost btn-icon btn-action-icon" aria-label="Editar usuario" title="Editar usuario">
+                            <x-ui.action-icon name="edit" label="Editar usuario" />
+                        </a>
                         <form action="{{ route('usuarios.destroy', $id) }}" method="POST" onsubmit="return confirm('¿Eliminar usuario?')">
                             @csrf
                             @method('DELETE')
-                            <button type="submit" class="btn btn-danger">Eliminar</button>
+                            <button type="submit" class="btn btn-danger btn-icon btn-action-icon" aria-label="Eliminar usuario" title="Eliminar usuario">
+                                <x-ui.action-icon name="trash" label="Eliminar usuario" />
+                            </button>
                         </form>
                     </x-ui.action-buttons>
                     @endif
