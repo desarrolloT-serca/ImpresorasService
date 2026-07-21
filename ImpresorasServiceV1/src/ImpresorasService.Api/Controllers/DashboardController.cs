@@ -1,4 +1,3 @@
-using System.Linq.Expressions;
 using System.Security.Claims;
 using ImpresorasService.Application.Services;
 using ImpresorasService.Domain;
@@ -7,44 +6,19 @@ using ImpresorasService.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace ImpresorasService.Api.Controllers;
-
-public static class DashboardPrintJobPredicates
-{
-    public static readonly Expression<Func<PrintJob, bool>> FailedWithoutRetryCurrent =
-        x => x.Status == PrintJobStatus.ErrorFinal
-             || ((x.Status == PrintJobStatus.Pending
-                  || x.Status == PrintJobStatus.Routed
-                  || x.Status == PrintJobStatus.Printing
-                  || x.Status == PrintJobStatus.Cancelled
-                  || x.Status == PrintJobStatus.PrinterBlocked)
-                 && x.AttemptCount > 1);
-}
 
 [ApiController]
 [Authorize(Policy = "EmployeeOrAbove")]
 [Route("api/[controller]")]
 public class DashboardController : ControllerBase
 {
-    private static readonly PrintJobStatus[] PrintedStatuses =
-    [
-        PrintJobStatus.SpoolAccepted,
-        PrintJobStatus.PrintedConfirmed,
-        PrintJobStatus.PrintedUnknown
-    ];
-
-    private static readonly PrintJobStatus[] QueueStatuses =
-    [
-        PrintJobStatus.Pending,
-        PrintJobStatus.Routed,
-        PrintJobStatus.Printing,
-        PrintJobStatus.RetryScheduled
-    ];
-
     private readonly ImpresorasDbContext _dbContext;
     private readonly TimeProvider _timeProvider;
     private readonly TimeZoneInfo _businessTimeZone;
+    private readonly ILogger<DashboardController> _logger;
     private const int DefaultWarningQueueMin = 10;
     private const int DefaultCriticalQueueMin = 30;
     private const int DefaultWarningFailedWithoutRetryMin = 1;
@@ -53,14 +27,13 @@ public class DashboardController : ControllerBase
     private const int DefaultConnWarningFailuresMin = 2;
     private const int DefaultConnCriticalFailuresMin = 3;
 
-    public DashboardController(ImpresorasDbContext dbContext, TimeProvider timeProvider, IConfiguration configuration)
+    public DashboardController(ImpresorasDbContext dbContext, TimeProvider timeProvider, IConfiguration configuration, ILogger<DashboardController> logger)
     {
         _dbContext = dbContext;
         _timeProvider = timeProvider;
-        var tzId = configuration["Dashboard:BusinessTimeZone"];
-        _businessTimeZone = string.IsNullOrWhiteSpace(tzId)
-            ? TimeZoneInfo.Utc
-            : TimeZoneInfo.FindSystemTimeZoneById(tzId);
+        _logger = logger;
+        // Compartido con StoreHealthAlertBackgroundService (Worker) — KPI-P2-004, mismo reloj de negocio.
+        _businessTimeZone = BusinessTimeZoneClock.Resolve(configuration["Dashboard:BusinessTimeZone"], _logger);
     }
 
     [HttpGet("overview")]
@@ -88,28 +61,29 @@ public class DashboardController : ControllerBase
             printers = printers.Where(x => x.StoreId == effectiveStoreId.Value);
         }
 
-        // received: cohorte de creados en la ventana. printed/failed/failedWithoutRetryCurrent:
-        // eventos ocurridos en la ventana (throughput), no cohorte — contrato en docs/contrato-kpi-dashboard.md.
-        // Acotada también por arriba (<= now), igual que PHP (resolveWindowRange) — VAL-P3-009.
+        // received: cohorte de creados en la ventana (foto de qué entró). failedWithoutRetryCurrent:
+        // foto actual de fallos sin reenvío — SIN ventana (A-KPI-01, auditoria-integral-2026-07-21.md):
+        // un ErrorFinal es terminal, su UpdatedAtUtc no vuelve a moverse, así que filtrarlo por ventana
+        // lo hacía "desaparecer" al cruzar medianoche aunque el job siguiera roto. printed/failed:
+        // eventos de negocio (PrintJobEvents), contados una sola vez por job — KPI-P1-001/002,
+        // docs/prompt-roadmap-kpi-dashboard.md. Acotada también por arriba (<= now), igual que PHP
+        // (resolveWindowRange) — VAL-P3-009.
         var jobsInWindow = jobs.Where(x => x.CreatedAtUtc >= fromUtc && x.CreatedAtUtc <= now);
-        var jobsUpdatedInWindow = jobs.Where(x => x.UpdatedAtUtc >= fromUtc && x.UpdatedAtUtc <= now);
+
+        var (printedRows, failedRows) = await LoadPrintedAndFailedAsync(jobs, fromUtc, now, cancellationToken);
 
         var kpis = new
         {
             received = await jobsInWindow.CountAsync(cancellationToken),
-            printed = await jobsUpdatedInWindow.CountAsync(x => PrintedStatuses.Contains(x.Status), cancellationToken),
-            failed = await jobsUpdatedInWindow.CountAsync(
-                x => x.Status == PrintJobStatus.ErrorFinal
-                     || x.Status == PrintJobStatus.RetryScheduled
-                     || (PrintedStatuses.Contains(x.Status) && x.AttemptCount > 1),
-                cancellationToken),
-            queueCurrent = await jobs.CountAsync(x => QueueStatuses.Contains(x.Status), cancellationToken),
-            failedWithoutRetryCurrent = await jobsUpdatedInWindow.CountAsync(DashboardPrintJobPredicates.FailedWithoutRetryCurrent, cancellationToken),
+            printed = printedRows.Count,
+            failed = failedRows.Count,
+            queueCurrent = await jobs.CountAsync(x => DashboardPrintJobPredicates.QueueStatuses.Contains(x.Status), cancellationToken),
+            failedWithoutRetryCurrent = await jobs.CountAsync(DashboardPrintJobPredicates.FailedWithoutRetryCurrent, cancellationToken),
             activePrinters = await printers.CountAsync(cancellationToken),
             activeStores = await stores.CountAsync(cancellationToken)
         };
 
-        var storeRows = await BuildStoreRowsAsync(stores, printers, jobsInWindow, jobsUpdatedInWindow, jobs, thresholds, cancellationToken);
+        var storeRows = await BuildStoreRowsAsync(stores, printers, jobsInWindow, jobs, printedRows, failedRows, thresholds, cancellationToken);
         var alerts = storeRows
             .Where(x => x.Health != "healthy")
             .OrderByDescending(x => x.FailedWithoutRetryCurrent)
@@ -205,12 +179,58 @@ public class DashboardController : ControllerBase
         return Ok(updated);
     }
 
+    /// <summary>
+    /// "printed": primera vez que cada JobId entra en un estado de <see cref="DashboardPrintJobPredicates.PrintedStatuses"/>
+    /// dentro de la ventana (no cada actualización posterior sobre el mismo estado impreso —
+    /// KPI-P1-001). "failed": JobId distintos con al menos una señal de fallo en la ventana
+    /// (entrada a ErrorFinal/RetryScheduled, o primera impresión con AttemptCount>1 — KPI-P1-002).
+    /// Un mismo job nunca suma más de una vez a cada KPI dentro de la misma ventana.
+    ///
+    /// Perf (A-KPI-03, docs/auditoria-integral-2026-07-21.md): el MIN(OccurredAtUtc) agrupado por
+    /// JobId se hacía sobre TODA la tabla de eventos (todas las tiendas, todo el histórico) y
+    /// luego se resolvía StoreId/AttemptCount con un segundo roundtrip + IN-list de todos los
+    /// JobId impresos. El Join contra <paramref name="jobsScope"/> (ya filtrado por tienda activa
+    /// y, si aplica, storeId) empuja ese scope a la agregación y evita el segundo roundtrip.
+    /// </summary>
+    private async Task<(List<PrintedJobRow> Printed, List<FailedJobRow> Failed)> LoadPrintedAndFailedAsync(
+        IQueryable<PrintJob> jobsScope, DateTimeOffset fromUtc, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var printed = await _dbContext.PrintJobEvents
+            .Where(e => e.NewStatus != null && DashboardPrintJobPredicates.PrintedStatuses.Contains(e.NewStatus.Value))
+            .Join(jobsScope, e => e.JobId, j => j.JobId,
+                (e, j) => new { e.JobId, j.StoreId, j.AttemptCount, e.OccurredAtUtc })
+            .GroupBy(x => new { x.JobId, x.StoreId, x.AttemptCount })
+            .Select(g => new { g.Key.JobId, g.Key.StoreId, g.Key.AttemptCount, FirstPrintedAtUtc = g.Min(x => x.OccurredAtUtc) })
+            .Where(x => x.FirstPrintedAtUtc >= fromUtc && x.FirstPrintedAtUtc <= now)
+            .Select(x => new PrintedJobRow(x.JobId, x.StoreId, x.AttemptCount))
+            .ToListAsync(cancellationToken);
+
+        var errorOrRetry = await _dbContext.PrintJobEvents
+            .Where(e => (e.NewStatus == PrintJobStatus.ErrorFinal || e.NewStatus == PrintJobStatus.RetryScheduled)
+                        && e.OccurredAtUtc >= fromUtc && e.OccurredAtUtc <= now)
+            .Join(jobsScope, e => e.JobId, j => j.JobId, (e, j) => new FailedJobRow(e.JobId, j.StoreId))
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var failed = errorOrRetry
+            .Concat(printed.Where(p => p.AttemptCount > 1).Select(p => new FailedJobRow(p.JobId, p.StoreId)))
+            .GroupBy(x => x.JobId)
+            .Select(g => g.First())
+            .ToList();
+
+        return (printed, failed);
+    }
+
+    private sealed record PrintedJobRow(Guid JobId, int StoreId, int AttemptCount);
+    private sealed record FailedJobRow(Guid JobId, int StoreId);
+
     private async Task<List<StoreDashboardRow>> BuildStoreRowsAsync(
         IQueryable<Domain.Entities.Store> stores,
         IQueryable<Domain.Entities.Printer> printers,
         IQueryable<Domain.Entities.PrintJob> jobsInWindow,
-        IQueryable<Domain.Entities.PrintJob> jobsUpdatedInWindow,
         IQueryable<Domain.Entities.PrintJob> allJobs,
+        List<PrintedJobRow> printedRows,
+        List<FailedJobRow> failedRows,
         DashboardThresholds thresholds,
         CancellationToken cancellationToken)
     {
@@ -240,29 +260,20 @@ public class DashboardController : ControllerBase
             .Select(x => new { StoreId = x.Key, Received = x.Count() })
             .ToDictionaryAsync(x => x.StoreId, x => x.Received, cancellationToken);
 
-        var printedFailedStats = await jobsUpdatedInWindow
-            .GroupBy(x => x.StoreId)
-            .Select(x => new
-            {
-                StoreId = x.Key,
-                Printed = x.Count(j => PrintedStatuses.Contains(j.Status)),
-                Failed = x.Count(j =>
-                    j.Status == PrintJobStatus.ErrorFinal
-                    || j.Status == PrintJobStatus.RetryScheduled
-                    || (PrintedStatuses.Contains(j.Status) && j.AttemptCount > 1))
-            })
-            .ToDictionaryAsync(x => x.StoreId, x => new { x.Printed, x.Failed }, cancellationToken);
+        var printedStats = printedRows.GroupBy(p => p.StoreId).ToDictionary(g => g.Key, g => g.Count());
+        var failedStats = failedRows.GroupBy(f => f.StoreId).ToDictionary(g => g.Key, g => g.Count());
 
         var queueCurrentStats = await allJobs
             .GroupBy(x => x.StoreId)
             .Select(x => new
             {
                 StoreId = x.Key,
-                QueuedCurrent = x.Count(j => QueueStatuses.Contains(j.Status))
+                QueuedCurrent = x.Count(j => DashboardPrintJobPredicates.QueueStatuses.Contains(j.Status))
             })
             .ToDictionaryAsync(x => x.StoreId, x => x.QueuedCurrent, cancellationToken);
 
-        var failedWindowStats = await jobsUpdatedInWindow
+        // Sin ventana (A-KPI-01): foto de estado actual, no filtrada por UpdatedAtUtc.
+        var failedWindowStats = await allJobs
             .Where(DashboardPrintJobPredicates.FailedWithoutRetryCurrent)
             .GroupBy(x => x.StoreId)
             .Select(x => new
@@ -275,47 +286,48 @@ public class DashboardController : ControllerBase
         // Breakdown por impresora: evita que el fallback PHP tenga que pedir jobs crudos
         // (api/printjobs?limit=5000, truncado a 500 por la API) solo para calcular estos chips.
         var printerQueueCurrent = await allJobs
-            .Where(j => QueueStatuses.Contains(j.Status) && j.PrinterId != null)
+            .Where(j => DashboardPrintJobPredicates.QueueStatuses.Contains(j.Status) && j.PrinterId != null)
             .GroupBy(j => new { j.StoreId, PrinterId = j.PrinterId!.Value })
             .Select(g => new { g.Key.StoreId, g.Key.PrinterId, Count = g.Count() })
             .ToListAsync(cancellationToken);
 
-        var printerFailedWindow = await jobsUpdatedInWindow
+        var printerFailedWindow = await allJobs
             .Where(DashboardPrintJobPredicates.FailedWithoutRetryCurrent)
             .Where(j => j.PrinterId != null)
             .GroupBy(j => new { j.StoreId, PrinterId = j.PrinterId!.Value })
             .Select(g => new { g.Key.StoreId, g.Key.PrinterId, Count = g.Count() })
             .ToListAsync(cancellationToken);
 
-        var printerTotalWindow = await jobsInWindow
+        // "recibidos por impresora": cohorte por CreatedAtUtc, igual que `received` — no eventos.
+        var printerReceivedWindow = await jobsInWindow
             .Where(j => j.PrinterId != null)
             .GroupBy(j => new { j.StoreId, PrinterId = j.PrinterId!.Value })
             .Select(g => new { g.Key.StoreId, g.Key.PrinterId, Count = g.Count() })
             .ToListAsync(cancellationToken);
 
         var unassignedQueueStats = await allJobs
-            .Where(j => QueueStatuses.Contains(j.Status) && j.PrinterId == null)
+            .Where(j => DashboardPrintJobPredicates.QueueStatuses.Contains(j.Status) && j.PrinterId == null)
             .GroupBy(j => j.StoreId)
             .Select(g => new { StoreId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.StoreId, x => x.Count, cancellationToken);
 
-        var printerAcc = new Dictionary<(int StoreId, int PrinterId), (int Queue, int Failed, int Total)>();
+        var printerAcc = new Dictionary<(int StoreId, int PrinterId), (int Queue, int Failed, int Received)>();
         foreach (var r in printerQueueCurrent)
             printerAcc[(r.StoreId, r.PrinterId)] = printerAcc.TryGetValue((r.StoreId, r.PrinterId), out var q)
-                ? (q.Queue + r.Count, q.Failed, q.Total) : (r.Count, 0, 0);
+                ? (q.Queue + r.Count, q.Failed, q.Received) : (r.Count, 0, 0);
         foreach (var r in printerFailedWindow)
             printerAcc[(r.StoreId, r.PrinterId)] = printerAcc.TryGetValue((r.StoreId, r.PrinterId), out var f)
-                ? (f.Queue, f.Failed + r.Count, f.Total) : (0, r.Count, 0);
-        foreach (var r in printerTotalWindow)
+                ? (f.Queue, f.Failed + r.Count, f.Received) : (0, r.Count, 0);
+        foreach (var r in printerReceivedWindow)
             printerAcc[(r.StoreId, r.PrinterId)] = printerAcc.TryGetValue((r.StoreId, r.PrinterId), out var t)
-                ? (t.Queue, t.Failed, t.Total + r.Count) : (0, 0, r.Count);
+                ? (t.Queue, t.Failed, t.Received + r.Count) : (0, 0, r.Count);
 
         var printersByStore = printerAcc
             .GroupBy(kv => kv.Key.StoreId)
             .ToDictionary(
                 g => g.Key,
                 g => (IReadOnlyList<PrinterDashboardRow>)g
-                    .Select(kv => new PrinterDashboardRow(kv.Key.PrinterId, kv.Value.Queue, kv.Value.Failed, kv.Value.Total))
+                    .Select(kv => new PrinterDashboardRow(kv.Key.PrinterId, kv.Value.Queue, kv.Value.Failed, kv.Value.Received))
                     .OrderByDescending(p => p.QueueCurrent)
                     .ToList());
 
@@ -325,14 +337,13 @@ public class DashboardController : ControllerBase
             connectedPrinters.TryGetValue(store.StoreId, out var connected);
             printersConnStats.TryGetValue(store.StoreId, out var connStats);
             receivedStats.TryGetValue(store.StoreId, out var received);
-            printedFailedStats.TryGetValue(store.StoreId, out var printedFailed);
+            printedStats.TryGetValue(store.StoreId, out var printed);
+            failedStats.TryGetValue(store.StoreId, out var failed);
             queueCurrentStats.TryGetValue(store.StoreId, out var queuedCurrentValue);
             failedWindowStats.TryGetValue(store.StoreId, out var failedWithoutRetryCurrentValue);
             unassignedQueueStats.TryGetValue(store.StoreId, out var unassignedQueueCurrent);
             printersByStore.TryGetValue(store.StoreId, out var storePrinters);
 
-            var printed = printedFailed?.Printed ?? 0;
-            var failed = printedFailed?.Failed ?? 0;
             var queuedCurrent = queuedCurrentValue;
             var failedWithoutRetryCurrent = failedWithoutRetryCurrentValue;
 
@@ -470,14 +481,8 @@ public class DashboardController : ControllerBase
             "7d" => now.AddDays(-7),
             "30d" => now.AddDays(-30),
             // "today" en la timezone de negocio (Dashboard:BusinessTimeZone), no en la del servidor.
-            _ => ResolveTodayStart(now)
+            _ => BusinessTimeZoneClock.TodayStartUtc(now, _businessTimeZone)
         };
-    }
-
-    private DateTimeOffset ResolveTodayStart(DateTimeOffset nowUtc)
-    {
-        var todayDate = TimeZoneInfo.ConvertTime(nowUtc, _businessTimeZone).Date;
-        return new DateTimeOffset(todayDate, _businessTimeZone.GetUtcOffset(todayDate));
     }
 
     private static string NormalizeWindow(string? window)
@@ -512,7 +517,7 @@ public class DashboardController : ControllerBase
         int PrinterId,
         int QueueCurrent,
         int FailedWindow,
-        int TotalWindow);
+        int ReceivedWindow);
 
     private sealed record DashboardThresholds(
         int WarningQueueMin,

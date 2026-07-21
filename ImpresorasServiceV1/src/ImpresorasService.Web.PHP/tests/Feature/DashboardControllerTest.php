@@ -182,7 +182,7 @@ class DashboardControllerTest extends TestCase
                                 'healthReason' => 'Cola actual mayor o igual a 30 trabajos',
                                 'unassignedQueueCurrent' => 3,
                                 'printers' => [
-                                    ['printerId' => 99, 'queueCurrent' => 597, 'failedWindow' => 0, 'totalWindow' => 600],
+                                    ['printerId' => 99, 'queueCurrent' => 597, 'failedWindow' => 0, 'receivedWindow' => 600],
                                 ],
                             ],
                         ],
@@ -210,7 +210,7 @@ class DashboardControllerTest extends TestCase
                 && ($store['unassignedQueueCurrent'] ?? null) === 3
                 && ($printer['printerId'] ?? null) === 99
                 && ($printer['queueCurrent'] ?? null) === 597
-                && ($printer['totalWindow'] ?? null) === 600;
+                && ($printer['receivedWindow'] ?? null) === 600;
         });
     }
 
@@ -294,5 +294,143 @@ class DashboardControllerTest extends TestCase
             // ambos cuentan ahora en failedWithoutRetryCurrent (antes del fix, solo ErrorFinal contaba -> 0).
             return $kpis['failedWithoutRetryCurrent'] === 2;
         });
+    }
+
+    /**
+     * Fase 2 (docs/prompt-roadmap-kpi-dashboard.md, KPI-P2-003): activePrinters/activeStores
+     * también deben salir del overview, no solo received/printed/failed/queueCurrent/
+     * failedWithoutRetryCurrent. Antes del fix, applyOverviewKpis() no los tocaba y el valor
+     * mostrado quedaba en el calculado localmente (heurística distinta: "tiendas con impresora
+     * conectada" en vez de "tiendas con IsActive=true").
+     */
+    public function test_dashboard_uses_all_overview_kpis(): void
+    {
+        $api = $this->makeOverviewApiClient(
+            jobs: [], // fetch legacy vacío: si activePrinters/activeStores no vinieran del overview, saldrían en 0 aquí.
+            printers: [],
+            overviewKpis: [
+                'received' => 5, 'printed' => 3, 'failed' => 1, 'queueCurrent' => 1,
+                'failedWithoutRetryCurrent' => 0, 'activePrinters' => 7, 'activeStores' => 3,
+            ],
+        );
+
+        $this->app->instance(ApiClient::class, $api);
+
+        $response = $this
+            ->withSession([
+                'impresoras_token' => 'token',
+                'impresoras_user' => ['role' => 'Admin', 'login' => 'admin'],
+            ])
+            ->get('/');
+
+        $response->assertOk();
+        $response->assertViewHas('kpis', function (array $kpis): bool {
+            return $kpis['activePrinters'] === 7 && $kpis['activeStores'] === 3;
+        });
+    }
+
+    /**
+     * Fase 2: con overview disponible, el bucle de agregación local sobre `api/printjobs` no debe
+     * ejecutarse en absoluto (no solo quedar sobrescrito al final). Se simulan 600 jobs crudos —
+     * suficientes para disparar `partialData` si el fallback corriera — y se comprueba que
+     * `partialData` sigue en false, señal de que el bucle nunca se ejecutó.
+     */
+    public function test_dashboard_does_not_recalculate_kpis_when_overview_exists(): void
+    {
+        $now = gmdate('c');
+        $jobs = [];
+        for ($i = 0; $i < 600; $i++) {
+            $jobs[] = ['storeId' => 10, 'printerId' => 0, 'status' => 'Pending', 'attemptCount' => 0, 'createdAtUtc' => $now, 'updatedAtUtc' => $now];
+        }
+
+        $api = $this->makeOverviewApiClient(
+            jobs: $jobs,
+            printers: [],
+            overviewKpis: [
+                'received' => 5, 'printed' => 3, 'failed' => 1, 'queueCurrent' => 1,
+                'failedWithoutRetryCurrent' => 0, 'activePrinters' => 1, 'activeStores' => 1,
+            ],
+        );
+
+        $this->app->instance(ApiClient::class, $api);
+
+        $response = $this
+            ->withSession([
+                'impresoras_token' => 'token',
+                'impresoras_user' => ['role' => 'Admin', 'login' => 'admin'],
+            ])
+            ->get('/');
+
+        $response->assertOk();
+        $response->assertViewHas('partialData', false);
+        $response->assertViewHas('kpis', fn (array $kpis): bool => $kpis['received'] === 5);
+    }
+
+    /**
+     * @param list<array<string, mixed>> $jobs
+     * @param list<array<string, mixed>> $printers
+     * @param array<string, int> $overviewKpis
+     */
+    private function makeOverviewApiClient(array $jobs, array $printers, array $overviewKpis): ApiClient
+    {
+        return new class($jobs, $printers, $overviewKpis) extends ApiClient
+        {
+            public function __construct(
+                private readonly array $jobs,
+                private readonly array $printers,
+                private readonly array $overviewKpis,
+            ) {
+                parent::__construct(new Client(['base_uri' => 'http://api.test/']), 'http://api.test');
+            }
+
+            public function getAsync(string $path): PromiseInterface
+            {
+                return Create::promiseFor($this->responseFor($path));
+            }
+
+            public function get(string $path): array
+            {
+                return $this->responseFor($path);
+            }
+
+            public function getQuiet(string $path): array
+            {
+                return $this->responseFor($path);
+            }
+
+            /**
+             * @return array<int|string, mixed>
+             */
+            private function responseFor(string $path): array
+            {
+                return match ($path) {
+                    'api/stores?isActive=true' => [
+                        ['storeId' => 10, 'name' => 'Tienda 10'],
+                    ],
+                    'api/dashboard/thresholds' => [],
+                    'api/printjobs?limit=500' => $this->jobs,
+                    'api/printers?isActive=true' => $this->printers,
+                    'api/users' => [],
+                    'api/dashboard/overview?window=today' => [
+                        'kpis' => $this->overviewKpis,
+                        'stores' => [
+                            [
+                                'storeId' => 10,
+                                'storeName' => 'Tienda 10',
+                                'connectedPrinters' => 1,
+                                'received' => $this->overviewKpis['received'],
+                                'printed' => $this->overviewKpis['printed'],
+                                'failed' => $this->overviewKpis['failed'],
+                                'queuedCurrent' => $this->overviewKpis['queueCurrent'],
+                                'failedWithoutRetryCurrent' => $this->overviewKpis['failedWithoutRetryCurrent'],
+                                'health' => 'healthy',
+                                'healthReason' => 'Operacion dentro de umbrales',
+                            ],
+                        ],
+                    ],
+                    default => [],
+                };
+            }
+        };
     }
 }

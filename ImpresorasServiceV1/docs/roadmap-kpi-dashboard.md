@@ -70,6 +70,8 @@ Documento `docs/contrato-kpi-dashboard.md` creado con la tabla de definiciones (
 
 **Archivo:** `DashboardController.cs` (`GetOverview`, `BuildStoreRowsAsync`). **Verificado:** fixtures 1 y 4 (F1.4) en verde.
 
+**⚠️ Refinado 2026-07-20 (KPI-P1-001/002):** `UpdatedAtUtc` + estado actual no equivale a "evento de negocio ocurrido una vez" — un job en `SpoolAccepted` un día y confirmado por el watchdog al día siguiente se contaba como impreso en ambos días. Corregido en `docs/prompt-roadmap-kpi-dashboard.md` (Fase 1): `printed`/`failed` ahora leen `PrintJobEvents`, deduplicados por `JobId`. Detalle en `docs/contrato-kpi-dashboard.md` (revisión v2).
+
 ### F1.2 Timezone de negocio explícita `[B]` — VAL-P1-003 ✅ HECHO
 - `Dashboard:BusinessTimeZone` = `"Europe/Madrid"` en `appsettings.json` de la Api.
 - `DashboardController` recibe `TimeProvider` + `IConfiguration` por constructor; `_businessTimeZone` resuelto una vez con `TimeZoneInfo.FindSystemTimeZoneById`.
