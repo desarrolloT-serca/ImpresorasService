@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Reflection;
 using ImpresorasService.Api.Controllers;
+using ImpresorasService.Application.Services;
 using ImpresorasService.Domain;
 using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure.Persistence;
@@ -78,11 +79,10 @@ public sealed class DashboardControllerTests : IntegrationTestBase
                 db.Printers.Add(new Printer { PrinterId = printerId, StoreId = storeId, PrinterName = "Breakdown Printer", SpoolQueue = @"\\host\q985", Host = "host", IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now });
             }
             db.PrintJobs.RemoveRange(await db.PrintJobs.Where(j => j.StoreId == storeId).ToListAsync());
-            db.PrintJobs.AddRange(
-                MakeJob(now, PrintJobStatus.Pending, storeId: storeId, printerId: printerId),
-                MakeJob(now, PrintJobStatus.Routed, storeId: storeId, printerId: printerId),
-                MakeJob(now, PrintJobStatus.ErrorFinal, storeId: storeId, printerId: printerId, attemptCount: 2),
-                MakeJob(now, PrintJobStatus.Pending, storeId: storeId, printerId: null));
+            AddJobWithEvent(db, MakeJob(now, PrintJobStatus.Pending, storeId: storeId, printerId: printerId));
+            AddJobWithEvent(db, MakeJob(now, PrintJobStatus.Routed, storeId: storeId, printerId: printerId));
+            AddJobWithEvent(db, MakeJob(now, PrintJobStatus.ErrorFinal, storeId: storeId, printerId: printerId, attemptCount: 2));
+            AddJobWithEvent(db, MakeJob(now, PrintJobStatus.Pending, storeId: storeId, printerId: null));
             await db.SaveChangesAsync();
         }
 
@@ -97,7 +97,7 @@ public sealed class DashboardControllerTests : IntegrationTestBase
         Assert.Equal(printerId, printer.PrinterId);
         Assert.Equal(2, printer.QueueCurrent);   // Pending + Routed
         Assert.Equal(1, printer.FailedWindow);   // ErrorFinal
-        Assert.Equal(3, printer.TotalWindow);    // los 3 jobs asignados a esta impresora, creados hoy
+        Assert.Equal(3, printer.ReceivedWindow); // los 3 jobs asignados a esta impresora, creados hoy
     }
 
     [Fact]
@@ -184,10 +184,9 @@ public sealed class DashboardControllerTests : IntegrationTestBase
 
         db.PrintJobs.RemoveRange(await db.PrintJobs.Where(j => j.StoreId == DashboardTestStoreId).ToListAsync());
 
-        db.PrintJobs.AddRange(
-            MakeJob(now, PrintJobStatus.Pending, attemptCount: 0),
-            MakeJob(now, PrintJobStatus.PrintedConfirmed, attemptCount: 1),
-            MakeJob(now, PrintJobStatus.ErrorFinal, attemptCount: 2));
+        AddJobWithEvent(db, MakeJob(now, PrintJobStatus.Pending, attemptCount: 0));
+        AddJobWithEvent(db, MakeJob(now, PrintJobStatus.PrintedConfirmed, attemptCount: 1));
+        AddJobWithEvent(db, MakeJob(now, PrintJobStatus.ErrorFinal, attemptCount: 2));
 
         await db.SaveChangesAsync();
     }
@@ -217,6 +216,29 @@ public sealed class DashboardControllerTests : IntegrationTestBase
     }
 
     private const int UnspecifiedPrinterId = -1;
+
+    /// <summary>
+    /// "printed"/"failed" ahora se calculan desde PrintJobEvents (KPI-P1-001/002), no solo desde
+    /// el Status/UpdatedAtUtc actual del job — sembrar el evento correspondiente junto al job.
+    /// </summary>
+    private static void AddJobWithEvent(ImpresorasDbContext db, PrintJob job)
+    {
+        db.PrintJobs.Add(job);
+
+        var isPrintedOrFailedStatus = job.Status is PrintJobStatus.SpoolAccepted or PrintJobStatus.PrintedConfirmed
+            or PrintJobStatus.PrintedUnknown or PrintJobStatus.ErrorFinal or PrintJobStatus.RetryScheduled;
+        if (isPrintedOrFailedStatus)
+        {
+            db.PrintJobEvents.Add(new PrintJobEvent
+            {
+                JobId = job.JobId,
+                EventType = "StatusChanged",
+                NewStatus = job.Status,
+                ActorType = "system",
+                OccurredAtUtc = job.UpdatedAtUtc
+            });
+        }
+    }
 
     private static PrintJob MakeJob(
         DateTimeOffset now,
@@ -314,7 +336,7 @@ public sealed class DashboardControllerTests : IntegrationTestBase
         public int PrinterId { get; set; }
         public int QueueCurrent { get; set; }
         public int FailedWindow { get; set; }
-        public int TotalWindow { get; set; }
+        public int ReceivedWindow { get; set; }
     }
 
     private sealed class DashboardThresholdsResponse

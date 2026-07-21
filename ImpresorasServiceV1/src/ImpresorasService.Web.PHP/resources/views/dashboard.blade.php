@@ -280,7 +280,7 @@
                         </span>
                     </div>
                     <div class="dbx-bar-row dbx-bar-row-danger">
-                        <span class="dbx-bar-label">Sin reenviar</span>
+                        <span class="dbx-bar-label" title="Estado actual, no depende del periodo seleccionado arriba">Sin reenviar <small class="dbx-subtle">(actual)</small></span>
                         <div class="dbx-bar-track"><div class="dbx-bar-fill danger" style="width: {{ (int) round(($failedNoRetryVal / $base) * 100) }}%"></div></div>
                         <span class="dbx-bar-value">
                             <span class="dbx-bar-value-number">{{ $failedNoRetryVal }}</span>

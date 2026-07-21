@@ -5,6 +5,7 @@ using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure.Options;
 using ImpresorasService.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -19,30 +20,24 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
     private readonly IOptions<TelegramOptions> _telegramOptions;
     private readonly ILogger<StoreHealthAlertBackgroundService> _logger;
     private readonly TimeProvider _timeProvider;
-
-    private static readonly TimeZoneInfo _spainTz =
-        TimeZoneInfo.FindSystemTimeZoneById(
-            OperatingSystem.IsWindows() ? "Romance Standard Time" : "Europe/Madrid");
-
-    // Debe mantenerse idéntico a DashboardController.QueueStatuses.
-    private static readonly PrintJobStatus[] QueueStatuses =
-    [
-        PrintJobStatus.Pending, PrintJobStatus.Routed,
-        PrintJobStatus.Printing, PrintJobStatus.RetryScheduled
-    ];
+    private readonly TimeZoneInfo _businessTimeZone;
 
     public StoreHealthAlertBackgroundService(
         IServiceScopeFactory scopeFactory,
         ITelegramNotifier telegram,
         IOptions<TelegramOptions> telegramOptions,
         ILogger<StoreHealthAlertBackgroundService> logger,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IConfiguration configuration)
     {
         _scopeFactory = scopeFactory;
         _telegram = telegram;
         _telegramOptions = telegramOptions;
         _logger = logger;
         _timeProvider = timeProvider;
+        // Misma clave que DashboardController (Api) — KPI-P2-004: dashboard y alertas deben usar
+        // el mismo reloj de negocio, no que uno lea Europe/Madrid y el otro medianoche UTC.
+        _businessTimeZone = BusinessTimeZoneClock.Resolve(configuration["Dashboard:BusinessTimeZone"], logger);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -103,7 +98,6 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
             .ToListAsync(ct);
 
         var now = _timeProvider.GetUtcNow();
-        var windowStart = now.Date;
 
         foreach (var store in stores)
         {
@@ -123,16 +117,18 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
             var connCrit = printers.Count(p => p.ConnectionFailuresStreak >= connCritMin);
 
             var queued = await db.PrintJobs.AsNoTracking()
-                .CountAsync(j => j.StoreId == store.StoreId && QueueStatuses.Contains(j.Status), ct);
+                .CountAsync(j => j.StoreId == store.StoreId && DashboardPrintJobPredicates.QueueStatuses.Contains(j.Status), ct);
 
-            // Alineado con DashboardController.BuildStoreRowsAsync: failedWindowStats usa UpdatedAtUtc
-            // y cuenta ErrorFinal más jobs con múltiples intentos aún sin éxito.
-            var updatedJobs = await db.PrintJobs.AsNoTracking()
-                .Where(j => j.StoreId == store.StoreId && j.UpdatedAtUtc >= windowStart)
-                .Select(j => new { j.Status, j.AttemptCount })
-                .ToListAsync(ct);
-
-            var failed = updatedJobs.Count(j => j.Status == PrintJobStatus.ErrorFinal || IsFailedAfterRetry(j.Status, j.AttemptCount));
+            // Mismo predicado que DashboardController.BuildStoreRowsAsync (failedWindowStats) — antes
+            // el Worker mantenía su propia copia (IsFailedAfterRetry) que excluía Printing con
+            // reintentos, algo que la Api sí cuenta como fallo. Ver DashboardPrintJobPredicates.
+            // Sin ventana (A-KPI-01): es una foto de estado actual, no un evento — filtrarla por
+            // UpdatedAtUtc la hacía "curarse sola" a medianoche (ErrorFinal es terminal, su
+            // UpdatedAtUtc no vuelve a moverse) y disparaba alertas de recuperación falsas.
+            var failed = await db.PrintJobs.AsNoTracking()
+                .Where(j => j.StoreId == store.StoreId)
+                .Where(DashboardPrintJobPredicates.FailedWithoutRetryCurrent)
+                .CountAsync(ct);
 
             var (health, reason) = StoreHealthEvaluator.Compute(
                 connected, queued, failed, missingHost, connWarn, connCrit,
@@ -178,8 +174,8 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
         bool isEscalation = isAlertLevel && wasAlertLevel
             && SeverityRank(currentHealth) > SeverityRank(previousNotifiedHealth);
 
-        var spainTime = TimeZoneInfo.ConvertTime(now.UtcDateTime, _spainTz);
-        var ts = spainTime.ToString("dd/MM HH:mm");
+        var localTime = TimeZoneInfo.ConvertTime(now.UtcDateTime, _businessTimeZone);
+        var ts = localTime.ToString("dd/MM HH:mm");
 
         string? message = null;
 
@@ -243,14 +239,6 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
         "critical" => 2,
         _ => 0
     };
-
-    private static bool IsFailedAfterRetry(PrintJobStatus status, int attemptCount)
-        => status != PrintJobStatus.RetryScheduled
-            && status != PrintJobStatus.SpoolAccepted
-            && status != PrintJobStatus.Printing
-            && status != PrintJobStatus.PrintedConfirmed
-            && status != PrintJobStatus.PrintedUnknown
-            && attemptCount > 1;
 
     private static bool HasImplicitHost(string? spoolQueue)
         => !string.IsNullOrEmpty(spoolQueue)

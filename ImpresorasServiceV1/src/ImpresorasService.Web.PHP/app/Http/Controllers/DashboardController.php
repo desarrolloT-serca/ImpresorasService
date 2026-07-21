@@ -155,7 +155,7 @@ class DashboardController extends Controller
                 'connectivityDetail' => (string) ($printer['connectivityDetail'] ?? $printer['ConnectivityDetail'] ?? $printer['lastConnectionError'] ?? $printer['LastConnectionError'] ?? ''),
                 'queueCurrent' => 0,
                 'failedWindow' => 0,
-                'totalWindow' => 0,
+                'receivedWindow' => 0,
             ];
         }
 
@@ -163,6 +163,13 @@ class DashboardController extends Controller
         // (applyOverviewStores/applyOverviewPrinters/applyOverviewKpis más abajo), así que agregar
         // sobre $jobs aquí sería trabajo desechado. Solo se calcula como fallback ante caída de la Api,
         // y en ese caso limit=500 (arriba) puede truncar tiendas con mucha cola: ver $partialData.
+        //
+        // Fase 2 (docs/prompt-roadmap-kpi-dashboard.md, KPI-P1-001/002 aplicado aquí): printed/failed
+        // en la Api leen PrintJobEvents (primera transición a estado impreso / señal de fallo,
+        // deduplicado por JobId). `api/printjobs` no expone eventos, solo el snapshot actual del job
+        // (Status/UpdatedAtUtc) — este fallback es una APROXIMACIÓN por diseño, no puede replicar la
+        // deduplicación por evento. Puede sobre-contar un job que cambió de estado impreso más de una
+        // vez dentro de esta misma ventana. Aceptable porque solo se activa con la Api caída.
         $partialData = false;
         if ($overview === null) {
             $partialData = count($jobs) >= 500;
@@ -214,10 +221,10 @@ class DashboardController extends Controller
                                 'connectionFailuresStreak' => 0,
                                 'queueCurrent' => 0,
                                 'failedWindow' => 0,
-                                'totalWindow' => 0,
+                                'receivedWindow' => 0,
                             ];
                         }
-                        $printerStatsByStore[$storeId][$printerId]['totalWindow'] = ($printerStatsByStore[$storeId][$printerId]['totalWindow'] ?? 0) + 1;
+                        $printerStatsByStore[$storeId][$printerId]['receivedWindow'] = ($printerStatsByStore[$storeId][$printerId]['receivedWindow'] ?? 0) + 1;
                     }
                 }
 
@@ -231,7 +238,11 @@ class DashboardController extends Controller
                     $storeStats[$storeId]['failed']++;
                 }
 
-                if ($isFailedWithoutRetryStatus && $updatedInWindow) {
+                // Sin ventana (A-KPI-01, docs/auditoria-integral-2026-07-21.md): es una foto de
+                // estado actual, no un evento — un ErrorFinal es terminal y su UpdatedAtUtc no
+                // vuelve a moverse, así que exigir updatedInWindow lo hacía "desaparecer" al cruzar
+                // medianoche aunque el job siguiera roto. Coherente con DashboardController.cs.
+                if ($isFailedWithoutRetryStatus) {
                     $failedWithoutRetryCurrent++;
                     $storeStats[$storeId]['failedWithoutRetryCurrent']++;
                     if ($printerId > 0) {
@@ -248,7 +259,7 @@ class DashboardController extends Controller
                                 'connectionFailuresStreak' => 0,
                                 'queueCurrent' => 0,
                                 'failedWindow' => 0,
-                                'totalWindow' => 0,
+                                'receivedWindow' => 0,
                             ];
                         }
                         $printerStatsByStore[$storeId][$printerId]['failedWindow'] = ($printerStatsByStore[$storeId][$printerId]['failedWindow'] ?? 0) + 1;
@@ -272,7 +283,7 @@ class DashboardController extends Controller
                                 'connectionFailuresStreak' => 0,
                                 'queueCurrent' => 0,
                                 'failedWindow' => 0,
-                                'totalWindow' => 0,
+                                'receivedWindow' => 0,
                             ];
                         }
                         $printerStatsByStore[$storeId][$printerId]['queueCurrent'] = ($printerStatsByStore[$storeId][$printerId]['queueCurrent'] ?? 0) + 1;
@@ -463,7 +474,11 @@ class DashboardController extends Controller
             return $kpis;
         }
 
-        foreach (['received', 'printed', 'failed', 'queueCurrent', 'failedWithoutRetryCurrent'] as $key) {
+        // KPI-P2-003: activePrinters/activeStores tambien deben venir del overview cuando existe.
+        // El calculo local de activeStores ("tiendas con >=1 impresora conectada") no es lo mismo
+        // que el de la Api ("tiendas con IsActive=true") — si el overview es la fuente unica, gana
+        // su definicion, no la heuristica local.
+        foreach (['received', 'printed', 'failed', 'queueCurrent', 'failedWithoutRetryCurrent', 'activePrinters', 'activeStores'] as $key) {
             $kpis[$key] = $this->readInt($overviewKpis, $key, $kpis[$key] ?? 0);
         }
 
@@ -511,7 +526,7 @@ class DashboardController extends Controller
     }
 
     /**
-     * Sustituye los chips por impresora (queueCurrent/failedWindow/totalWindow) por los del
+     * Sustituye los chips por impresora (queueCurrent/failedWindow/receivedWindow) por los del
      * overview, que no dependen del limit=5000 truncado a 500 del fallback legacy (VAL-P1-004).
      *
      * @param array<string, mixed> $storeRow
@@ -555,7 +570,7 @@ class DashboardController extends Controller
             }
             $byPrinterId[$printerId]['queueCurrent'] = $this->readInt($overviewPrinter, 'queueCurrent');
             $byPrinterId[$printerId]['failedWindow'] = $this->readInt($overviewPrinter, 'failedWindow');
-            $byPrinterId[$printerId]['totalWindow'] = $this->readInt($overviewPrinter, 'totalWindow');
+            $byPrinterId[$printerId]['receivedWindow'] = $this->readInt($overviewPrinter, 'receivedWindow');
         }
 
         $printersForStore = array_values($byPrinterId);
