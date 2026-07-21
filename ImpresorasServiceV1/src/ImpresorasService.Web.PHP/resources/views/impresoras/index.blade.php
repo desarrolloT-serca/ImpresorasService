@@ -84,7 +84,9 @@
             </div>
             <div class="dbx-printer-panel-tools">
                 @if($isAdmin ?? false)
-                    <a href="{{ $createUrl }}" class="btn btn-primary dbx-routing-create-btn" title="Crear impresora para esta tienda" aria-label="Crear impresora para esta tienda">+ Nueva impresora</a>
+                    <a href="{{ $createUrl }}" class="btn btn-primary btn-icon btn-action-icon dbx-routing-create-btn" title="Crear impresora para esta tienda" aria-label="Crear impresora para esta tienda">
+                        <x-ui.action-icon name="plus" label="Crear impresora para esta tienda" />
+                    </a>
                 @endif
             </div>
         </div>

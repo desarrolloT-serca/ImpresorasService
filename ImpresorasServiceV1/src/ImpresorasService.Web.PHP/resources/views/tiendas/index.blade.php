@@ -13,7 +13,9 @@
             </div>
         </form>
         <div class="dbx-form-actions">
-            <a href="{{ route('tiendas.create') }}" class="btn btn-primary">Nueva tienda</a>
+            <a href="{{ route('tiendas.create') }}" class="btn btn-primary btn-icon btn-action-icon" aria-label="Nueva tienda" title="Nueva tienda">
+                <x-ui.action-icon name="plus" label="Nueva tienda" />
+            </a>
         </div>
     </x-ui.toolbar>
 <x-ui.table class="dbx-actions-table">
@@ -49,7 +51,9 @@
                 <td class="actions-col">
                     @if($id !== null && $id !== '')
                     <x-ui.action-buttons>
-                        <a href="{{ route('tiendas.edit', $id) }}" class="btn btn-ghost">Editar</a>
+                        <a href="{{ route('tiendas.edit', $id) }}" class="btn btn-ghost btn-icon btn-action-icon" aria-label="Editar tienda" title="Editar tienda">
+                            <x-ui.action-icon name="edit" label="Editar tienda" />
+                        </a>
                         @if($isActive)
                             <x-ui.confirm-form
                                 :action="route('tiendas.destroy', $id)"

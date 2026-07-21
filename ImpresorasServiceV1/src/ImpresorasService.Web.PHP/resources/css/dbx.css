@@ -1692,7 +1692,7 @@ html.dark .dbx-store-head {
 
 .dbx-printers-head,
 .dbx-printer-row {
-    grid-template-columns: minmax(0, 1fr) 6.7rem 3.4rem;
+    grid-template-columns: minmax(0, 1fr) 4.3rem 3.4rem;
     padding: 8px 12px;
 }
 
@@ -1707,6 +1707,7 @@ html.dark .dbx-store-head {
 }
 
 .dbx-printer-row {
+    grid-template-columns: minmax(0, 1fr) max-content;
     min-height: 2.45rem;
     border-top: 1px solid var(--ui-border);
     background: var(--ui-surface);
@@ -1731,6 +1732,15 @@ html.dark .dbx-store-head {
     letter-spacing: 0.035em;
 }
 
+.dbx-printer-row .dbx-printer-state {
+    grid-column: 2;
+    text-align: center;
+}
+
+.dbx-printer-row span:nth-child(3) {
+    display: none;
+}
+
 .dbx-printer-state.ok {
     color: #ffffff;
     background: var(--ui-success);
@@ -1750,11 +1760,16 @@ html.dark .dbx-store-head {
 
 .dbx-store-grid.cols-4 .dbx-printers-head,
 .dbx-store-grid.cols-4 .dbx-printer-row {
-    grid-template-columns: minmax(0, 1fr) 5.9rem 2.8rem;
+    grid-template-columns: minmax(0, 1fr) 3.9rem 2.8rem;
+}
+
+.dbx-store-grid.cols-4 .dbx-printer-row {
+    grid-template-columns: minmax(0, 1fr) max-content;
 }
 
 .dbx-store-grid.cols-4 .dbx-printer-state {
-    min-width: 4.8rem;
+    width: 3.2rem;
+    min-width: 3.2rem;
 }
 
 @media (max-width: 760px) {

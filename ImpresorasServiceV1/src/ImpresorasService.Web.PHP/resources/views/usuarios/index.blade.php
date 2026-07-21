@@ -25,7 +25,9 @@
             </div>
         </form>
         <div class="dbx-form-actions">
-            <a href="{{ route('usuarios.create') }}" class="btn btn-primary">Nuevo usuario</a>
+            <a href="{{ route('usuarios.create') }}" class="btn btn-primary btn-icon btn-action-icon" aria-label="Nuevo usuario" title="Nuevo usuario">
+                <x-ui.action-icon name="plus" label="Nuevo usuario" />
+            </a>
         </div>
     </x-ui.toolbar>
 <x-ui.table class="dbx-actions-table">
