@@ -44,21 +44,15 @@ G5  UI/UX y accesibilidad                     ← P2/P3
 
 ---
 
-## G1 — Correctitud de `printed`/`failed` en 7d/30d `[P1]`
+## G1 — Correctitud de `printed`/`failed` en 7d/30d `[P1]` ✅ CERRADO (no aplica) 2026-07-27
 
-**Problema:** A-KPI-02. Dependen 100% de `PrintJobEvents`; sin backfill, 7d/30d subcuentan tras el deploy.
+**Problema original:** A-KPI-02. `printed`/`failed` dependen 100% de `PrintJobEvents`; si hubiera jobs históricos migrados de otro sistema sin evento propio, 7d/30d subcontarían.
 
-**Paso 1 — medir (gate HANA/staging):** contar en HANA cuántos jobs en estado impreso/fallido **carecen** de evento de esa transición. Query de diagnóstico (no cambio de código). Decide entre 2A y 2B:
+**Cierre:** confirmado con el usuario (2026-07-27) que no habrá migración de histórico hacia esta base — arranque limpio en producción. El pipeline actual es 100% event-sourced desde el primer commit (`IngestionService`, `RoutingService`, `PrintExecutionService` generan evento en cada transición de estado, verificado por lectura de código). Sin datos heredados que backfillear, la decisión 2A/2B no aplica: todo job que exista en `PrintJob` en estado impreso/fallido tendrá su evento correspondiente por construcción.
 
-- **2A · Backfill** (recomendado si el hueco es grande): script en `scripts/sql/` que inserta un `PrintJobEvent` sintético (`OccurredAtUtc = updated_at_utc`, `NewStatus = status`, `EventType='Backfill'`, `ActorType='migration'`) por job impreso/fallido sin evento previo. Idempotente (no duplicar si ya existe evento de ese estado).
-- **2B · Ventana ciega documentada:** si el hueco es pequeño o el histórico no importa, aceptar y anotar en el contrato "los KPIs de evento son fiables desde la fecha de activación del event-sourcing".
+**Validación de la query de diagnóstico** (control positivo, no mide producción real, valida que el SQL detecta huecos si algún día existieran): en `ZTEST_VICENTE_2` (que será la base de producción), se sembraron ~25 jobs vía `/pruebas`, se borró manualmente el evento de un job en `PrintedConfirmed` (`scripts/sql/g1_validacion_borrar_evento.sql`) y `scripts/sql/diagnose_g1_1_resumen.sql` pasó de 0 a 1 fila correctamente. Confirma que si algún bug futuro rompiera el event-sourcing, la query lo detectaría.
 
-**Tests:**
-- `.NET`: job en `PrintedConfirmed` **sin** `PrintJobEvents` → tras backfill simulado, cuenta en `printed` de la ventana correspondiente; sin backfill, no cuenta (documenta el límite).
-
-**Aceptación:** `printed`/`failed` a 7d/30d reproducen el volumen real del histórico (2A) o el límite queda escrito y visible en UI (2B). **Gate:** no desplegar F1 sin decidir 2A/2B con datos de HANA.
-
-**Riesgo:** 2A modifica datos → ejecutar en staging primero, con `COUNT` antes/después y backup. Rollback = borrar eventos `EventType='Backfill'`.
+**Nota:** si en el futuro se decide importar histórico de otro sistema, este cierre queda invalidado y hay que reabrir G1 con la decisión 2A/2B original (scripts `scripts/sql/diagnose_g1_*.sql` ya preparados).
 
 ---
 
@@ -66,18 +60,22 @@ G5  UI/UX y accesibilidad                     ← P2/P3
 
 **Problema:** A-KPI-05. Filtros de fecha y `Stores.Any(...)` no verificados contra HANA.
 
-| # | Prueba (en staging con datos reales) | Verifica |
-|---|---|---|
-| 1 | Tipo real de `created_at_utc`/`updated_at_utc`/`occurred_at_utc` (`TIMESTAMP` vs `NVARCHAR`) | A-KPI-05 |
-| 2 | `CreatedAtUtc >= @from` devuelve el conjunto correcto (incl. filas legacy si las hay) | received |
-| 3 | `OccurredAtUtc >= @from` ídem sobre `PrintJobEvents` | printed/failed |
-| 4 | Traducción SQL del `EXISTS` correlacionado (`DashboardController.cs:67`) | tiendas activas |
-| 5 | Job creado 23:58 Madrid, consultado 00:05 → no cuenta en "today" | timezone |
-| 6 | 48 h de `logKpiDiffIfAny` sin diffs legacy↔overview | fuente única |
+`ZTEST_VICENTE_2` es la base que será de producción (sin migración de histórico, ver G1) — los resultados obtenidos ahí valen como definitivos, no como "solo sandbox".
 
-**Regla:** si (1) revela VARCHAR con formatos/offsets mixtos → **bloquear F1** y migrar a `TIMESTAMP` nativo (DDL en `scripts/sql/`). No parchear en el controller.
+| # | Prueba | Verifica | Estado |
+|---|---|---|---|
+| 1 | Tipo real de `created_at_utc`/`updated_at_utc`/`occurred_at_utc` (`TIMESTAMP` vs `NVARCHAR`) | A-KPI-05 | ✅ VERDE 2026-07-27: `TIMESTAMP` nativo confirmado (`SYS.TABLE_COLUMNS`, `scripts/sql/diagnose_g2_1_tipos_columna.sql`) en `created_at_utc`, `updated_at_utc`, `next_retry_at_utc`, `occurred_at_utc`. El comentario legacy de `ImpresorasDbContext.cs:413-414` sobre "formato string no homogéneo" no aplica a esta base — puede ser de un entorno anterior o defensivo por adelantado; sin impacto real detectado. |
+| 2 | `CreatedAtUtc >= @from` devuelve el conjunto correcto | received | ⏳ pendiente — validar con más volumen real (tráfico de producción) |
+| 3 | `OccurredAtUtc >= @from` ídem sobre `PrintJobEvents` | printed/failed | ⏳ pendiente |
+| 4 | Traducción SQL del `EXISTS` correlacionado (`DashboardController.cs:50-55`) | tiendas activas | ⏳ pendiente — activar logging SQL de EF y comparar contra el plan de HANA |
+| 5 | Job creado 23:58 Madrid, consultado 00:05 → no cuenta en "today" | timezone | ⏳ pendiente — control positivo preparado (`scripts/sql/g2_5_backdatar_timezone.sql`), no ejecutado aún |
+| 6 | 48 h de `logKpiDiffIfAny` sin diffs legacy↔overview | fuente única | ⏳ pendiente — requiere tráfico real sostenido, no aplicable con datos de prueba puntuales |
 
-**Aceptación:** pruebas 1-6 verdes en staging antes de producción.
+**Regla (ya no aplica):** el punto de bloqueo por VARCHAR queda descartado — test #1 confirmó tipo nativo.
+
+**Aceptación:** pruebas 2-6 verdes antes de dar por cerrado el gate completo.
+
+**Diferido 2026-07-27** (decisión del usuario): pruebas #2-6 son verificación operativa (requieren tráfico real o pasos manuales de bajo riesgo — `EXISTS` estándar de EF, timezone ya cubierto por unit tests de `BusinessTimeZoneClockTests`), no bloquean trabajo de código. Se retoman cuando haya tráfico real de producción o antes del despliegue final. Scripts ya preparados: `scripts/sql/g2_5_backdatar_timezone.sql` (test #5).
 
 ---
 
@@ -100,7 +98,7 @@ G5  UI/UX y accesibilidad                     ← P2/P3
 
 ## G5 — UI/UX y accesibilidad `[P2/P3]`
 
-- **G5.1 (P2, A-UI-02)** ⚠️ AUDITADO 2026-07-21, sin cambio de código (decisión explícita del usuario: solo documentar, no tocar CSS sin verificación visual). Confirmado con evidencia, no solo sospecha: **55 selectores de nivel superior** definidos en ambos archivos (`comm -12` sobre selectores top-level). Muestreo de los más usados en el dashboard (`.dbx-card`, `.dbx-pill`, `.dbx-table`, `.dbx-tabs`, `.dbx-title`, `.dbx-toolbar`, `.badge`) muestra que **no son duplicados inofensivos**: `dbx.css` define un valor (tamaños en `px`, colores fijos) y `system.css` (cargado después, `layouts/app.blade.php:10-11`) lo **redefine con valores distintos** (`rem`, `var(--ui-primary)`, pesos de fuente distintos) que ganan por orden de cascada. Las reglas de `dbx.css` para esos 55 selectores son código muerto en producción. Build real (`npm run build`) confirma el peso: `dbx.css` compila a 43.7 kB, `system.css` a 118.6 kB — 162 kB de CSS para el dashboard, con buena parte de `dbx.css` inerte. **Remediación futura** (no ejecutada): eliminar de `dbx.css` las 55 reglas confirmadas muertas, verificando con captura antes/después (dev server + Playwright) por tratarse de un archivo compartido por todas las páginas (dashboard, impresoras, tiendas, usuarios, cola, alertas, ajustes).
+- **G5.1 (P2, A-UI-02)** ✅ HECHO 2026-07-27: auditoría inicial (2026-07-21) había estimado 55 selectores duplicados por nombre; análisis riguroso posterior (comparación propiedad-por-propiedad, no solo por nombre de selector) sobre los 117 selectores top-level presentes en ambos archivos identificó **46 selectores 100% muertos** (`system.css`, cargado después, redefine *todas* sus propiedades, sin `!important` en `dbx.css` que invirtiera el orden de cascada) y **71 parcialmente vivos** (aportan propiedades que `system.css` no cubre — esos se dejaron intactos). Eliminadas las 46 reglas muertas de `dbx.css` (bloques completos borrados, o solo el selector muerto podado de grupos `selector-a, selector-b` compartidos con selectores aún vivos, preservando el resto). `dbx.css`: 2334 → 2163 líneas. Build (`npm run build`): `dbx-*.css` 43.7 kB → 40.02 kB. Verificado: `php artisan test` 12/12; verificación visual manual del usuario en dashboard/impresoras/tiendas/cola tras hard-refresh — "todo igual, ningún cambio apreciable".
 - **G5.2 (P2, A-UI-03)** ✅ HECHO 2026-07-21: la fila "Sin reenviar" en `dashboard.blade.php` vivía dentro de la tarjeta rotulada "Periodo: {{ $windowLabel }}" sin distinguirse — tras el fix de G0 (failedWithoutRetryCurrent ya no depende de la ventana), esa etiqueta pasó a ser **activamente engañosa** (antes del fix sí era coherente con "Periodo"; ahora no). Corregido: la fila añade `(actual)` + `title` explicando que no depende del periodo seleccionado arriba. `dashboard-local.blade.php` ya lo hacía bien (etiqueta "fallos activos", fuera del bloque "Flujo del periodo") — no requirió cambio. Verificado: `php artisan test` 12/12, vista sigue renderizando sin errores.
 - **G5.3 (P2, A-UI-04)** ⚠️ AUDITADO 2026-07-21, sin cambio de código (mismo criterio de riesgo que G5.1: cambio de comportamiento runtime, no solo estilo, sin forma de verificar visualmente aquí). Hallazgo más preciso que el original: la Api ya devuelve `overview.alerts` (un alert por tienda no-healthy, `DashboardController.cs:98-111`, misma fuente que `stores[].health`/`healthReason` — sin riesgo de divergencia interna). **PHP ignora `overview.alerts` por completo** y siempre recalcula desde cero con `buildPrioritizedAlerts()` (`DashboardController.php:1072-1184`), que usa su **propio motor de reglas** (`dashboard-threshold-rules.json`, hasta 3 niveles de severidad por métrica) — más rico que el de la Api (`DashboardThresholds`, solo warning/critical). Son **tres implementaciones independientes** de "qué severidad aplica" (`StoreHealthEvaluator.Compute` en C#, `computeHealth()` y `buildPrioritizedAlerts()` en PHP) que pueden divergir en la prioridad con la que evalúan las reglas. Unificar exige decidir si la Api adopta el motor de reglas dinámico de PHP (3 niveles) o si PHP renuncia a su granularidad multi-alerta-por-tienda — **decisión de producto/arquitectura, no un fix de UI pequeño**. Requiere confirmación antes de implementar.
 - **G5.4 (P3, A-UI-05)** ✅ HECHO 2026-07-21: `.github/workflows/impresoras-service-ci.yml` no ejecutaba `npm run build` en ningún job — un error en Vite/CSS/JS solo se habría descubierto en producción, degradando silenciosamente al fallback inline de `layouts/app.blade.php:290`. Añadidos pasos `actions/setup-node@v4` + `npm ci` + `npm run build` al job `php`, antes de `php artisan test`. Verificado localmente: `npm run build` compila limpio (57 módulos, `dbx-*.css` 43.7 kB, `system-*.css` 118.6 kB, `app-*.js` 43.5 kB); `public/build/` está en `.gitignore`, no ensucia el repo.
@@ -112,10 +110,10 @@ G5  UI/UX y accesibilidad                     ← P2/P3
 | Hallazgo | Sev | Acción | Test | Criterio de cierre |
 |---|---|---|---|---|
 | A-KPI-01 | P1 | G0 | `ErrorFinal` de ayer cuenta hoy | cifra estable entre ventanas; sin falsa "RECUPERADA" |
-| A-KPI-02 | P1 | G1 (2A/2B) | job impreso sin evento | 7d/30d reproducen histórico o límite documentado |
+| A-KPI-02 | P1 | G1 ✅ cerrado (no aplica) | job impreso sin evento (control positivo verde) | sin migración de histórico, no hay hueco posible por diseño |
 | A-KPI-03 | P2 | G3.1 | dashboard 1 tienda no carga JobIds de otras | latencia aceptable con volumen |
 | A-KPI-04 | P2 | (se cierra con G0) | igualdad dashboard↔alerta | coinciden en 7d/30d |
-| A-KPI-05 | P2 | G2 | pruebas HANA 1-6 | fechas nativas verificadas |
+| A-KPI-05 | P2 | G2 (parcial ✅) | pruebas 1-6, #1 verde | fechas nativas verificadas (✅); #2-6 pendientes |
 | A-KPI-06 | P3 | G3.3 | — | contrato actualizado |
 | A-KPI-07 | P3 | G3.2 | id TZ inválido | endpoint no 500 |
 | A-ARCH-01 | P1 | G4.1 ✅ (código) | `WorkerLockCoordinatorTests` (2º holder bloqueado / relevo tras expirar) | lock verificado en staging con 2 procesos reales (pendiente) |
@@ -128,20 +126,19 @@ G5  UI/UX y accesibilidad                     ← P2/P3
 
 1. **PR-1 (G0):** fix `failedWithoutRetryCurrent` sin ventana (API + Worker + contrato + tests). Pequeño, alto impacto.
 2. **PR-2 (G3.2 + G3.4):** robustez TZ + warnings null. Trivial, aparte para no mezclar con semántica.
-3. **PR-3 (G1 paso 1):** query de diagnóstico + decisión 2A/2B documentada.
-4. **PR-4 (G1 paso 2):** backfill o nota de ventana ciega + tests.
-5. **PR-5 (G3.1):** perf de `firstPrintedEvents` + índice.
-6. **PR-6 (G4.2):** centralizar estados.
-7. **PR-7 (G5.x):** UI/UX por lotes pequeños.
-8. **G2 (HANA) y G4.1 (lock)** no son PRs de código puro: gate de staging y feature mayor respectivamente, con su propio plan.
+3. ~~**PR-3 (G1 paso 1)**~~ y ~~**PR-4 (G1 paso 2)**: no aplican — G1 cerrado sin cambio de código (2026-07-27, ver G1).
+4. **PR-5 (G3.1):** perf de `firstPrintedEvents` + índice.
+5. **PR-6 (G4.2):** centralizar estados.
+6. **PR-7 (G5.x):** UI/UX por lotes pequeños.
+7. **G2 (pruebas 2-6) y G4.1 (verificación en staging con 2 procesos)** no son PRs de código puro: verificación operativa con datos/tráfico real, con su propio plan.
 
 ---
 
 ## Gates obligatorios antes de producción
 
 1. G0 mergeado y verde (sin falsas recuperaciones).
-2. G1 decidido con datos de HANA (backfill aplicado o ventana ciega documentada en UI).
-3. G2: pruebas HANA 1-6 verdes; fechas en tipo nativo.
-4. G4.1: lock implementado y con test (✅ 2026-07-27); falta aplicar `scripts/sql/create_worker_lock.sql` en HANA y verificar en staging con 2 procesos Worker reales antes de escalar a multi-instancia.
+2. ~~G1 decidido~~ ✅ cerrado 2026-07-27 (no aplica, sin migración de histórico).
+3. G2: test #1 verde (✅ TIMESTAMP nativo); pendientes #2-6 con tráfico real.
+4. G4.1: lock implementado y con test (✅ 2026-07-27); falta aplicar `scripts/sql/create_worker_lock.sql` en HANA y verificar con 2 procesos Worker reales antes de escalar a multi-instancia.
 5. Suites verdes: `dotnet test` + `php artisan test` + `npm run build`.
-6. 48 h de `logKpiDiffIfAny` sin diffs en staging.
+6. 48 h de `logKpiDiffIfAny` sin diffs, con tráfico real de producción.
