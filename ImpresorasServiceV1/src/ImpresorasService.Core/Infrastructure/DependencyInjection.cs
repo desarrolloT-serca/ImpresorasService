@@ -76,6 +76,9 @@ public static class DependencyInjection
         services.Configure<WorkerLockOptions>(configuration.GetSection(WorkerLockOptions.SectionName));
         services.AddScoped<IWorkerLockCoordinator, WorkerLockCoordinator>();
 
+        services.Configure<DashboardThresholdRulesOptions>(configuration.GetSection(DashboardThresholdRulesOptions.SectionName));
+        services.AddSingleton<IDashboardThresholdRuleStore, DashboardThresholdRuleStore>();
+
         return services;
     }
 

@@ -1,6 +1,7 @@
 using ImpresorasService.Application.Abstractions;
 using ImpresorasService.Application.Services;
 using ImpresorasService.Domain;
+using ImpresorasService.Domain.Connectivity;
 using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure.Options;
 using ImpresorasService.Infrastructure.Persistence;
@@ -22,6 +23,7 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
     private readonly TimeProvider _timeProvider;
     private readonly TimeZoneInfo _businessTimeZone;
     private readonly WorkerLockState _lockState;
+    private readonly IDashboardThresholdRuleStore _ruleStore;
 
     public StoreHealthAlertBackgroundService(
         IServiceScopeFactory scopeFactory,
@@ -30,7 +32,8 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
         ILogger<StoreHealthAlertBackgroundService> logger,
         TimeProvider timeProvider,
         IConfiguration configuration,
-        WorkerLockState lockState)
+        WorkerLockState lockState,
+        IDashboardThresholdRuleStore ruleStore)
     {
         _scopeFactory = scopeFactory;
         _telegram = telegram;
@@ -38,6 +41,7 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
         _logger = logger;
         _timeProvider = timeProvider;
         _lockState = lockState;
+        _ruleStore = ruleStore;
         // Misma clave que DashboardController (Api) — KPI-P2-004: dashboard y alertas deben usar
         // el mismo reloj de negocio, no que uno lea Europe/Madrid y el otro medianoche UTC.
         _businessTimeZone = BusinessTimeZoneClock.Resolve(configuration["Dashboard:BusinessTimeZone"], logger);
@@ -90,16 +94,17 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
         var minSeverity = config.MinSeverity.Trim().ToLowerInvariant();
         var notifyOnRecovery = config.NotifyOnRecovery;
 
+        // Umbrales legacy (2 niveles): siguen en BD, solo se usan aquí para el criterio OR de
+        // connWarning/connCritical (mismo criterio que usaba PHP junto a la clasificación de
+        // conectividad — ver LoadConnectivityStatsAsync en DashboardController.cs, Api).
         var thresholdRow = await db.DashboardThresholds.AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == 1, ct);
 
-        int warnQueue = thresholdRow?.WarningQueueMin ?? 10;
-        int critQueue = thresholdRow?.CriticalQueueMin ?? 30;
-        int warnFailed = thresholdRow?.WarningFailedWithoutRetryMin ?? 1;
-        int critFailed = thresholdRow?.CriticalFailedWithoutRetryMin ?? 5;
-        int missingHostMin = thresholdRow?.MissingHostMin ?? 1;
         int connWarnMin = thresholdRow?.ConnWarningFailuresMin ?? 2;
         int connCritMin = thresholdRow?.ConnCriticalFailuresMin ?? 3;
+
+        // G5.3: reglas de severidad de 1-3 niveles — fuente única de verdad, compartida con la Api.
+        var rules = await _ruleStore.LoadAsync(ct);
 
         var activeOnly = true;
         var stores = await db.Stores.AsNoTracking()
@@ -115,16 +120,35 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
                 .Where(p => p.IsActive == activeOnly && p.StoreId == store.StoreId)
                 .Select(p => new
                 {
-                    p.Host,
-                    p.SpoolQueue,
+                    p.IsActive,
+                    p.LastConnectionOk,
+                    p.LastConnectionCheckAtUtc,
+                    p.LastConnectionError,
                     p.ConnectionFailuresStreak,
                 })
                 .ToListAsync(ct);
 
             var connected = printers.Count;
-            var missingHost = printers.Count(p => string.IsNullOrEmpty(p.Host) && !HasImplicitHost(p.SpoolQueue));
-            var connWarn = printers.Count(p => p.ConnectionFailuresStreak >= connWarnMin);
-            var connCrit = printers.Count(p => p.ConnectionFailuresStreak >= connCritMin);
+            var missingHost = 0;
+            var connWarn = 0;
+            var connCrit = 0;
+            var connMaxStreak = 0;
+            foreach (var p in printers)
+            {
+                var descriptor = PrinterConnectivityState.FromSnapshot(
+                    p.IsActive, p.LastConnectionOk, p.LastConnectionCheckAtUtc, p.LastConnectionError, p.ConnectionFailuresStreak);
+
+                if (descriptor.ConnectivityStatus == PrinterConnectivityState.StatusNoHost)
+                    missingHost++;
+
+                connMaxStreak = Math.Max(connMaxStreak, p.ConnectionFailuresStreak);
+
+                if (descriptor.ConnectivitySeverity == PrinterConnectivityState.SeverityCritical || p.ConnectionFailuresStreak >= connCritMin)
+                    connCrit++;
+                else if ((descriptor.ConnectivitySeverity == PrinterConnectivityState.SeverityWarning && descriptor.ConnectivityStatus != PrinterConnectivityState.StatusNoHost)
+                         || p.ConnectionFailuresStreak >= connWarnMin)
+                    connWarn++;
+            }
 
             var queued = await db.PrintJobs.AsNoTracking()
                 .CountAsync(j => j.StoreId == store.StoreId && DashboardPrintJobPredicates.QueueStatuses.Contains(j.Status), ct);
@@ -141,15 +165,7 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
                 .CountAsync(ct);
 
             var (health, reason) = StoreHealthEvaluator.Compute(
-                connected, queued, failed, missingHost, connWarn, connCrit,
-                warnQueue, critQueue, warnFailed, critFailed, missingHostMin, connWarnMin, connCritMin,
-                thresholdRow?.ConnCriticalSeverity ?? "critical",
-                thresholdRow?.FailedCriticalSeverity ?? "critical",
-                thresholdRow?.QueueCriticalSeverity ?? "critical",
-                thresholdRow?.ConnWarningSeverity ?? "warning",
-                thresholdRow?.MissingHostSeverity ?? "warning",
-                thresholdRow?.FailedWarningSeverity ?? "warning",
-                thresholdRow?.QueueWarningSeverity ?? "warning");
+                connected, queued, failed, missingHost, connMaxStreak, connCrit, connWarn, rules);
 
             await ProcessStoreAlertAsync(db, store.StoreId, store.Name,
                 health, reason, queued, failed, minSeverity, notifyOnRecovery, now, ct);
@@ -249,10 +265,6 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
         "critical" => 2,
         _ => 0
     };
-
-    private static bool HasImplicitHost(string? spoolQueue)
-        => !string.IsNullOrEmpty(spoolQueue)
-            && spoolQueue.StartsWith(@"\\", StringComparison.Ordinal);
 
     private async Task<int> GetCheckIntervalAsync(CancellationToken ct)
     {

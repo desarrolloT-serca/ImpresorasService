@@ -344,7 +344,12 @@ class DashboardController extends Controller
             $stores = array_values(array_filter($stores, fn (array $row): bool => ($row['health'] ?? '') === $health));
         }
 
-        $alerts = $this->buildPrioritizedAlerts($stores, $thresholds);
+        // G5.3: la Api calcula las alertas con el mismo motor de reglas que stores[].health (una
+        // sola fuente de verdad) — buildPrioritizedAlerts() solo se usa si la Api no respondió
+        // (fallback ya documentado como aproximación, igual que applyOverviewKpis/Stores).
+        $alerts = $overview !== null && is_array($overview['alerts'] ?? $overview['Alerts'] ?? null)
+            ? $this->mapOverviewAlerts($overview['alerts'] ?? $overview['Alerts'])
+            : $this->buildPrioritizedAlerts($stores, $thresholds);
 
         $kpis = [
             'received' => $received,
@@ -424,10 +429,13 @@ class DashboardController extends Controller
             return back()->withErrors(['thresholds' => implode(' ', $ruleErrors)])->withInput();
         }
 
-        $legacyPayload = $this->deriveLegacyThresholdPayload($rules);
-
         try {
-            $this->api->put('api/dashboard/thresholds', $legacyPayload);
+            // G5.3: la Api es la fuente única de verdad de las reglas de severidad (ya entiende
+            // 1-3 niveles de forma nativa, api/dashboard/threshold-rules) — ya no hace falta
+            // colapsar a 2 niveles para el endpoint legacy.
+            $this->api->put('api/dashboard/threshold-rules', $rules);
+            // Cache local: mantiene el fallback de este método operativo si la Api está caída
+            // en el momento en que se carga /dashboard (ver resolveHealthThresholds).
             $this->storeDynamicThresholdRules($rules);
 
             return back()->with('success', 'Umbrales de salud actualizados.');
@@ -465,6 +473,22 @@ class DashboardController extends Controller
     /**
      * @param array<string, int> $kpis
      * @param array<string, mixed> $overview
+     * @param array<int, array<string, mixed>> $overviewAlerts
+     * @return array<int, array<string, mixed>>
+     */
+    private function mapOverviewAlerts(array $overviewAlerts): array
+    {
+        return array_values(array_map(fn (array $a): array => [
+            'storeId' => $this->readInt($a, 'storeId'),
+            'storeName' => (string) ($a['storeName'] ?? $a['StoreName'] ?? ''),
+            'health' => (string) ($a['health'] ?? $a['Health'] ?? 'healthy'),
+            'healthReason' => (string) ($a['healthReason'] ?? $a['HealthReason'] ?? ''),
+            'queuedCurrent' => $this->readInt($a, 'queuedCurrent'),
+            'failedWithoutRetryCurrent' => $this->readInt($a, 'failedWithoutRetryCurrent'),
+        ], array_filter($overviewAlerts, 'is_array')));
+    }
+
+    /**
      * @return array<string, int>
      */
     private function applyOverviewKpis(array $kpis, array $overview): array
@@ -856,7 +880,11 @@ class DashboardController extends Controller
                 'connCriticalSeverity' => (string) ($thresholds['connCriticalSeverity'] ?? $thresholds['ConnCriticalSeverity'] ?? $defaults['connCriticalSeverity']),
             ];
 
-            $resolved['thresholdRules'] = $this->loadDynamicThresholdRules() ?? $this->legacyRulesFromThresholds($resolved);
+            // G5.3: la Api es la fuente única de verdad de las reglas de severidad. El fichero local
+            // (loadDynamicThresholdRules) y los campos legacy solo se usan si la Api no responde.
+            $resolved['thresholdRules'] = $this->fetchApiThresholdRules()
+                ?? $this->loadDynamicThresholdRules()
+                ?? $this->legacyRulesFromThresholds($resolved);
 
             return $resolved;
         } catch (\Throwable) {
@@ -971,66 +999,6 @@ class DashboardController extends Controller
         return true;
     }
 
-    private function deriveLegacyThresholdPayload(array $rules): array
-    {
-        $queue = $this->deriveTwoLevelLegacy($rules['queue'] ?? [], 10, 30);
-        $failed = $this->deriveTwoLevelLegacy($rules['failed'] ?? [], 1, 5);
-        $conn = $this->deriveTwoLevelLegacy($rules['conn'] ?? [], 2, 3);
-        $missingHost = $this->deriveSingleLevelLegacy($rules['missingHost'] ?? [], 1, 'warning');
-
-        return [
-            'warningQueueMin' => $queue['warningMin'],
-            'criticalQueueMin' => $queue['criticalMin'],
-            'queueWarningSeverity' => $queue['warningSeverity'],
-            'queueCriticalSeverity' => $queue['criticalSeverity'],
-            'warningFailedWithoutRetryMin' => $failed['warningMin'],
-            'criticalFailedWithoutRetryMin' => $failed['criticalMin'],
-            'failedWarningSeverity' => $failed['warningSeverity'],
-            'failedCriticalSeverity' => $failed['criticalSeverity'],
-            'missingHostMin' => $missingHost['min'],
-            'missingHostSeverity' => $missingHost['severity'],
-            'connWarningFailuresMin' => $conn['warningMin'],
-            'connCriticalFailuresMin' => $conn['criticalMin'],
-            'connWarningSeverity' => $conn['warningSeverity'],
-            'connCriticalSeverity' => $conn['criticalSeverity'],
-        ];
-    }
-
-    private function deriveTwoLevelLegacy(array $rules, int $defaultWarning, int $defaultCritical): array
-    {
-        $rules = $this->normalizeRuleSet($rules ?: [
-            ['min' => $defaultWarning, 'severity' => 'warning'],
-            ['min' => $defaultCritical, 'severity' => 'critical'],
-        ]);
-        $bySeverity = [];
-        foreach ($rules as $rule) {
-            $bySeverity[$rule['severity']] = $rule;
-        }
-
-        $warning = $bySeverity['warning'] ?? $bySeverity['info'] ?? $rules[0];
-        $critical = $bySeverity['critical'] ?? $rules[count($rules) - 1] ?? ['min' => $warning['min'] + 1, 'severity' => $warning['severity']];
-
-        $warningMin = (int) $warning['min'];
-        $criticalMin = (int) $critical['min'];
-        if ($criticalMin <= $warningMin) {
-            $criticalMin = $warningMin + 1;
-        }
-
-        return [
-            'warningMin' => $warningMin,
-            'criticalMin' => $criticalMin,
-            'warningSeverity' => (string) $warning['severity'],
-            'criticalSeverity' => (string) $critical['severity'],
-        ];
-    }
-
-    private function deriveSingleLevelLegacy(array $rules, int $defaultMin, string $defaultSeverity): array
-    {
-        $rules = $this->normalizeRuleSet($rules ?: [['min' => $defaultMin, 'severity' => $defaultSeverity]]);
-        $rule = $rules[0] ?? ['min' => $defaultMin, 'severity' => $defaultSeverity];
-        return ['min' => (int) $rule['min'], 'severity' => (string) $rule['severity']];
-    }
-
     private function matchThresholdRule(array $rules, int $value): ?array
     {
         $rules = $this->normalizeRuleSet($rules);
@@ -1041,6 +1009,21 @@ class DashboardController extends Controller
         }
 
         return null;
+    }
+
+    private function fetchApiThresholdRules(): ?array
+    {
+        try {
+            $decoded = $this->api->get('api/dashboard/threshold-rules');
+            if (!is_array($decoded)) {
+                return null;
+            }
+            [$rules, $errors] = $this->normalizeThresholdRules($decoded);
+            return $errors === [] ? $rules : null;
+        } catch (\Throwable $e) {
+            Log::warning('No se pudieron cargar las reglas de dashboard desde la Api', ['error' => $e->getMessage()]);
+            return null;
+        }
     }
 
     private function loadDynamicThresholdRules(): ?array
