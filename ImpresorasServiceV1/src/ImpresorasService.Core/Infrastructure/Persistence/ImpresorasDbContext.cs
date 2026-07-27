@@ -129,6 +129,7 @@ public class ImpresorasDbContext : DbContext
     public DbSet<TelegramConfig> TelegramConfigs => Set<TelegramConfig>();
     public DbSet<TelegramChat> TelegramChats => Set<TelegramChat>();
     public DbSet<StoreAlertState> StoreAlertStates => Set<StoreAlertState>();
+    public DbSet<WorkerLock> WorkerLocks => Set<WorkerLock>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -398,6 +399,15 @@ public class ImpresorasDbContext : DbContext
             entity.Property(x => x.NotifiedHealth).HasColumnName("notified_health").HasMaxLength(20);
             entity.Property(x => x.NotifiedAtUtc).HasColumnName("notified_at_utc");
             entity.Property(x => x.CheckedAtUtc).HasColumnName("checked_at_utc").IsRequired();
+        });
+
+        modelBuilder.Entity<WorkerLock>(entity =>
+        {
+            entity.ToTable("printer_worker_lock");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(x => x.Holder).HasColumnName("holder").HasMaxLength(200);
+            entity.Property(x => x.HeartbeatAtUtc).HasColumnName("heartbeat_utc").IsRequired();
         });
 
         // HANA está persistiendo fechas históricas en formato string no homogéneo (legacy).

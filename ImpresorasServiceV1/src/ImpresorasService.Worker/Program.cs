@@ -14,6 +14,8 @@ CultureInfo.DefaultThreadCurrentUICulture = appCulture;
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddSingleton<WorkerLockState>();
+builder.Services.AddHostedService<WorkerLockBackgroundService>();
 builder.Services.AddHostedService<IngestionBackgroundService>();
 builder.Services.AddHostedService<PrintExecutionBackgroundService>();
 builder.Services.AddHostedService<SpoolAcceptedWatchdogBackgroundService>();

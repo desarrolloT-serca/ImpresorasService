@@ -21,6 +21,7 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
     private readonly ILogger<StoreHealthAlertBackgroundService> _logger;
     private readonly TimeProvider _timeProvider;
     private readonly TimeZoneInfo _businessTimeZone;
+    private readonly WorkerLockState _lockState;
 
     public StoreHealthAlertBackgroundService(
         IServiceScopeFactory scopeFactory,
@@ -28,13 +29,15 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
         IOptions<TelegramOptions> telegramOptions,
         ILogger<StoreHealthAlertBackgroundService> logger,
         TimeProvider timeProvider,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        WorkerLockState lockState)
     {
         _scopeFactory = scopeFactory;
         _telegram = telegram;
         _telegramOptions = telegramOptions;
         _logger = logger;
         _timeProvider = timeProvider;
+        _lockState = lockState;
         // Misma clave que DashboardController (Api) — KPI-P2-004: dashboard y alertas deben usar
         // el mismo reloj de negocio, no que uno lea Europe/Madrid y el otro medianoche UTC.
         _businessTimeZone = BusinessTimeZoneClock.Resolve(configuration["Dashboard:BusinessTimeZone"], logger);
@@ -46,6 +49,13 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            // G4.1: sin el lock de instancia única, esta réplica no evalúa/notifica (evita alertas Telegram duplicadas).
+            if (!_lockState.IsHolder)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+                continue;
+            }
+
             try
             {
                 await RunOnceAsync(stoppingToken);
