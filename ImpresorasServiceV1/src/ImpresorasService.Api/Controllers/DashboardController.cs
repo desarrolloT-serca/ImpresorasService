@@ -83,6 +83,13 @@ public class DashboardController : ControllerBase
             activeStores = await stores.CountAsync(cancellationToken)
         };
 
+        // Observabilidad de negocio (A-ARCH-05, G4.3): sin backend de métricas (OTel/Prometheus) en
+        // el proyecto, se usa logging estructurado — mismo patrón que IngestionService/StoreHealthAlertBackgroundService.
+        _logger.LogInformation(
+            "Dashboard overview KPIs. window={Window} storeId={StoreId} received={Received} printed={Printed} failed={Failed} queueCurrent={QueueCurrent} failedWithoutRetryCurrent={FailedWithoutRetryCurrent} activePrinters={ActivePrinters} activeStores={ActiveStores}",
+            NormalizeWindow(window), effectiveStoreId, kpis.received, kpis.printed, kpis.failed,
+            kpis.queueCurrent, kpis.failedWithoutRetryCurrent, kpis.activePrinters, kpis.activeStores);
+
         var storeRows = await BuildStoreRowsAsync(stores, printers, jobsInWindow, jobs, printedRows, failedRows, thresholds, cancellationToken);
         var alerts = storeRows
             .Where(x => x.Health != "healthy")
