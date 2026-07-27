@@ -1,6 +1,8 @@
 using System.Security.Claims;
+using ImpresorasService.Application.Abstractions;
 using ImpresorasService.Application.Services;
 using ImpresorasService.Domain;
+using ImpresorasService.Domain.Connectivity;
 using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
@@ -19,6 +21,7 @@ public class DashboardController : ControllerBase
     private readonly TimeProvider _timeProvider;
     private readonly TimeZoneInfo _businessTimeZone;
     private readonly ILogger<DashboardController> _logger;
+    private readonly IDashboardThresholdRuleStore _ruleStore;
     private const int DefaultWarningQueueMin = 10;
     private const int DefaultCriticalQueueMin = 30;
     private const int DefaultWarningFailedWithoutRetryMin = 1;
@@ -27,11 +30,14 @@ public class DashboardController : ControllerBase
     private const int DefaultConnWarningFailuresMin = 2;
     private const int DefaultConnCriticalFailuresMin = 3;
 
-    public DashboardController(ImpresorasDbContext dbContext, TimeProvider timeProvider, IConfiguration configuration, ILogger<DashboardController> logger)
+    public DashboardController(
+        ImpresorasDbContext dbContext, TimeProvider timeProvider, IConfiguration configuration,
+        ILogger<DashboardController> logger, IDashboardThresholdRuleStore ruleStore)
     {
         _dbContext = dbContext;
         _timeProvider = timeProvider;
         _logger = logger;
+        _ruleStore = ruleStore;
         // Compartido con StoreHealthAlertBackgroundService (Worker) — KPI-P2-004, mismo reloj de negocio.
         _businessTimeZone = BusinessTimeZoneClock.Resolve(configuration["Dashboard:BusinessTimeZone"], _logger);
     }
@@ -90,21 +96,8 @@ public class DashboardController : ControllerBase
             NormalizeWindow(window), effectiveStoreId, kpis.received, kpis.printed, kpis.failed,
             kpis.queueCurrent, kpis.failedWithoutRetryCurrent, kpis.activePrinters, kpis.activeStores);
 
-        var storeRows = await BuildStoreRowsAsync(stores, printers, jobsInWindow, jobs, printedRows, failedRows, thresholds, cancellationToken);
-        var alerts = storeRows
-            .Where(x => x.Health != "healthy")
-            .OrderByDescending(x => x.FailedWithoutRetryCurrent)
-            .ThenByDescending(x => x.QueuedCurrent)
-            .Select(x => new
-            {
-                x.StoreId,
-                x.StoreName,
-                x.Health,
-                x.HealthReason,
-                x.QueuedCurrent,
-                x.FailedWithoutRetryCurrent
-            })
-            .ToList();
+        var rules = await _ruleStore.LoadAsync(cancellationToken);
+        var (storeRows, alerts) = await BuildStoreRowsAsync(stores, printers, jobsInWindow, jobs, printedRows, failedRows, thresholds, rules, cancellationToken);
 
         return Ok(new
         {
@@ -127,6 +120,42 @@ public class DashboardController : ControllerBase
         var thresholds = await GetThresholdsAsync(cancellationToken);
         return Ok(thresholds);
     }
+
+    /// <summary>
+    /// Reglas de severidad de 1-3 niveles por métrica (G5.3) — sustituye a dashboard-threshold-rules.json
+    /// de PHP; la Api es ahora la fuente única de verdad, consumida también por el Worker.
+    /// </summary>
+    [HttpGet("threshold-rules")]
+    public async Task<IActionResult> GetThresholdRules(CancellationToken cancellationToken)
+    {
+        var rules = await _ruleStore.LoadAsync(cancellationToken);
+        return Ok(ToDto(rules));
+    }
+
+    [HttpPut("threshold-rules")]
+    [Authorize(Policy = "AdminOnly")]
+    public async Task<IActionResult> UpdateThresholdRules([FromBody] ThresholdRuleSetRequest request, CancellationToken cancellationToken)
+    {
+        var rules = new ThresholdRuleSet(
+            ToRules(request.Queue), ToRules(request.Failed), ToRules(request.MissingHost), ToRules(request.Conn));
+
+        var errors = await _ruleStore.SaveAsync(rules, cancellationToken);
+        if (errors.Count > 0)
+            return BadRequest(new { errors });
+
+        return Ok(ToDto(await _ruleStore.LoadAsync(cancellationToken)));
+    }
+
+    private static List<ThresholdRule> ToRules(List<ThresholdRuleRequest>? rules) =>
+        (rules ?? []).Select(r => new ThresholdRule(r.Min, r.Severity ?? "warning")).ToList();
+
+    private static object ToDto(ThresholdRuleSet rules) => new
+    {
+        queue = rules.Queue.Select(r => new { r.Min, r.Severity }),
+        failed = rules.Failed.Select(r => new { r.Min, r.Severity }),
+        missingHost = rules.MissingHost.Select(r => new { r.Min, r.Severity }),
+        conn = rules.Conn.Select(r => new { r.Min, r.Severity })
+    };
 
     [HttpPut("thresholds")]
     [Authorize(Policy = "AdminOnly")]
@@ -231,7 +260,7 @@ public class DashboardController : ControllerBase
     private sealed record PrintedJobRow(Guid JobId, int StoreId, int AttemptCount);
     private sealed record FailedJobRow(Guid JobId, int StoreId);
 
-    private async Task<List<StoreDashboardRow>> BuildStoreRowsAsync(
+    private async Task<(List<StoreDashboardRow> Rows, List<StoreAlert> Alerts)> BuildStoreRowsAsync(
         IQueryable<Domain.Entities.Store> stores,
         IQueryable<Domain.Entities.Printer> printers,
         IQueryable<Domain.Entities.PrintJob> jobsInWindow,
@@ -239,6 +268,7 @@ public class DashboardController : ControllerBase
         List<PrintedJobRow> printedRows,
         List<FailedJobRow> failedRows,
         DashboardThresholds thresholds,
+        ThresholdRuleSet rules,
         CancellationToken cancellationToken)
     {
         var baseStores = await stores
@@ -251,16 +281,8 @@ public class DashboardController : ControllerBase
             .Select(x => new { StoreId = x.Key, Count = x.Count() })
             .ToDictionaryAsync(x => x.StoreId, x => x.Count, cancellationToken);
 
-        var printersConnStats = await printers
-            .GroupBy(x => x.StoreId)
-            .Select(x => new
-            {
-                StoreId = x.Key,
-                MissingHost = x.Count(p => (p.Host == null || p.Host == "") && !EF.Functions.Like(p.SpoolQueue, "\\\\%")),
-                ConnWarn = x.Count(p => p.ConnectionFailuresStreak >= thresholds.ConnWarningFailuresMin),
-                ConnCrit = x.Count(p => p.ConnectionFailuresStreak >= thresholds.ConnCriticalFailuresMin),
-            })
-            .ToDictionaryAsync(x => x.StoreId, x => new { x.MissingHost, x.ConnWarn, x.ConnCrit }, cancellationToken);
+        var printersConnStats = await LoadConnectivityStatsAsync(
+            printers, thresholds.ConnWarningFailuresMin, thresholds.ConnCriticalFailuresMin, cancellationToken);
 
         var receivedStats = await jobsInWindow
             .GroupBy(x => x.StoreId)
@@ -339,6 +361,7 @@ public class DashboardController : ControllerBase
                     .ToList());
 
         var rows = new List<StoreDashboardRow>(baseStores.Count);
+        var alertInputs = new List<StoreAlertInput>(baseStores.Count);
         foreach (var store in baseStores)
         {
             connectedPrinters.TryGetValue(store.StoreId, out var connected);
@@ -354,10 +377,14 @@ public class DashboardController : ControllerBase
             var queuedCurrent = queuedCurrentValue;
             var failedWithoutRetryCurrent = failedWithoutRetryCurrentValue;
 
-            var missingHost = connStats?.MissingHost ?? 0;
-            var connWarn = connStats?.ConnWarn ?? 0;
-            var connCrit = connStats?.ConnCrit ?? 0;
-            var (health, healthReason) = ComputeHealth(connected, queuedCurrent, failedWithoutRetryCurrent, missingHost, connWarn, connCrit, thresholds);
+            var missingHost = connStats.MissingHost;
+            var connMaxStreak = connStats.ConnMaxStreak;
+            var connCrit = connStats.ConnCritical;
+            var connWarn = connStats.ConnWarning;
+
+            var (health, healthReason) = StoreHealthEvaluator.Compute(
+                connected, queuedCurrent, failedWithoutRetryCurrent, missingHost,
+                connMaxStreak, connCrit, connWarn, rules);
 
             rows.Add(new StoreDashboardRow(
                 StoreId: store.StoreId,
@@ -372,27 +399,60 @@ public class DashboardController : ControllerBase
                 HealthReason: healthReason,
                 UnassignedQueueCurrent: unassignedQueueCurrent,
                 Printers: storePrinters ?? []));
+
+            alertInputs.Add(new StoreAlertInput(
+                store.StoreId, store.Name, connected, queuedCurrent, failedWithoutRetryCurrent,
+                missingHost, connMaxStreak, connCrit, connWarn));
         }
 
-        return rows;
+        var alerts = StoreHealthEvaluator.BuildAlerts(alertInputs, rules).ToList();
+        return (rows, alerts);
     }
 
-    private static (string health, string reason) ComputeHealth(
-        int connectedPrinters,
-        int queuedCurrent,
-        int failedWithoutRetryCurrent,
-        int missingHost,
-        int connWarn,
-        int connCrit,
-        DashboardThresholds t)
-        => StoreHealthEvaluator.Compute(
-            connectedPrinters, queuedCurrent, failedWithoutRetryCurrent,
-            missingHost, connWarn, connCrit,
-            t.WarningQueueMin, t.CriticalQueueMin,
-            t.WarningFailedWithoutRetryMin, t.CriticalFailedWithoutRetryMin,
-            t.MissingHostMin, t.ConnWarningFailuresMin, t.ConnCriticalFailuresMin,
-            t.ConnCriticalSeverity, t.FailedCriticalSeverity, t.QueueCriticalSeverity,
-            t.ConnWarningSeverity, t.MissingHostSeverity, t.FailedWarningSeverity, t.QueueWarningSeverity);
+    /// <summary>
+    /// Clasifica conectividad por impresora reutilizando <see cref="PrinterConnectivityState"/> (misma
+    /// lógica que PrinterConnectivityMonitorService), y agrega por tienda (G5.3): missingHost por
+    /// estado "sin host" real (no solo campo Host vacío), connCritical/connWarning con el mismo
+    /// criterio OR (severidad de conectividad || streak &gt;= umbral legacy) que usaba PHP.
+    /// </summary>
+    private static async Task<Dictionary<int, ConnectivityStats>> LoadConnectivityStatsAsync(
+        IQueryable<Domain.Entities.Printer> printers, int connWarnMin, int connCritMin, CancellationToken cancellationToken)
+    {
+        var rows = await printers
+            .Select(p => new
+            {
+                p.StoreId, p.IsActive, p.LastConnectionOk, p.LastConnectionCheckAtUtc,
+                p.LastConnectionError, p.ConnectionFailuresStreak
+            })
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .GroupBy(p => p.StoreId)
+            .ToDictionary(g => g.Key, g =>
+            {
+                int missingHost = 0, warn = 0, crit = 0, maxStreak = 0;
+                foreach (var p in g)
+                {
+                    var descriptor = PrinterConnectivityState.FromSnapshot(
+                        p.IsActive, p.LastConnectionOk, p.LastConnectionCheckAtUtc, p.LastConnectionError, p.ConnectionFailuresStreak);
+
+                    if (descriptor.ConnectivityStatus == PrinterConnectivityState.StatusNoHost)
+                        missingHost++;
+
+                    maxStreak = Math.Max(maxStreak, p.ConnectionFailuresStreak);
+
+                    if (descriptor.ConnectivitySeverity == PrinterConnectivityState.SeverityCritical || p.ConnectionFailuresStreak >= connCritMin)
+                        crit++;
+                    else if ((descriptor.ConnectivitySeverity == PrinterConnectivityState.SeverityWarning && descriptor.ConnectivityStatus != PrinterConnectivityState.StatusNoHost)
+                             || p.ConnectionFailuresStreak >= connWarnMin)
+                        warn++;
+                }
+
+                return new ConnectivityStats(missingHost, warn, crit, maxStreak);
+            });
+    }
+
+    private readonly record struct ConnectivityStats(int MissingHost, int ConnWarning, int ConnCritical, int ConnMaxStreak);
 
     private async Task<DashboardThresholds> GetThresholdsAsync(CancellationToken cancellationToken)
     {
@@ -558,3 +618,11 @@ public record UpdateDashboardThresholdsRequest(
     int ConnCriticalFailuresMin,
     string? ConnWarningSeverity,
     string? ConnCriticalSeverity);
+
+public record ThresholdRuleRequest(int Min, string? Severity);
+
+public record ThresholdRuleSetRequest(
+    List<ThresholdRuleRequest>? Queue,
+    List<ThresholdRuleRequest>? Failed,
+    List<ThresholdRuleRequest>? MissingHost,
+    List<ThresholdRuleRequest>? Conn);
