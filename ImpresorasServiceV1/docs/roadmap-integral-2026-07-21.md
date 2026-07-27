@@ -92,7 +92,7 @@ G5  UI/UX y accesibilidad                     ← P2/P3
 
 ## G4 — Arquitectura `[P1 lock / P2-P3 refactor]`
 
-- **G4.1 (P1, A-ARCH-01):** lock de instancia única del Worker (Fase 2 forense de `roadmapimpresoras.md`) **antes** de permitir multi-instancia. Sin él, eventos duplicados inflan `printed`/`failed`. Test: dos workers concurrentes no duplican eventos de la misma transición.
+- **G4.1 (P1, A-ARCH-01)** ✅ HECHO 2026-07-27: lock de instancia única del Worker vía fila singleton `printer_worker_lock` (`id=1`, `holder`, `heartbeat_utc`) adquirida/renovada por `WorkerLockCoordinator.TryAcquireOrRenewAsync` con UPDATE condicional (`ExecuteUpdateAsync`, mismo patrón que `SapHanaJobSourceAdapter.RenewJobLeasesAsync`) — solo afecta la fila si el holder coincide o el lease expiró (`WorkerLock:LeaseSeconds`, 30s por defecto). Nuevo `WorkerLockBackgroundService` corre en bucle (heartbeat cada `WorkerLock:HeartbeatIntervalSeconds`, 10s) y publica el resultado en `WorkerLockState` (singleton en memoria, un `InstanceId` por proceso). Los 5 BackgroundService existentes (`IngestionBackgroundService`, `PrintExecutionBackgroundService`, `SpoolAcceptedWatchdogBackgroundService`, `PrinterConnectivityMonitorService`, `StoreHealthAlertBackgroundService`) comprueban `WorkerLockState.IsHolder` al inicio de cada ciclo y se saltan el trabajo si no son titulares — así una 2ª instancia no ingiere, no envía al spooler, no escribe eventos/estado ni duplica alertas Telegram. DDL de referencia: `scripts/sql/create_worker_lock.sql`. Tests: `WorkerLockCoordinatorTests` (siembra inicial, bloqueo del 2º holder durante el lease, renovación por el mismo holder, relevo tras expirar el lease) con `ManualTimeProvider`/SQLite en memoria. Verificado: `dotnet test` 132/132 (antes 128), `php artisan test` 12/12 (sin cambios PHP). **Pendiente** (no ejecutable aquí): aplicar el DDL en HANA/staging antes de desplegar; verificar en staging con 2 procesos Worker reales que solo uno procese (el acceptance del roadmap original: "arrancar 2 Workers → sólo uno procesa; matar al titular → el segundo toma el relevo").
 - **G4.2 (P2, A-ARCH-03)** ✅ HECHO 2026-07-21: `PrintedStatuses`/`QueueStatuses` movidos a `DashboardPrintJobPredicates.cs` (Core), junto a `FailedWithoutRetryCurrent`. `DashboardController.cs` y `StoreHealthAlertBackgroundService.cs` referencian la copia única; eliminado el comentario "debe mantenerse idéntico" (ya no puede divergir, es la misma constante). Verificado: `dotnet build` ambos proyectos 0 advertencias, `dotnet test` 128/128.
 - **G4.3 (P3, A-ARCH-05):** métricas de negocio (conteo de KPIs, diffs overview↔legacy, duplicados de evento) vía OTel/logs estructurados.
 
@@ -118,7 +118,7 @@ G5  UI/UX y accesibilidad                     ← P2/P3
 | A-KPI-05 | P2 | G2 | pruebas HANA 1-6 | fechas nativas verificadas |
 | A-KPI-06 | P3 | G3.3 | — | contrato actualizado |
 | A-KPI-07 | P3 | G3.2 | id TZ inválido | endpoint no 500 |
-| A-ARCH-01 | P1 | G4.1 | 2 workers no duplican eventos | lock verificado |
+| A-ARCH-01 | P1 | G4.1 ✅ (código) | `WorkerLockCoordinatorTests` (2º holder bloqueado / relevo tras expirar) | lock verificado en staging con 2 procesos reales (pendiente) |
 | A-ARCH-03 | P2 | G4.2 | — | estados en un único punto |
 | A-UI-02 | P2 | G5.1 | — | sin solapes críticos |
 
@@ -142,6 +142,6 @@ G5  UI/UX y accesibilidad                     ← P2/P3
 1. G0 mergeado y verde (sin falsas recuperaciones).
 2. G1 decidido con datos de HANA (backfill aplicado o ventana ciega documentada en UI).
 3. G2: pruebas HANA 1-6 verdes; fechas en tipo nativo.
-4. G4.1: **una sola instancia de Worker** garantizada mientras no exista lock.
+4. G4.1: lock implementado y con test (✅ 2026-07-27); falta aplicar `scripts/sql/create_worker_lock.sql` en HANA y verificar en staging con 2 procesos Worker reales antes de escalar a multi-instancia.
 5. Suites verdes: `dotnet test` + `php artisan test` + `npm run build`.
 6. 48 h de `logKpiDiffIfAny` sin diffs en staging.

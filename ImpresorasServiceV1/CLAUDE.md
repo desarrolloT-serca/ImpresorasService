@@ -151,7 +151,8 @@ Variables de entorno que sobreescriben appsettings (patrón `Section__Key`):
 
 ### Pendiente
 - Confirmación IPP **por trabajo** (hoy solo consulta `printer-state` global, no `job-id`) — Fase 3 de `docs/roadmapimpresoras.md`
-- Claim atómico / lock de instancia única del Worker — Fase 2 de `docs/roadmapimpresoras.md` (núcleo, bloqueante para 2+ workers)
+- Claim atómico de `PrintJob` (UPDATE condicional en `PrintExecutionService`) — Fase 2.2 de `docs/roadmapimpresoras.md`, aún no implementado
+- Aplicar `scripts/sql/create_worker_lock.sql` en HANA y verificar en staging con 2 procesos Worker reales (código del lock de instancia única ya implementado, G4.1)
 - Tests e2e de IPP/watchdog/conectividad
 - Pruebas con bot Telegram real en producción (operativo, no código)
 

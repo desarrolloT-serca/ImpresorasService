@@ -18,19 +18,22 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
     private readonly IIppConfirmationService _ippService;
     private readonly ILogger<SpoolAcceptedWatchdogBackgroundService> _logger;
     private readonly TimeProvider _timeProvider;
+    private readonly WorkerLockState _lockState;
 
     public SpoolAcceptedWatchdogBackgroundService(
         IServiceScopeFactory scopeFactory,
         IOptions<PrintExecutionOptions> options,
         IIppConfirmationService ippService,
         ILogger<SpoolAcceptedWatchdogBackgroundService> logger,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        WorkerLockState lockState)
     {
         _scopeFactory = scopeFactory;
         _options = options;
         _ippService = ippService;
         _logger = logger;
         _timeProvider = timeProvider;
+        _lockState = lockState;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -39,6 +42,13 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            // G4.1: sin el lock de instancia única, esta réplica no confirma/escribe eventos.
+            if (!_lockState.IsHolder)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+                continue;
+            }
+
             try
             {
                 await RunOnceAsync(stoppingToken);

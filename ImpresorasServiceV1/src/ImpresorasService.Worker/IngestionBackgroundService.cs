@@ -9,15 +9,18 @@ public class IngestionBackgroundService : BackgroundService
     private readonly IServiceProvider _serviceProvider;
     private readonly IOptions<IngestionOptions> _options;
     private readonly ILogger<IngestionBackgroundService> _logger;
+    private readonly WorkerLockState _lockState;
 
     public IngestionBackgroundService(
         IServiceProvider serviceProvider,
         IOptions<IngestionOptions> options,
-        ILogger<IngestionBackgroundService> logger)
+        ILogger<IngestionBackgroundService> logger,
+        WorkerLockState lockState)
     {
         _serviceProvider = serviceProvider;
         _options = options;
         _logger = logger;
+        _lockState = lockState;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -26,6 +29,13 @@ public class IngestionBackgroundService : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            // G4.1: sin el lock de instancia única, esta réplica no procesa (evita ingesta duplicada).
+            if (!_lockState.IsHolder)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+                continue;
+            }
+
             try
             {
                 using IServiceScope scope = _serviceProvider.CreateScope();
