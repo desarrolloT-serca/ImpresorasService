@@ -5264,6 +5264,12 @@ html.dark .table-alerts tbody tr.dbx-alert-row-healthy:hover td {
     grid-template-columns: minmax(200px, 260px) minmax(0, 1fr) !important;
 }
 
+@media (max-width: 900px) {
+    .dbx-routing-layout {
+        grid-template-columns: 1fr !important;
+    }
+}
+
 .dbx-store-summary-groups,
 .local-kpi-grid {
     grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)) !important;
