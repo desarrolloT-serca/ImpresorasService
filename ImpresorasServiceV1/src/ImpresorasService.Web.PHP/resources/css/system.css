@@ -4528,6 +4528,72 @@ html.dark .dbx-store-view-tab.is-active {
     color: #ffffff;
 }
 
+.dbx-rule-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.dbx-rule-sentence-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 4px;
+    border-top: 1px solid var(--ui-border);
+}
+
+.dbx-rule-sentence-row:first-child {
+    border-top: none;
+}
+
+.dbx-rule-sentence {
+    margin: 0;
+    font-size: 0.88rem;
+    line-height: 1.5;
+    color: var(--ui-text);
+    max-width: 60ch;
+}
+
+.dbx-rule-sentence strong {
+    color: var(--ui-primary-strong);
+    font-weight: 700;
+}
+
+.dbx-rule-wildcard {
+    font-style: italic;
+    color: var(--ui-text-muted);
+}
+
+.dbx-rule-conflict {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 6px;
+    padding: 1px 8px;
+    border-radius: var(--ui-radius-pill);
+    background: color-mix(in srgb, var(--ui-danger) 12%, var(--ui-surface));
+    color: var(--ui-danger);
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.dbx-rule-sentence-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+.dbx-count-link {
+    color: var(--ui-primary-strong);
+    text-decoration: none;
+    font-weight: 700;
+    border-radius: var(--ui-radius-sm);
+}
+
+.dbx-count-link:hover {
+    text-decoration: underline;
+}
+
 .sr-only {
     position: absolute;
     width: 1px;

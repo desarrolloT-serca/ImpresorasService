@@ -11,6 +11,9 @@
         'Supervisor' => 'Jefe de tienda',
         'Employee' => 'Empleado',
     ];
+    $storeNameById = collect($storeOptions ?? [])->mapWithKeys(
+        fn ($store) => [(string) ($store['storeId'] ?? '') => $store['name'] ?? null]
+    );
 @endphp
 
 <x-ui.card>
@@ -47,8 +50,8 @@
                 <td>{{ $id }}</td>
                 <td>{{ $user['login'] ?? $user['Login'] ?? '-' }}</td>
                 <td>{{ $user['displayName'] ?? $user['DisplayName'] ?? '-' }}</td>
-                <td>{{ $roleLabels[$role] ?? $role }}</td>
-                <td>{{ $storeId ?? '-' }}</td>
+                <td><span class="badge badge-neutral">{{ $roleLabels[$role] ?? $role }}</span></td>
+                <td>{{ $storeId !== null ? \App\Helpers\StoreFormat::label($storeId, $storeNameById[(string) $storeId] ?? null) : '-' }}</td>
                 <td>
                     @if($id)
                     <x-ui.action-buttons>

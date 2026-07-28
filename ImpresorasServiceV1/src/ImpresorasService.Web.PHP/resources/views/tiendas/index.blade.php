@@ -39,8 +39,8 @@
             <tr>
                 <td class="number-col">{{ $id }}</td>
                 <td class="text-col">{{ $name }}</td>
-                <td class="number-col">{{ $usersCount }}</td>
-                <td class="number-col">{{ $printersCount }}</td>
+                <td class="number-col"><a href="{{ route('usuarios.index', ['q' => $id]) }}" class="dbx-count-link">{{ $usersCount }}</a></td>
+                <td class="number-col"><a href="{{ route('impresoras.index', ['storeId' => $id]) }}" class="dbx-count-link">{{ $printersCount }}</a></td>
                 <td class="status-col">
                     <x-ui.status :level="$isActive ? 'healthy' : 'critical'" aria-label="{{ $isActive ? 'Tienda activa' : 'Tienda inactiva' }}">
                         {{ $isActive ? 'Si' : 'No' }}

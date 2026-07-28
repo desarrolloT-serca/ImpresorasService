@@ -83,56 +83,70 @@
         @elseif(!$selectedStoreGroup || count($rules) === 0)
             <div class="dbx-empty-state">Esta tienda no tiene reglas configuradas.</div>
         @else
-            <x-ui.table class="dbx-actions-table dbx-routing-rules-table">
-                <thead>
-                    <tr>
-                        <th class="number-col">Prioridad</th>
-                        <th class="status-col">Tipo doc</th>
-                        <th class="status-col">Canal</th>
-                        <th class="text-col">Impresora</th>
-                        <th class="status-col">Activa</th>
-                        <th class="actions-col">Acciones</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach($rules as $r)
-                        @php
-                            $id = $r['ruleId'] ?? $r['RuleId'] ?? null;
-                            $isActive = (bool) ($r['isActive'] ?? $r['IsActive'] ?? false);
-                        @endphp
-                        <tr>
-                            <td class="number-col">{{ $r['priority'] ?? $r['Priority'] ?? '-' }}</td>
-                            <td class="status-col">{{ $r['documentType'] ?? $r['DocumentType'] ?? '-' }}</td>
-                            <td class="status-col">{{ $r['channel'] ?? $r['Channel'] ?? '-' }}</td>
-                            <td class="text-col">{{ ($r['printer'] ?? null) ? ($r['printer']['printerName'] ?? $r['printer']['PrinterName'] ?? $r['printerId'] ?? $r['PrinterId']) : ($r['printerId'] ?? $r['PrinterId'] ?? '-') }}</td>
-                            <td class="status-col">
-                                <x-ui.status :level="$isActive ? 'healthy' : 'critical'" aria-label="{{ $isActive ? 'Regla activa' : 'Regla inactiva' }}">
-                                    {{ $isActive ? 'Sí' : 'No' }}
-                                </x-ui.status>
-                            </td>
-                            <td class="actions-col">
-                                @if($id)
-                                <x-ui.action-buttons>
-                                    <a href="{{ route('reglas.edit', $id) }}" class="btn btn-ghost">Editar</a>
-                                    <x-ui.confirm-form
-                                        :action="route('reglas.destroy', $id)"
-                                        method="DELETE"
-                                        title="Eliminar regla"
-                                        message="Se eliminara la regla de prioridad {{ $r['priority'] ?? $r['Priority'] ?? '-' }} ({{ $r['documentType'] ?? $r['DocumentType'] ?? '-' }} / {{ $r['channel'] ?? $r['Channel'] ?? '-' }}). Esta accion no se puede deshacer."
-                                        confirm-label="Eliminar"
-                                        danger
-                                    >
-                                        <x-slot:trigger>
-                                            <button type="submit" class="btn btn-danger">Eliminar</button>
-                                        </x-slot:trigger>
-                                    </x-ui.confirm-form>
-                                </x-ui.action-buttons>
-                                @endif
-                            </td>
-                        </tr>
-                    @endforeach
-                </tbody>
-            </x-ui.table>
+            @php
+                $activePriorityCounts = [];
+                foreach ($rules as $r) {
+                    if ((bool) ($r['isActive'] ?? $r['IsActive'] ?? false)) {
+                        $p = $r['priority'] ?? $r['Priority'] ?? null;
+                        if ($p !== null) {
+                            $activePriorityCounts[$p] = ($activePriorityCounts[$p] ?? 0) + 1;
+                        }
+                    }
+                }
+            @endphp
+            <div class="dbx-rule-list">
+                @foreach($rules as $r)
+                    @php
+                        $id = $r['ruleId'] ?? $r['RuleId'] ?? null;
+                        $isActive = (bool) ($r['isActive'] ?? $r['IsActive'] ?? false);
+                        $priority = $r['priority'] ?? $r['Priority'] ?? null;
+                        $docType = $r['documentType'] ?? $r['DocumentType'] ?? null;
+                        $channel = $r['channel'] ?? $r['Channel'] ?? null;
+                        $printerName = ($r['printer'] ?? null)
+                            ? ($r['printer']['printerName'] ?? $r['printer']['PrinterName'] ?? $r['printerId'] ?? $r['PrinterId'])
+                            : ($r['printerId'] ?? $r['PrinterId'] ?? '-');
+                        $docTypeIsWildcard = $docType === null || $docType === '' || $docType === '-';
+                        $channelIsWildcard = $channel === null || $channel === '' || $channel === '-' || strtoupper((string) $channel) === 'DEFAULT';
+                        $hasPriorityConflict = $isActive && $priority !== null && ($activePriorityCounts[$priority] ?? 0) > 1;
+                        $docTypePhrase = $docTypeIsWildcard
+                            ? '<span class="dbx-rule-wildcard">cualquier tipo de documento</span>'
+                            : 'documentos tipo <strong>' . e($docType) . '</strong>';
+                        $channelPhrase = $channelIsWildcard
+                            ? '<span class="dbx-rule-wildcard">cualquier canal</span>'
+                            : 'canal <strong>' . e($channel) . '</strong>';
+                    @endphp
+                    <div class="dbx-rule-sentence-row">
+                        <p class="dbx-rule-sentence">
+                            Si {!! $docTypePhrase !!} y {!! $channelPhrase !!}, enviar a <strong>{{ $printerName }}</strong>, prioridad <strong>{{ $priority ?? '-' }}</strong>
+                            @if($hasPriorityConflict)
+                                <span class="dbx-rule-conflict" title="Otra regla activa de esta tienda comparte la misma prioridad">Prioridad duplicada</span>
+                            @endif
+                        </p>
+                        <div class="dbx-rule-sentence-meta">
+                            <x-ui.status :level="$isActive ? 'healthy' : 'critical'" aria-label="{{ $isActive ? 'Regla activa' : 'Regla inactiva' }}">
+                                {{ $isActive ? 'Activa' : 'Inactiva' }}
+                            </x-ui.status>
+                            @if($id)
+                            <x-ui.action-buttons>
+                                <a href="{{ route('reglas.edit', $id) }}" class="btn btn-ghost">Editar</a>
+                                <x-ui.confirm-form
+                                    :action="route('reglas.destroy', $id)"
+                                    method="DELETE"
+                                    title="Eliminar regla"
+                                    message="Se eliminara la regla de prioridad {{ $priority ?? '-' }} ({{ $docType ?? '-' }} / {{ $channel ?? '-' }}). Esta accion no se puede deshacer."
+                                    confirm-label="Eliminar"
+                                    danger
+                                >
+                                    <x-slot:trigger>
+                                        <button type="submit" class="btn btn-danger">Eliminar</button>
+                                    </x-slot:trigger>
+                                </x-ui.confirm-form>
+                            </x-ui.action-buttons>
+                            @endif
+                        </div>
+                    </div>
+                @endforeach
+            </div>
         @endif
     </x-ui.card>
 </section>
