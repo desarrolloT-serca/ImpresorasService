@@ -4528,6 +4528,37 @@ html.dark .dbx-store-view-tab.is-active {
     color: #ffffff;
 }
 
+.dbx-bulk-bar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: 0 0 14px;
+    padding: 10px 14px;
+    border: 1px solid color-mix(in srgb, var(--ui-primary) 30%, var(--ui-border));
+    border-radius: var(--ui-radius);
+    background: var(--ui-primary-soft);
+}
+
+.dbx-bulk-bar-count {
+    font-weight: 800;
+    font-size: 0.82rem;
+    color: var(--ui-primary-strong);
+    white-space: nowrap;
+}
+
+.dbx-bulk-bar-hint {
+    font-size: 0.8rem;
+    color: var(--ui-text-muted);
+    flex: 1 1 auto;
+}
+
+.dbx-bulk-bar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
 .dbx-rule-list {
     display: flex;
     flex-direction: column;
