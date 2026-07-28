@@ -1,4 +1,4 @@
-/* Final design-system layer.
+﻿/* Final design-system layer.
    Loaded after legacy app/dbx styles so these tokens and component rules are authoritative. */
 
 :root {
@@ -112,7 +112,6 @@ html.dark .app-shell .app-sidebar {
     font-weight: 800;
     letter-spacing: 0.03em;
     line-height: 1.15;
-    text-transform: uppercase;
 }
 
 .app-logo {
@@ -138,7 +137,6 @@ html.dark .app-shell .app-sidebar {
     font-weight: 800;
     letter-spacing: 0.025em;
     padding: 9px 10px;
-    text-transform: uppercase;
 }
 
 .app-nav-group-title {
@@ -148,7 +146,6 @@ html.dark .app-shell .app-sidebar {
     font-size: 0.66rem;
     font-weight: 800;
     letter-spacing: 0.06em;
-    text-transform: uppercase;
     opacity: 0.65;
 }
 
@@ -215,7 +212,6 @@ html.dark .app-shell .app-sidebar {
     font-weight: 850;
     letter-spacing: 0.015em;
     line-height: 1.2;
-    text-transform: uppercase;
 }
 
 .app-topbar-title h1::before,
@@ -253,7 +249,6 @@ html.dark .app-shell .app-sidebar {
     font-size: 1rem;
     font-weight: 850;
     letter-spacing: 0.02em;
-    text-transform: uppercase;
 }
 
 .dbx-subtle,
@@ -345,7 +340,6 @@ html.dark .dbx-toggle input[type="checkbox"]::after {
     gap: 6px;
     letter-spacing: 0.02em;
     padding: 7px 11px;
-    text-transform: uppercase;
     transform: none;
     transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
 }
@@ -423,7 +417,6 @@ input:hover {
     font-size: 0.72rem;
     font-weight: 850;
     letter-spacing: 0.05em;
-    text-transform: uppercase;
 }
 
 .badge,
@@ -437,7 +430,6 @@ input:hover {
     letter-spacing: 0.035em;
     line-height: 1.15;
     padding: 4px 7px;
-    text-transform: uppercase;
 }
 
 .badge-neutral,
@@ -494,7 +486,6 @@ input:hover {
     font-size: 0.72rem;
     font-weight: 850;
     letter-spacing: 0.035em;
-    text-transform: uppercase;
 }
 
 .dbx-table td,
@@ -1004,7 +995,6 @@ html.dark .btn-warning {
     font-weight: 800;
     letter-spacing: 0.02em;
     padding: 5px 9px;
-    text-transform: uppercase;
 }
 
 .bulk-action-control {
@@ -1070,7 +1060,6 @@ html.dark .btn-warning {
     color: var(--ui-text-muted);
     font-size: 0.82rem;
     font-weight: 800;
-    text-transform: uppercase;
 }
 
 .dbx-pagination .is-disabled {
@@ -1187,7 +1176,6 @@ html.dark .btn-warning {
     font-size: 0.72rem;
     font-weight: 850;
     letter-spacing: 0.05em;
-    text-transform: uppercase;
 }
 
 .dbx-health-ring-copy {
@@ -1256,7 +1244,6 @@ html.dark .btn-warning {
     font-weight: 800;
     letter-spacing: 0.035em;
     line-height: 1.15;
-    text-transform: uppercase;
 }
 
 .dbx-health-legend-row strong {
@@ -1422,7 +1409,6 @@ html.dark .btn-warning {
     line-height: 1.05;
     overflow: hidden;
     text-overflow: ellipsis;
-    text-transform: uppercase;
     white-space: nowrap;
 }
 
@@ -1572,7 +1558,6 @@ html.dark .btn-warning {
     line-height: 1.05;
     overflow: hidden;
     text-overflow: ellipsis;
-    text-transform: uppercase;
     white-space: nowrap;
 }
 
@@ -1739,7 +1724,6 @@ html.dark .btn-warning {
     line-height: 1;
     padding: 7px 11px;
     text-decoration: none;
-    text-transform: uppercase;
     white-space: nowrap;
 }
 
@@ -1782,7 +1766,6 @@ html.dark .btn-warning {
     font-weight: 900;
     letter-spacing: 0.055em;
     line-height: 1;
-    text-transform: uppercase;
 }
 
 .dbx-store-summary-group p {
@@ -2027,7 +2010,6 @@ html.dark .dbx-printer-summary {
     letter-spacing: 0.02em;
     line-height: 1.1;
     padding: 6px 4px;
-    text-transform: uppercase;
     transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease, box-shadow 0.14s ease;
 }
 
@@ -2108,7 +2090,6 @@ html.dark .severity-picker {
     font-size: 0.72rem;
     font-weight: 850;
     letter-spacing: 0.04em;
-    text-transform: uppercase;
 }
 
 .threshold-rule-head span:nth-child(2) {
@@ -2515,7 +2496,6 @@ html.dark .theme-icon-moon {
     font-size: 0.72rem;
     font-weight: 850;
     letter-spacing: 0.1em;
-    text-transform: uppercase;
 }
 
 .login-brand-copy h1 {
@@ -2524,7 +2504,6 @@ html.dark .theme-icon-moon {
     font-size: clamp(2rem, 4vw, 3.3rem);
     font-weight: 850;
     line-height: 0.98;
-    text-transform: uppercase;
 }
 
 .login-brand-copy p {
@@ -2552,7 +2531,6 @@ html.dark .theme-icon-moon {
     font-size: 0.72rem;
     font-weight: 850;
     letter-spacing: 0.09em;
-    text-transform: uppercase;
 }
 
 .login-access h2 {
@@ -2561,7 +2539,6 @@ html.dark .theme-icon-moon {
     font-size: 1.75rem;
     font-weight: 850;
     line-height: 1.1;
-    text-transform: uppercase;
 }
 
 .login-access p {
@@ -2720,7 +2697,6 @@ html.dark .login-logo-frame {
     font-size: 0.63rem;
     font-weight: 850;
     line-height: 1.2;
-    text-transform: uppercase;
     white-space: nowrap;
 }
 
@@ -2870,7 +2846,6 @@ html.dark .login-logo-frame {
     color: var(--ui-danger);
     font-size: 0.72rem;
     font-weight: 850;
-    text-transform: uppercase;
 }
 
 .dbx-rule-form-section {
@@ -2898,7 +2873,6 @@ html.dark .login-logo-frame {
     color: var(--ui-primary);
     font-size: 0.92rem;
     font-weight: 850;
-    text-transform: uppercase;
 }
 
 .dbx-rule-form-section-title span {
@@ -2976,7 +2950,6 @@ html.dark .login-logo-frame {
 .dbx-bar-label {
     font-size: 11px !important;
     font-weight: 750 !important;
-    text-transform: uppercase;
     letter-spacing: 0.025em;
     display: flex;
     align-items: center;
@@ -3191,7 +3164,6 @@ html.dark .dbx-table .dbx-alert-row-warning td {
     font-size: 0.72rem;
     font-weight: 850;
     letter-spacing: 0.03em;
-    text-transform: uppercase;
     white-space: nowrap;
     z-index: 9999;
     pointer-events: none;
@@ -3464,7 +3436,6 @@ html.sc-init .app-brand {
     line-height: 1.2;
     text-align: center;
     text-decoration: none;
-    text-transform: uppercase;
     white-space: nowrap;
     cursor: pointer;
     user-select: none;
@@ -3882,7 +3853,6 @@ html.dark .btn-outline {
     line-height: 1.15;
     text-align: center;
     text-decoration: none;
-    text-transform: uppercase;
     white-space: nowrap;
     cursor: pointer;
     user-select: none;
@@ -4197,7 +4167,6 @@ html.dark .app-context-badge {
     position: relative;
     text-align: center;
     text-decoration: none;
-    text-transform: uppercase;
     transition:
         transform 160ms ease,
         box-shadow 160ms ease,
@@ -4406,7 +4375,6 @@ html.dark .app-context-badge {
     font-weight: 850;
     letter-spacing: 0.018em;
     padding-inline: 12px;
-    text-transform: uppercase;
 }
 
 .app-topbar-actions .select {
@@ -4451,7 +4419,6 @@ html.dark .app-context-badge {
     padding: 7px 13px;
     position: relative;
     text-decoration: none;
-    text-transform: uppercase;
     transition:
         transform 160ms ease,
         border-color 160ms ease,
@@ -5492,7 +5459,6 @@ html.dark .dynamic-panel-error {
     font-weight: 800;
     color: var(--ui-text-muted);
     letter-spacing: 0.04em;
-    text-transform: uppercase;
     white-space: nowrap;
 }
 
@@ -5629,7 +5595,6 @@ html.dark .dynamic-panel-error {
 .dbx-summary-mini-label {
     font-size: 8px !important;
     letter-spacing: 0.07em !important;
-    text-transform: uppercase !important;
     color: var(--ui-text-muted) !important;
     font-weight: 800 !important;
 }

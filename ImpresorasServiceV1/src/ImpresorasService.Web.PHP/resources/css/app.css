@@ -1,4 +1,4 @@
-@import 'tailwindcss';
+﻿@import 'tailwindcss';
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
@@ -273,7 +273,6 @@ textarea::placeholder {
 
 .dbx-summary-label {
     font-size: 0.75rem;
-    text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--ui-text-muted);
 }
@@ -538,7 +537,6 @@ textarea::placeholder {
 
 .metric-label {
     font-size: 0.64rem;
-    text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--ui-text-muted);
     line-height: 1.2;
@@ -553,7 +551,6 @@ textarea::placeholder {
 .metric-meta {
     font-size: 0.65rem;
     color: var(--ui-text-muted);
-    text-transform: uppercase;
     letter-spacing: 0.03em;
 }
 
@@ -673,7 +670,6 @@ textarea::placeholder {
 .store-kpis-row span {
     font-size: 0.64rem;
     color: var(--ui-text-muted);
-    text-transform: uppercase;
 }
 
 .store-kpis-row strong {
@@ -701,7 +697,6 @@ textarea::placeholder {
     background: color-mix(in srgb, var(--ui-surface-soft) 92%, transparent);
     color: var(--ui-text-muted);
     font-weight: 700;
-    text-transform: uppercase;
 }
 
 .store-printer-item {
@@ -1151,7 +1146,6 @@ html.dark body {
     min-width: 0;
     font-size: 0.88rem;
     line-height: 1.15;
-    text-transform: uppercase;
     letter-spacing: 0.035em;
 }
 
@@ -1165,7 +1159,6 @@ html.dark body {
     border-radius: 0;
     border-left: 4px solid transparent;
     color: color-mix(in srgb, var(--ui-text) 82%, var(--ui-text-muted));
-    text-transform: uppercase;
     letter-spacing: 0.025em;
     font-size: 0.78rem;
     font-weight: 850;
@@ -1214,7 +1207,6 @@ html.dark .app-nav-link-active {
 }
 
 .app-topbar-title h1 {
-    text-transform: uppercase;
     letter-spacing: 0.02em;
     color: var(--ui-primary);
 }
@@ -1231,7 +1223,6 @@ html.dark .app-nav-link-active {
 
 .btn {
     border-radius: 0;
-    text-transform: uppercase;
     letter-spacing: 0.025em;
     box-shadow: none;
 }
@@ -1273,7 +1264,6 @@ html.dark .app-nav-link-active {
 
 .badge {
     border-radius: 0;
-    text-transform: uppercase;
     letter-spacing: 0.04em;
 }
 
