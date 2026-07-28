@@ -27,12 +27,11 @@
 .dbx-wrap { display: grid; gap: 14px; }
 .dbx-dashboard-page {
     width: 100%;
-    max-width: 1420px;
     margin: 0 auto;
     display: grid;
     gap: 14px;
 }
-.dbx-card { background: var(--ui-surface); border: 1px solid var(--ui-border); border-radius: 12px; box-shadow: var(--ui-shadow-soft); }
+.dbx-card { background: var(--ui-surface); border: 1px solid var(--ui-border); border-radius: var(--ui-radius); box-shadow: var(--ui-shadow-soft); }
 .dbx-card-body { padding: 14px; position: relative; }
 .dbx-checkbox-col { width: 40px; }
 .dbx-toolbar {
@@ -52,7 +51,7 @@
 .dbx-tab { border-radius: 999px; padding: 6px 12px; font-size: 12px; color: var(--ui-text-muted); text-decoration: none; font-weight: 700; }
 .dbx-tab.is-active { background: var(--ui-primary); color: #fff; }
 .dbx-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 10px; }
-.dbx-kpi { min-height: 92px; border-radius: 10px; border: 1px solid var(--ui-border); background: var(--ui-surface); padding: 10px; display: flex; flex-direction: column; justify-content: space-between; }
+.dbx-kpi { min-height: 92px; border-radius: var(--ui-radius); border: 1px solid var(--ui-border); background: var(--ui-surface); padding: 10px; display: flex; flex-direction: column; justify-content: space-between; }
 .dbx-kpi-label {
     font-size: 10px;
     font-weight: 700;
@@ -138,7 +137,7 @@
 }
 .dbx-store-focus-item {
     border: 1px solid var(--ui-border);
-    border-radius: 10px;
+    border-radius: var(--ui-radius);
     padding: 10px;
     background: var(--ui-surface-soft);
     display: grid;
@@ -159,7 +158,7 @@
 .dbx-store-health.critical { color: #b91c1c; }
 .dbx-store-reason-box {
     border: 1px solid var(--ui-border);
-    border-radius: 10px;
+    border-radius: var(--ui-radius);
     background: var(--ui-surface);
     padding: 10px;
     margin-top: 8px;
@@ -233,7 +232,7 @@
 .dbx-bar-fill.danger { background: #ef4444; }
 .dbx-bar-fill.warning { background: #f59e0b; }
 .dbx-bar-value { font-size: 14px; color: var(--ui-text); text-align: center; font-weight: 700; }
-.dbx-table-wrap { overflow: auto; border: 1px solid var(--ui-border); border-radius: 10px; }
+.dbx-table-wrap { overflow: auto; border: 1px solid var(--ui-border); border-radius: var(--ui-radius); }
 .dbx-alerts-wrap {
     /* Crece hasta N filas visibles y luego aplica scroll vertical */
     max-height: min(72vh, calc(42px + (var(--dbx-visible-rows, 10) * 44px)));
@@ -254,12 +253,12 @@
 .dbx-store-grid.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .dbx-store-grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .dbx-store-grid.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.dbx-store { border: 1px solid var(--ui-border); border-radius: 12px; background: var(--ui-surface); overflow: hidden; }
+.dbx-store { border: 1px solid var(--ui-border); border-radius: var(--ui-radius); background: var(--ui-surface); overflow: hidden; }
 .dbx-store-head { display: flex; justify-content: space-between; gap: 10px; align-items: start; padding: 12px; border-bottom: 1px solid var(--ui-border); }
 .dbx-store-title { margin: 0; font-size: 16px; font-weight: 800; color: var(--ui-text); line-height: 1.2; word-break: break-word; }
 .dbx-store-reason { margin: 4px 0 0; font-size: 12px; color: var(--ui-text-muted); }
 .dbx-mini-kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--ui-border); background: var(--ui-surface-soft); }
-.dbx-mini-kpis > div { border: 1px solid var(--ui-border); border-radius: 8px; background: var(--ui-surface); padding: 6px; }
+.dbx-mini-kpis > div { border: 1px solid var(--ui-border); border-radius: var(--ui-radius-sm); background: var(--ui-surface); padding: 6px; }
 .dbx-mini-kpis span { display: block; font-size: 9px; color: var(--ui-text-muted); text-transform: uppercase; }
 .dbx-mini-kpis strong { font-size: 13px; color: var(--ui-text); line-height: 1; }
 .dbx-printers { padding: 0 12px 12px; }
@@ -559,7 +558,7 @@ html.dark .dbx-donut::after {
     margin-top: 4px;
 }
 .dbx-summary-mini {
-    border-radius: 10px;
+    border-radius: var(--ui-radius);
     border: 1px solid var(--ui-border);
     background: var(--ui-surface-soft);
     padding: 8px 10px;
@@ -585,7 +584,6 @@ html.dark .dbx-donut::after {
 }
 
 .ajustes-wrap {
-    max-width: 1280px;
     margin: 0 auto;
 }
 
@@ -662,10 +660,6 @@ html.dark .dbx-donut::after {
 .dbx-wrap,
 .dbx-dashboard-page {
     gap: 12px;
-}
-
-.dbx-dashboard-page {
-    max-width: 1440px;
 }
 
 .dbx-card {
@@ -1020,10 +1014,6 @@ html.dark .dbx-donut::after {
 
 .btn-warning:hover {
     background: color-mix(in srgb, var(--ui-warning) 15%, var(--ui-surface));
-}
-
-.ajustes-wrap {
-    max-width: 1320px;
 }
 
 .ajustes-grid {

@@ -26,6 +26,7 @@
     --ui-nav-strong: #f4f6fa;
     --ui-radius: 6px;
     --ui-radius-sm: 4px;
+    --ui-radius-pill: 999px;
     --ui-shadow: 0 10px 24px rgba(27, 47, 130, 0.08);
     --ui-shadow-soft: 0 1px 4px rgba(27, 47, 130, 0.08);
     --ui-focus: 0 0 0 3px rgba(27, 47, 130, 0.22);
@@ -277,7 +278,7 @@ html.dark .app-shell .app-sidebar {
     width: 36px;
     height: 20px;
     border: 1px solid var(--ui-border-strong);
-    border-radius: 10px;
+    border-radius: var(--ui-radius-pill);
     background: var(--ui-surface-soft);
     cursor: pointer;
     position: relative;
@@ -3647,7 +3648,7 @@ html.sc-init .app-brand {
     font-size: 0.72rem;
     gap: 4px;
     letter-spacing: 0.015em;
-    border-radius: 5px;
+    border-radius: var(--ui-radius-sm);
 }
 
 /* .btn-md = same as default .btn, no overrides needed */
@@ -3772,8 +3773,6 @@ html.dark .btn-outline {
    ===================================================================== */
 
 :root {
-    --btn-radius: 7px;
-    --btn-radius-sm: 6px;
     --btn-glass-shadow: 0 3px 10px rgba(27, 47, 130, 0.10);
     --btn-glass-shadow-hover: 0 7px 18px rgba(27, 47, 130, 0.16);
     --btn-glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.58);
@@ -3800,7 +3799,7 @@ html.dark .btn-outline {
     min-height: 32px;
     padding: 6px 12px;
     border: 1px solid var(--btn-border);
-    border-radius: var(--btn-radius);
+    border-radius: var(--ui-radius);
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0) 42%),
         linear-gradient(135deg, var(--btn-bg-a), var(--btn-bg-b));
@@ -3838,7 +3837,7 @@ html.dark .btn-outline {
     position: absolute;
     inset: 1px 1px auto;
     height: 42%;
-    border-radius: calc(var(--btn-radius) - 2px);
+    border-radius: calc(var(--ui-radius) - 2px);
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0));
     pointer-events: none;
     z-index: -1;
@@ -3963,7 +3962,7 @@ html.dark .btn-outline {
 .table td .btn {
     min-height: 28px;
     padding: 4px 9px;
-    border-radius: var(--btn-radius-sm);
+    border-radius: var(--ui-radius-sm);
     font-size: 0.69rem;
     gap: 4px;
 }
@@ -4001,7 +4000,7 @@ html.dark .btn-outline {
 .app-topbar-actions .select,
 .app-context-badge {
     min-height: 34px;
-    border-radius: var(--btn-radius);
+    border-radius: var(--ui-radius);
 }
 
 .app-topbar-actions .select {
@@ -4109,7 +4108,7 @@ html.dark .app-context-badge {
     backdrop-filter: blur(10px) saturate(1.08);
     background: linear-gradient(180deg, var(--btn-bg-a) 0%, var(--btn-bg-b) 100%);
     border: 1px solid var(--btn-border);
-    border-radius: 7px;
+    border-radius: var(--ui-radius);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.72),
         0 1px 2px rgba(15, 23, 42, 0.08),
@@ -4314,7 +4313,7 @@ html.dark .app-context-badge {
 .app-topbar-actions .btn,
 .app-topbar-actions .select,
 .app-context-badge {
-    border-radius: 7px;
+    border-radius: var(--ui-radius);
     min-height: 34px;
 }
 
@@ -4370,7 +4369,7 @@ html.dark .app-context-badge {
     backdrop-filter: blur(10px) saturate(1.08);
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(247, 250, 255, 0.68));
     border: 1px solid rgba(32, 55, 141, 0.28);
-    border-radius: 7px;
+    border-radius: var(--ui-radius);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.72),
         0 6px 16px rgba(24, 47, 122, 0.06);
@@ -4423,7 +4422,7 @@ html.dark .app-context-badge {
     backdrop-filter: blur(10px) saturate(1.08);
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(247, 250, 255, 0.68));
     border: 1px solid rgba(32, 55, 141, 0.28);
-    border-radius: 7px;
+    border-radius: var(--ui-radius);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.72),
         0 6px 16px rgba(24, 47, 122, 0.06);
@@ -4541,7 +4540,7 @@ html.dark .dbx-store-view-tab.is-active {
         linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.04) 46%, rgba(255, 255, 255, 0.12)),
         linear-gradient(135deg, var(--glass-bg), var(--glass-bg-tint));
     border: 1px solid var(--glass-border);
-    border-radius: 8px;
+    border-radius: var(--ui-radius);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.58),
         inset 0 -1px 0 color-mix(in srgb, var(--glass-accent) 12%, transparent),
@@ -4664,13 +4663,13 @@ html.dark .dbx-store-view-tab.is-active {
 .action-buttons .btn,
 .dbx-table td .btn,
 .table td .btn {
-    border-radius: 7px;
+    border-radius: var(--ui-radius-sm);
     min-height: 28px;
     padding: 4px 9px;
 }
 
 .btn-icon {
-    border-radius: 8px;
+    border-radius: var(--ui-radius-sm);
 }
 
 .app-context-badge,
@@ -5360,7 +5359,7 @@ html.dark .table-alerts tbody tr.dbx-alert-row-healthy:hover td {
     padding: 0.75rem 0.85rem;
     border: 1px solid rgba(239, 68, 68, 0.34);
     border-left: 4px solid var(--danger);
-    border-radius: 8px;
+    border-radius: var(--ui-radius);
     background: rgba(254, 242, 242, 0.9);
     color: #991b1b;
     font-size: 0.86rem;
