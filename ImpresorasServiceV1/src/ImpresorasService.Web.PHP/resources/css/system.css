@@ -4528,6 +4528,25 @@ html.dark .dbx-store-view-tab.is-active {
     color: #ffffff;
 }
 
+.dbx-table-group-row th {
+    background: var(--ui-surface);
+    color: var(--ui-text-muted);
+    border-top: none;
+    border-bottom: 1px solid var(--ui-border);
+    padding-top: 6px;
+    padding-bottom: 4px;
+    font-size: 9px;
+    letter-spacing: 0.06em;
+}
+
+.dbx-table-group-row .dbx-table-group-label.is-live {
+    color: var(--ui-primary-strong);
+}
+
+.dbx-col-divider {
+    border-left: 1px solid var(--ui-border);
+}
+
 .dbx-bulk-bar {
     display: flex;
     align-items: center;
