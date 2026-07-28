@@ -402,5 +402,118 @@
         setTimeout(function () { if (window.showToast) window.showToast(item.message, item.type); }, i * 130);
     });
     </script>
+    <div id="app-confirm-overlay" class="app-confirm-overlay" role="presentation">
+        <div class="app-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="app-confirm-title" aria-describedby="app-confirm-message">
+            <h2 class="app-confirm-title" id="app-confirm-title"></h2>
+            <p class="app-confirm-message" id="app-confirm-message"></p>
+            <input type="text" class="input app-confirm-type" id="app-confirm-type-input" autocomplete="off" hidden>
+            <div class="app-confirm-actions">
+                <button type="button" class="btn btn-ghost" id="app-confirm-cancel">Cancelar</button>
+                <button type="button" class="btn btn-danger" id="app-confirm-accept">Confirmar</button>
+            </div>
+        </div>
+    </div>
+    <script>
+    (function () {
+        var overlay = document.getElementById('app-confirm-overlay');
+        var dialog = overlay.querySelector('.app-confirm-dialog');
+        var titleEl = document.getElementById('app-confirm-title');
+        var messageEl = document.getElementById('app-confirm-message');
+        var typeInput = document.getElementById('app-confirm-type-input');
+        var cancelBtn = document.getElementById('app-confirm-cancel');
+        var acceptBtn = document.getElementById('app-confirm-accept');
+        var activeResolve = null;
+        var lastFocused = null;
+
+        function close(result) {
+            overlay.classList.remove('is-open');
+            document.removeEventListener('keydown', onKeydown);
+            if (lastFocused) lastFocused.focus();
+            var resolve = activeResolve;
+            activeResolve = null;
+            if (resolve) resolve(result);
+        }
+
+        function onKeydown(e) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                close(false);
+                return;
+            }
+            if (e.key === 'Tab') {
+                var focusable = [cancelBtn, acceptBtn];
+                var idx = focusable.indexOf(document.activeElement);
+                if (e.shiftKey && idx <= 0) {
+                    e.preventDefault();
+                    focusable[focusable.length - 1].focus();
+                } else if (!e.shiftKey && idx === focusable.length - 1) {
+                    e.preventDefault();
+                    focusable[0].focus();
+                }
+            }
+        }
+
+        function syncTypeGate() {
+            if (typeInput.hidden) return;
+            acceptBtn.disabled = typeInput.value.trim() !== typeInput.dataset.expected;
+        }
+
+        typeInput.addEventListener('input', syncTypeGate);
+        overlay.addEventListener('click', function (e) {
+            if (e.target === overlay) close(false);
+        });
+        cancelBtn.addEventListener('click', function () { close(false); });
+        acceptBtn.addEventListener('click', function () { close(true); });
+
+        window.confirmDialog = function (message, opts) {
+            opts = opts || {};
+            return new Promise(function (resolve) {
+                activeResolve = resolve;
+                lastFocused = document.activeElement;
+                titleEl.textContent = opts.title || 'Confirmar accion';
+                messageEl.textContent = message || '';
+                acceptBtn.textContent = opts.confirmLabel || 'Confirmar';
+                dialog.classList.toggle('is-danger', !!opts.danger);
+                acceptBtn.classList.toggle('btn-danger', !!opts.danger);
+                acceptBtn.classList.toggle('btn-primary', !opts.danger);
+
+                if (opts.typeToConfirm) {
+                    typeInput.hidden = false;
+                    typeInput.value = '';
+                    typeInput.dataset.expected = opts.typeToConfirm;
+                    acceptBtn.disabled = true;
+                } else {
+                    typeInput.hidden = true;
+                    acceptBtn.disabled = false;
+                }
+
+                overlay.classList.add('is-open');
+                document.addEventListener('keydown', onKeydown);
+                (opts.typeToConfirm ? typeInput : cancelBtn).focus();
+            });
+        };
+
+        document.addEventListener('submit', function (e) {
+            var form = e.target;
+            if (!(form instanceof HTMLFormElement) || !form.dataset.confirmMessage) return;
+            if (form.dataset.confirming === '1') {
+                delete form.dataset.confirming;
+                return;
+            }
+            e.preventDefault();
+            window.confirmDialog(form.dataset.confirmMessage, {
+                title: form.dataset.confirmTitle,
+                confirmLabel: form.dataset.confirmLabel,
+                danger: form.dataset.confirmDanger === '1',
+                typeToConfirm: form.dataset.confirmType || null,
+            }).then(function (ok) {
+                if (!ok) return;
+                form.dataset.confirming = '1';
+                if (typeof form.requestSubmit === 'function') form.requestSubmit();
+                else form.submit();
+            });
+        });
+    })();
+    </script>
 </body>
 </html>

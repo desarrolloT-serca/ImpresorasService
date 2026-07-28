@@ -5877,6 +5877,63 @@ html.dark .app-toast {
     box-shadow: var(--ui-shadow);
 }
 
+/* ── Confirm dialog (sustituye a confirm() nativo) ───────────────────── */
+.app-confirm-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    background: rgba(15, 23, 42, 0.44);
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.app-confirm-overlay.is-open {
+    display: flex;
+}
+
+.app-confirm-dialog {
+    width: 100%;
+    max-width: 420px;
+    background: var(--ui-surface-raised);
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius);
+    box-shadow: var(--ui-shadow);
+    padding: 20px;
+}
+
+.app-confirm-title {
+    margin: 0 0 8px;
+    font-size: 1rem;
+    font-weight: 800;
+    color: var(--ui-text);
+}
+
+.app-confirm-message {
+    margin: 0;
+    font-size: 0.86rem;
+    line-height: 1.5;
+    color: var(--ui-text-muted);
+    word-break: break-word;
+}
+
+.app-confirm-type {
+    margin-top: 12px;
+    width: 100%;
+}
+
+.app-confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 18px;
+}
+
+.app-confirm-dialog.is-danger .app-confirm-title {
+    color: var(--ui-danger);
+}
+
 /* Cola: contador de seleccionados fijo en esquina superior derecha del banner. */
 .dbx-operational-card .dbx-cola-section-header-top {
     align-items: center;

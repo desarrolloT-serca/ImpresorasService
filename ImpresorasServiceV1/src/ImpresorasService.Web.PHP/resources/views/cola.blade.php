@@ -356,8 +356,11 @@
         }
 
         const confirmMessage = form.dataset.confirm;
-        if (confirmMessage && !window.confirm(confirmMessage)) {
-            return;
+        if (confirmMessage) {
+            const ok = window.confirmDialog
+                ? await window.confirmDialog(confirmMessage, { title: 'Confirmar accion', danger: form.dataset.colaAction === 'cancelar-masivo' || form.dataset.colaAction === 'cancelar' })
+                : window.confirm(confirmMessage);
+            if (!ok) return;
         }
 
         const action = form.dataset.colaAction;

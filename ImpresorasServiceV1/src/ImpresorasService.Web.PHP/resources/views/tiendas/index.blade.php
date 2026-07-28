@@ -42,33 +42,53 @@
                 <td class="number-col">{{ $usersCount }}</td>
                 <td class="number-col">{{ $printersCount }}</td>
                 <td class="status-col">
-                    <span class="badge status-chip {{ $isActive ? 'badge-success' : 'badge-danger' }}" aria-label="{{ $isActive ? 'Tienda activa' : 'Tienda inactiva' }}">
+                    <x-ui.status :level="$isActive ? 'healthy' : 'critical'" aria-label="{{ $isActive ? 'Tienda activa' : 'Tienda inactiva' }}">
                         {{ $isActive ? 'Si' : 'No' }}
-                    </span>
+                    </x-ui.status>
                 </td>
                 <td class="actions-col">
                     @if($id !== null && $id !== '')
                     <x-ui.action-buttons>
                         <a href="{{ route('tiendas.edit', $id) }}" class="btn btn-ghost">Editar</a>
                         @if($isActive)
-                            <form action="{{ route('tiendas.destroy', $id) }}" method="POST" onsubmit="return confirm('¿Desactivar tienda? Se mantendran logs e historico, y las impresoras de esta tienda quedaran inactivas.')">
-                                @csrf
-                                @method('DELETE')
-                                <button type="submit" class="btn btn-warning">Desactivar</button>
-                            </form>
+                            <x-ui.confirm-form
+                                :action="route('tiendas.destroy', $id)"
+                                method="DELETE"
+                                title="Desactivar tienda"
+                                message="Se mantendran logs e historico, y las impresoras de esta tienda quedaran inactivas."
+                                confirm-label="Desactivar"
+                            >
+                                <x-slot:trigger>
+                                    <button type="submit" class="btn btn-warning">Desactivar</button>
+                                </x-slot:trigger>
+                            </x-ui.confirm-form>
                         @else
-                            <form action="{{ route('tiendas.activate', $id) }}" method="POST" onsubmit="return confirm('¿Activar tienda de nuevo?')">
-                                @csrf
-                                <button type="submit" class="btn btn-primary">Activar</button>
-                            </form>
+                            <x-ui.confirm-form
+                                :action="route('tiendas.activate', $id)"
+                                title="Activar tienda"
+                                message="La tienda {{ $name }} volvera a estar disponible para enrutado."
+                                confirm-label="Activar"
+                            >
+                                <x-slot:trigger>
+                                    <button type="submit" class="btn btn-primary">Activar</button>
+                                </x-slot:trigger>
+                            </x-ui.confirm-form>
                         @endif
-                        <form action="{{ route('tiendas.destroy', $id) }}" method="POST" onsubmit="return confirm('¿ELIMINAR DEFINITIVAMENTE la tienda {{ $name }} ({{ $id }})? Esta acci&oacute;n borrar&aacute; tambi&eacute;n hist&oacute;rico de impresi&oacute;n y no se puede deshacer.')">
-                            @csrf
-                            @method('DELETE')
+                        <x-ui.confirm-form
+                            :action="route('tiendas.destroy', $id)"
+                            method="DELETE"
+                            title="Eliminar tienda definitivamente"
+                            message="Esta accion borrara tambien el historico de impresion de {{ $name }} (#{{ $id }}) y no se puede deshacer."
+                            confirm-label="Eliminar definitivo"
+                            danger
+                            :type-to-confirm="(string) $id"
+                        >
                             <input type="hidden" name="hardDelete" value="1">
                             <input type="hidden" name="purgeHistory" value="1">
-                            <button type="submit" class="btn btn-danger">Eliminar definitivo</button>
-                        </form>
+                            <x-slot:trigger>
+                                <button type="submit" class="btn btn-danger">Eliminar definitivo</button>
+                            </x-slot:trigger>
+                        </x-ui.confirm-form>
                     </x-ui.action-buttons>
                     @endif
                 </td>

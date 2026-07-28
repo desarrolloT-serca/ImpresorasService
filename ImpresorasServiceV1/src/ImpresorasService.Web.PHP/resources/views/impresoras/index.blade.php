@@ -190,9 +190,9 @@
                             <td class="text-col dbx-printer-text-cell" title="{{ $spoolQueue }}">{{ $spoolQueue }}</td>
                             <td class="text-col dbx-printer-text-cell" title="{{ $host !== '' ? $host : 'Sin host configurado' }}">{{ $host !== '' ? $host : '-' }}</td>
                             <td class="status-col">
-                                <span class="badge status-chip {{ $isActive ? 'badge-success' : 'badge-danger' }}" aria-label="{{ $isActive ? 'Impresora activa' : 'Impresora inactiva' }}">
+                                <x-ui.status :level="$isActive ? 'healthy' : 'critical'" aria-label="{{ $isActive ? 'Impresora activa' : 'Impresora inactiva' }}">
                                     {{ $isActive ? 'Sí' : 'No' }}
-                                </span>
+                                </x-ui.status>
                             </td>
                             <td class="status-col">
                                 <span class="ping-status badge {{ $connectionClass }}" data-id="{{ $id ?? '' }}" title="{{ $connectionTitle }}">{{ $connectionLabel }}</span>
@@ -202,25 +202,32 @@
                             </td>
                             <td class="status-col">
                                 @if($ippSupported === true)
-                                    <span class="badge badge-success" title="Soporta IPP">IPP ✓</span>
+                                    <x-ui.status level="healthy" title="Soporta IPP">IPP ✓</x-ui.status>
                                 @elseif($ippSupported === false)
-                                    <span class="badge badge-neutral" title="No soporta IPP">IPP ✗</span>
+                                    <x-ui.status level="neutral" title="No soporta IPP">IPP ✗</x-ui.status>
                                 @else
-                                    <span class="badge badge-warning" title="Compatibilidad IPP sin comprobar">IPP ?</span>
+                                    <x-ui.status level="warning" title="Compatibilidad IPP sin comprobar">IPP ?</x-ui.status>
                                 @endif
                             </td>
                             <td class="actions-col">
                                 @if(($isAdmin ?? false) && $id)
                                     <x-ui.action-buttons>
                                         <a href="{{ $editUrl }}" class="btn btn-ghost">Editar</a>
-                                        <form action="{{ route('impresoras.destroy', $id) }}" method="POST" onsubmit="return confirm('&iquest;Eliminar?')">
-                                            @csrf
-                                            @method('DELETE')
+                                        <x-ui.confirm-form
+                                            :action="route('impresoras.destroy', $id)"
+                                            method="DELETE"
+                                            title="Eliminar impresora"
+                                            message="Se eliminara la impresora {{ $name }}. Esta accion no se puede deshacer."
+                                            confirm-label="Eliminar"
+                                            danger
+                                        >
                                             @if($pageStoreId !== null)
                                                 <input type="hidden" name="storeId" value="{{ $pageStoreId }}">
                                             @endif
-                                            <button type="submit" class="btn btn-danger">Eliminar</button>
-                                        </form>
+                                            <x-slot:trigger>
+                                                <button type="submit" class="btn btn-danger">Eliminar</button>
+                                            </x-slot:trigger>
+                                        </x-ui.confirm-form>
                                     </x-ui.action-buttons>
                                 @else
                                     <span class="text-slate-400 text-sm">-</span>

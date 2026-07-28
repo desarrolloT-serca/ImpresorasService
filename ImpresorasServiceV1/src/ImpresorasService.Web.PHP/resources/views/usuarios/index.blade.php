@@ -53,11 +53,18 @@
                     @if($id)
                     <x-ui.action-buttons>
                         <a href="{{ route('usuarios.edit', $id) }}" class="btn btn-ghost">Editar</a>
-                        <form action="{{ route('usuarios.destroy', $id) }}" method="POST" onsubmit="return confirm('¿Eliminar usuario?')">
-                            @csrf
-                            @method('DELETE')
-                            <button type="submit" class="btn btn-danger">Eliminar</button>
-                        </form>
+                        <x-ui.confirm-form
+                            :action="route('usuarios.destroy', $id)"
+                            method="DELETE"
+                            title="Eliminar usuario"
+                            message="Se eliminara el usuario {{ $user['displayName'] ?? $user['DisplayName'] ?? $user['login'] ?? $id }}. Esta accion no se puede deshacer."
+                            confirm-label="Eliminar"
+                            danger
+                        >
+                            <x-slot:trigger>
+                                <button type="submit" class="btn btn-danger">Eliminar</button>
+                            </x-slot:trigger>
+                        </x-ui.confirm-form>
                     </x-ui.action-buttons>
                     @endif
                 </td>
