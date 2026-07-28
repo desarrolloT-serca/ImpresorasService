@@ -19,56 +19,38 @@
             @method('PUT')
         @endif
 
-        <div>
-            <label class="form-label">Login</label>
-            <input type="text" name="login" value="{{ $login }}" class="input @error('login') border-red-500 @enderror" required minlength="3" maxlength="80">
-            @error('login')<p class="field-error">{{ $message }}</p>@enderror
-        </div>
+        <x-ui.field label="Login" name="login" :value="$login" required minlength="3" maxlength="80" autocomplete="username" />
 
-        <div>
-            <label class="form-label">Nombre visible</label>
-            <input type="text" name="displayName" value="{{ $displayName }}" class="input @error('displayName') border-red-500 @enderror" maxlength="120">
-            @error('displayName')<p class="field-error">{{ $message }}</p>@enderror
-        </div>
+        <x-ui.field label="Nombre visible" name="displayName" :value="$displayName" maxlength="120" autocomplete="off" />
 
-        <div>
-            <label class="form-label">Rol</label>
-            <select name="role" id="role" class="select @error('role') border-red-500 @enderror" required>
-                @foreach($roles as $roleValue => $roleLabel)
-                    <option value="{{ $roleValue }}" {{ $role === $roleValue ? 'selected' : '' }}>{{ $roleLabel }}</option>
-                @endforeach
-            </select>
-            @error('role')<p class="field-error">{{ $message }}</p>@enderror
-        </div>
+        <x-ui.field label="Rol" name="role" type="select" required>
+            @foreach($roles as $roleValue => $roleLabel)
+                <option value="{{ $roleValue }}" {{ $role === $roleValue ? 'selected' : '' }}>{{ $roleLabel }}</option>
+            @endforeach
+        </x-ui.field>
 
-        <div id="store-wrapper">
-            <label class="form-label">Tienda (obligatoria para jefe de tienda y empleado)</label>
-            <select name="storeId" id="storeId" class="select @error('storeId') border-red-500 @enderror">
-                <option value="">Sin tienda</option>
-                @foreach($stores as $store)
-                    @php
-                        $sid = $store['storeId'] ?? $store['StoreId'] ?? '';
-                        $sname = $store['name'] ?? $store['Name'] ?? ('Tienda ' . $sid);
-                    @endphp
-                    <option value="{{ $sid }}" {{ (string)$storeId === (string)$sid ? 'selected' : '' }}>
-                        {{ \App\Helpers\StoreFormat::label($sid, $sname) }}
-                    </option>
-                @endforeach
-            </select>
-            @error('storeId')<p class="field-error">{{ $message }}</p>@enderror
-        </div>
+        <x-ui.field label="Tienda (obligatoria para jefe de tienda y empleado)" name="storeId" type="select">
+            <option value="">Sin tienda</option>
+            @foreach($stores as $store)
+                @php
+                    $sid = $store['storeId'] ?? $store['StoreId'] ?? '';
+                    $sname = $store['name'] ?? $store['Name'] ?? ('Tienda ' . $sid);
+                @endphp
+                <option value="{{ $sid }}" {{ (string)$storeId === (string)$sid ? 'selected' : '' }}>
+                    {{ \App\Helpers\StoreFormat::label($sid, $sname) }}
+                </option>
+            @endforeach
+        </x-ui.field>
 
-        <div>
-            <label class="form-label">
-                @if($editing)
-                    Nueva contrase&ntilde;a (opcional)
-                @else
-                    Contrase&ntilde;a
-                @endif
-            </label>
-            <input type="password" name="password" class="input @error('password') border-red-500 @enderror" {{ $editing ? '' : 'required' }} minlength="6" maxlength="80">
-            @error('password')<p class="field-error">{{ $message }}</p>@enderror
-        </div>
+        <x-ui.field
+            :label="$editing ? 'Nueva contraseña (opcional)' : 'Contraseña'"
+            name="password"
+            type="password"
+            minlength="6"
+            maxlength="80"
+            autocomplete="new-password"
+            :required="!$editing"
+        />
 
         <div class="form-actions">
             <a href="{{ route('usuarios.index') }}" class="btn btn-ghost">Cancelar</a>

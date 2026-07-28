@@ -17,26 +17,14 @@
             @method('PUT')
         @endif
 
-        <div>
-            <label class="form-label">Numero de tienda</label>
-            <input type="number" name="storeId" value="{{ $storeId }}" class="input @error('storeId') border-red-500 @enderror" {{ $editing ? 'readonly' : '' }} required>
-            @error('storeId')<p class="field-error">{{ $message }}</p>@enderror
-        </div>
+        <x-ui.field label="Numero de tienda" name="storeId" type="number" :value="$storeId" required :readonly="$editing" />
 
-        <div>
-            <label class="form-label">Nombre</label>
-            <input type="text" name="name" value="{{ $name }}" class="input @error('name') border-red-500 @enderror" required maxlength="120">
-            @error('name')<p class="field-error">{{ $message }}</p>@enderror
-        </div>
+        <x-ui.field label="Nombre" name="name" :value="$name" required maxlength="120" autocomplete="off" />
 
-        <div>
-            <label class="form-label">Activa</label>
-            <select name="isActive" class="select @error('isActive') border-red-500 @enderror">
-                <option value="1" {{ $isActiveValue === '1' ? 'selected' : '' }}>Si</option>
-                <option value="0" {{ $isActiveValue === '0' ? 'selected' : '' }}>No</option>
-            </select>
-            @error('isActive')<p class="field-error">{{ $message }}</p>@enderror
-        </div>
+        <x-ui.field label="Activa" name="isActive" type="select">
+            <option value="1" {{ $isActiveValue === '1' ? 'selected' : '' }}>Si</option>
+            <option value="0" {{ $isActiveValue === '0' ? 'selected' : '' }}>No</option>
+        </x-ui.field>
 
         <div class="form-actions">
             <a href="{{ route('tiendas.index') }}" class="btn btn-ghost">Cancelar</a>
