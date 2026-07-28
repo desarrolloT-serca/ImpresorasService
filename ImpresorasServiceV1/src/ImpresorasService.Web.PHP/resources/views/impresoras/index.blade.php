@@ -96,17 +96,12 @@
         @else
             <x-ui.table class="dbx-actions-table dbx-routing-rules-table dbx-printers-table">
                 <thead>
-                    <tr class="dbx-table-group-row">
-                        <th colspan="4" class="dbx-table-group-label">Configuración</th>
-                        <th colspan="3" class="dbx-table-group-label is-live">Salud en vivo</th>
-                        <th></th>
-                    </tr>
                     <tr>
                         <th class="text-col">Nombre</th>
                         <th class="text-col">SpoolQueue</th>
                         <th class="text-col">Host</th>
                         <th class="status-col">Activa</th>
-                        <th class="status-col dbx-col-divider">Conectividad</th>
+                        <th class="status-col">Conectividad</th>
                         <th class="status-col">Puerto</th>
                         <th class="status-col">IPP</th>
                         <th class="actions-col">Acciones</th>
@@ -199,7 +194,7 @@
                                     {{ $isActive ? 'Sí' : 'No' }}
                                 </x-ui.status>
                             </td>
-                            <td class="status-col dbx-col-divider">
+                            <td class="status-col">
                                 <span class="ping-status badge {{ $connectionClass }}" data-id="{{ $id ?? '' }}" title="{{ $connectionTitle }}">{{ $connectionLabel }}</span>
                             </td>
                             <td class="status-col">

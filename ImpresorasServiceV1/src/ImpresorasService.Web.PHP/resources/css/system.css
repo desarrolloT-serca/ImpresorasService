@@ -2768,11 +2768,6 @@ html.dark .login-logo-frame {
     white-space: nowrap;
 }
 
-.dbx-printers-table .dbx-table {
-    width: 100%;
-    table-layout: fixed;
-}
-
 .dbx-printers-table .dbx-table th.text-col:nth-child(1),
 .dbx-printers-table .dbx-table td.text-col:nth-child(1) {
     width: 16%;
@@ -4528,25 +4523,6 @@ html.dark .dbx-store-view-tab.is-active {
     color: #ffffff;
 }
 
-.dbx-table-group-row th {
-    background: var(--ui-surface);
-    color: var(--ui-text-muted);
-    border-top: none;
-    border-bottom: 1px solid var(--ui-border);
-    padding-top: 6px;
-    padding-bottom: 4px;
-    font-size: 9px;
-    letter-spacing: 0.06em;
-}
-
-.dbx-table-group-row .dbx-table-group-label.is-live {
-    color: var(--ui-primary-strong);
-}
-
-.dbx-col-divider {
-    border-left: 1px solid var(--ui-border);
-}
-
 .dbx-bulk-bar {
     display: flex;
     align-items: center;
@@ -4575,61 +4551,6 @@ html.dark .dbx-store-view-tab.is-active {
     display: flex;
     align-items: center;
     gap: 8px;
-    flex-shrink: 0;
-}
-
-.dbx-rule-list {
-    display: flex;
-    flex-direction: column;
-}
-
-.dbx-rule-sentence-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 14px 4px;
-    border-top: 1px solid var(--ui-border);
-}
-
-.dbx-rule-sentence-row:first-child {
-    border-top: none;
-}
-
-.dbx-rule-sentence {
-    margin: 0;
-    font-size: 0.88rem;
-    line-height: 1.5;
-    color: var(--ui-text);
-    max-width: 60ch;
-}
-
-.dbx-rule-sentence strong {
-    color: var(--ui-primary-strong);
-    font-weight: 700;
-}
-
-.dbx-rule-wildcard {
-    font-style: italic;
-    color: var(--ui-text-muted);
-}
-
-.dbx-rule-conflict {
-    display: inline-flex;
-    align-items: center;
-    margin-left: 6px;
-    padding: 1px 8px;
-    border-radius: var(--ui-radius-pill);
-    background: color-mix(in srgb, var(--ui-danger) 12%, var(--ui-surface));
-    color: var(--ui-danger);
-    font-size: 0.72rem;
-    font-weight: 700;
-}
-
-.dbx-rule-sentence-meta {
-    display: flex;
-    align-items: center;
-    gap: 12px;
     flex-shrink: 0;
 }
 
@@ -5268,14 +5189,14 @@ html.dark .table-alerts tbody tr.dbx-alert-row-healthy:hover td {
     min-width: 100%;
 }
 
-.dbx-printers-table .dbx-table {
-    width: 100%;
-    table-layout: fixed;
-}
-
 .dbx-printers-table .dbx-table th,
 .dbx-printers-table .dbx-table td {
     max-width: none;
+}
+
+.dbx-printers-table td.text-col,
+.dbx-printers-table th.text-col {
+    white-space: nowrap;
 }
 
 .dbx-table th,
