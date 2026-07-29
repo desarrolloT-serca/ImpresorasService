@@ -38,10 +38,10 @@ public class PrintJobsController : ControllerBase
         IQueryable<PrintJob> query = _dbContext.PrintJobs.AsNoTracking();
 
         var effectiveStoreId = IsAdmin() ? storeId : GetCurrentUserStoreId();
+        if (!IsAdmin() && !effectiveStoreId.HasValue)
+            return Forbid();
         if (effectiveStoreId.HasValue)
-        {
             query = query.Where(x => x.StoreId == effectiveStoreId.Value);
-        }
 
         if (status.HasValue)
         {

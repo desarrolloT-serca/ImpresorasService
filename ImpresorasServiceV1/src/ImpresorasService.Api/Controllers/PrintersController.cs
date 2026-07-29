@@ -36,6 +36,8 @@ public class PrintersController : ControllerBase
         IQueryable<Printer> query = _dbContext.Printers.AsNoTracking();
 
         var effectiveStoreId = IsAdmin() ? storeId : GetCurrentUserStoreId();
+        if (!IsAdmin() && !effectiveStoreId.HasValue)
+            return Forbid();
         if (effectiveStoreId.HasValue)
             query = query.Where(x => x.StoreId == effectiveStoreId.Value);
         if (isActive.HasValue)
