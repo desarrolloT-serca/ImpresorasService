@@ -210,8 +210,8 @@
         jobIds.forEach(id => {
             const tr = document.createElement('tr');
             tr.dataset.jobId = id;
-            tr.innerHTML = `<td class="text-col" style="font-size:.8rem;">${id}</td>
-                <td><span class="badge badge-warning">Pending</span></td><td>-</td>`;
+            tr.innerHTML = '<td class="text-col" style="font-size:.8rem;"></td><td><span class="badge badge-warning">Pending</span></td><td>-</td>';
+            tr.cells[0].textContent = id;
             tbody.appendChild(tr);
         });
 
@@ -309,8 +309,8 @@
         jobIds.forEach(id => {
             const tr = document.createElement('tr');
             tr.dataset.jobId = id;
-            tr.innerHTML = `<td class="text-col" style="font-size:.8rem;">${id}</td>
-                <td><span class="badge badge-warning">…</span></td><td>-</td>`;
+            tr.innerHTML = '<td class="text-col" style="font-size:.8rem;"></td><td><span class="badge badge-warning">…</span></td><td>-</td>';
+            tr.cells[0].textContent = id;
             tbody.appendChild(tr);
         });
         document.getElementById('pruebas-resultado-resumen').textContent = 'Retomando seguimiento…';
@@ -403,18 +403,16 @@
     function appendPdfRow(pdf) {
         const tbody = document.getElementById('pdfs-tbody');
         if (!tbody) return;
-        const tr   = document.createElement('tr');
+        const tr = document.createElement('tr');
         tr.dataset.pdfId = pdf.id;
-        const kb   = ((pdf.size || 0) / 1024).toFixed(1);
-        tr.innerHTML = `
-            <td>${pdf.name}</td>
-            <td>${kb} KB</td>
-            <td>
-                <button type="button" class="btn btn-ghost btn-sm btn-seleccionar-pdf"
-                        data-pdf-id="${pdf.id}" data-pdf-name="${pdf.name}">Seleccionar</button>
-                <button type="button" class="btn btn-danger btn-sm btn-eliminar-pdf"
-                        data-pdf-id="${pdf.id}">Eliminar</button>
-            </td>`;
+        const kb = ((pdf.size || 0) / 1024).toFixed(1);
+        tr.innerHTML = '<td></td><td></td><td><button type="button" class="btn btn-ghost btn-sm btn-seleccionar-pdf">Seleccionar</button><button type="button" class="btn btn-danger btn-sm btn-eliminar-pdf">Eliminar</button></td>';
+        tr.cells[0].textContent = pdf.name;
+        tr.cells[1].textContent = kb + ' KB';
+        const selBtn = tr.querySelector('.btn-seleccionar-pdf');
+        selBtn.dataset.pdfId = pdf.id;
+        selBtn.dataset.pdfName = pdf.name;
+        tr.querySelector('.btn-eliminar-pdf').dataset.pdfId = pdf.id;
         tbody.appendChild(tr);
     }
 
