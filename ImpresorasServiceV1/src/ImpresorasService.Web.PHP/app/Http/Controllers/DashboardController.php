@@ -527,7 +527,7 @@ class DashboardController extends Controller
             }
 
             $storeId = $this->readInt($overviewStore, 'storeId');
-            if ($storeId <= 0) {
+            if ($storeId < 0) {
                 continue;
             }
 

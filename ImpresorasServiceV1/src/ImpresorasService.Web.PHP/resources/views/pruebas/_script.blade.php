@@ -140,7 +140,7 @@
                 count:        parseInt(g('count'), 10) || 1,
                 pdfId:        g('pdfId') || null,
             };
-        }).filter(b => b.storeId > 0 && b.documentType);
+        }).filter(b => b.storeId >= 0 && b.documentType);
     }
 
     // ── Eliminar escenario ───────────────────────────────────────────────────
