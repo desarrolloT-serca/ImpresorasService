@@ -78,15 +78,20 @@ public class DashboardController : ControllerBase
 
         var (printedRows, failedRows) = await LoadPrintedAndFailedAsync(jobs, fromUtc, now, cancellationToken);
 
+        // BuildStoreRowsAsync ya agrega received/queue/failed por tienda en HANA;
+        // sumar en memoria evita 5 COUNT queries adicionales (AUD-18).
+        var rules = await _ruleStore.LoadAsync(cancellationToken);
+        var (storeRows, alerts) = await BuildStoreRowsAsync(stores, printers, jobsInWindow, jobs, printedRows, failedRows, thresholds, rules, cancellationToken);
+
         var kpis = new
         {
-            received = await jobsInWindow.CountAsync(cancellationToken),
+            received = storeRows.Sum(r => r.Received),
             printed = printedRows.Count,
             failed = failedRows.Count,
-            queueCurrent = await jobs.CountAsync(x => DashboardPrintJobPredicates.QueueStatuses.Contains(x.Status), cancellationToken),
-            failedWithoutRetryCurrent = await jobs.CountAsync(DashboardPrintJobPredicates.FailedWithoutRetryCurrent, cancellationToken),
-            activePrinters = await printers.CountAsync(cancellationToken),
-            activeStores = await stores.CountAsync(cancellationToken)
+            queueCurrent = storeRows.Sum(r => r.QueuedCurrent),
+            failedWithoutRetryCurrent = storeRows.Sum(r => r.FailedWithoutRetryCurrent),
+            activePrinters = storeRows.Sum(r => r.ConnectedPrinters),
+            activeStores = storeRows.Count
         };
 
         // Observabilidad de negocio (A-ARCH-05, G4.3): sin backend de métricas (OTel/Prometheus) en
@@ -95,9 +100,6 @@ public class DashboardController : ControllerBase
             "Dashboard overview KPIs. window={Window} storeId={StoreId} received={Received} printed={Printed} failed={Failed} queueCurrent={QueueCurrent} failedWithoutRetryCurrent={FailedWithoutRetryCurrent} activePrinters={ActivePrinters} activeStores={ActiveStores}",
             NormalizeWindow(window), effectiveStoreId, kpis.received, kpis.printed, kpis.failed,
             kpis.queueCurrent, kpis.failedWithoutRetryCurrent, kpis.activePrinters, kpis.activeStores);
-
-        var rules = await _ruleStore.LoadAsync(cancellationToken);
-        var (storeRows, alerts) = await BuildStoreRowsAsync(stores, printers, jobsInWindow, jobs, printedRows, failedRows, thresholds, rules, cancellationToken);
 
         return Ok(new
         {
