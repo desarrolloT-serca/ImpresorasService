@@ -125,6 +125,17 @@ public class UsersController : ControllerBase
         if (!RoleCatalog.TryNormalize(request.Role, out var role))
             return BadRequest(new { error = "El rol no es valido." });
 
+        if (RoleCatalog.Normalize(user.Role) == RoleCatalog.Admin && role != RoleCatalog.Admin)
+        {
+            var remainingRoles = await _dbContext.Users
+                .AsNoTracking()
+                .Where(x => x.UserId != id)
+                .Select(x => x.Role)
+                .ToListAsync(cancellationToken);
+            if (!remainingRoles.Any(r => RoleCatalog.Normalize(r) == RoleCatalog.Admin))
+                return Conflict(new { error = "No se puede demover al ultimo administrador." });
+        }
+
         user.Login = request.Login.Trim();
         user.DisplayName = string.IsNullOrWhiteSpace(request.DisplayName) ? request.Login.Trim() : request.DisplayName.Trim();
         user.Role = role;
