@@ -171,6 +171,8 @@ if (!builder.Environment.IsEnvironment("Testing"))
                 new { error = "Demasiados intentos. Espera un momento e inténtalo de nuevo." },
                 cancellationToken);
         };
+        // ponytail: partición por RemoteIpAddress — detrás de Nginx actúa como límite global.
+        // Si se necesita por-IP-real, configurar ForwardedHeaders + leer X-Forwarded-For.
         options.AddPolicy<string>("auth", httpContext =>
             RateLimitPartition.GetFixedWindowLimiter(
                 partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
@@ -247,9 +249,8 @@ if (app.Environment.IsDevelopment())
 
 app.UseSecurityHeaders();
 
-app.UseHttpsRedirection();
-
-// Lee o genera X-Correlation-Id, lo devuelve en respuesta y abre scope de log (AUD-22)
+// Lee o genera X-Correlation-Id, lo devuelve en respuesta y abre scope de log (AUD-22).
+// Debe ir antes de UseHttpsRedirection para que las respuestas 301 también lleven el header.
 app.Use(async (context, next) =>
 {
     if (!context.Request.Headers.TryGetValue("X-Correlation-Id", out var cid) || string.IsNullOrWhiteSpace(cid))
@@ -258,6 +259,8 @@ app.Use(async (context, next) =>
     using (app.Logger.BeginScope("CorrelationId:{CorrelationId}", cid.ToString()))
         await next(context);
 });
+
+app.UseHttpsRedirection();
 
 app.UseCors();
 
