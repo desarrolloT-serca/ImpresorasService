@@ -105,6 +105,64 @@ public class RoutingService : IRoutingService
         return new RouteResult(true, printerId, null);
     }
 
+    public async Task TryRouteBatchAsync(IReadOnlyList<Guid> jobIds, CancellationToken cancellationToken = default)
+    {
+        if (jobIds.Count == 0) return;
+
+        var jobs = await _db.PrintJobs
+            .Where(j => jobIds.Contains(j.JobId) && j.Status == PrintJobStatus.Pending)
+            .ToListAsync(cancellationToken);
+
+        if (jobs.Count == 0) return;
+
+        var requests = jobs.Select(j => (j.StoreId, j.DocumentType, j.Channel)).ToList();
+        var printerIds = await _resolver.ResolveBatchAsync(requests, cancellationToken);
+
+        var now = DateTimeOffset.UtcNow;
+        for (int i = 0; i < jobs.Count; i++)
+        {
+            var job = jobs[i];
+            var printerId = printerIds[i];
+
+            if (printerId is null)
+            {
+                job.Status = PrintJobStatus.ErrorFinal;
+                job.LastErrorCode = RouteNotFoundCode;
+                job.LastErrorMessage = "No existe regla activa aplicable para este trabajo.";
+                job.UpdatedAtUtc = now;
+                _db.PrintJobEvents.Add(new PrintJobEvent
+                {
+                    JobId = job.JobId,
+                    EventType = "ROUTE_NOT_FOUND",
+                    OldStatus = PrintJobStatus.Pending,
+                    NewStatus = PrintJobStatus.ErrorFinal,
+                    ErrorCode = RouteNotFoundCode,
+                    Message = "No existe regla activa aplicable para este trabajo.",
+                    ActorType = "system",
+                    OccurredAtUtc = now
+                });
+            }
+            else
+            {
+                job.Status = PrintJobStatus.Routed;
+                job.PrinterId = printerId;
+                job.UpdatedAtUtc = now;
+                _db.PrintJobEvents.Add(new PrintJobEvent
+                {
+                    JobId = job.JobId,
+                    EventType = "ROUTED",
+                    OldStatus = PrintJobStatus.Pending,
+                    NewStatus = PrintJobStatus.Routed,
+                    ActorType = "system",
+                    Message = $"Enrutado a impresora {printerId}.",
+                    OccurredAtUtc = now
+                });
+            }
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
     private async Task ApplyRouteNotFoundAsync(PrintJob job, CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
