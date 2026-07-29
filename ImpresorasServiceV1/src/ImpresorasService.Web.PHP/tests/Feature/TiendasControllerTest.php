@@ -45,10 +45,10 @@ class TiendasControllerTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('/tiendas/0/edit', false);
-        $response->assertSee('aria-label="Desactivar tienda"', false);
-        $response->assertSee('aria-label="Eliminar definitivamente tienda"', false);
-        $response->assertDontSee('>Desactivar<', false);
-        $response->assertDontSee('>Eliminar definitivo<', false);
+        $response->assertSee('data-confirm-title="Desactivar tienda"', false);
+        $response->assertSee('data-confirm-title="Eliminar tienda definitivamente"', false);
+        $response->assertSee('>Desactivar<', false);
+        $response->assertSee('>Eliminar definitivo<', false);
     }
 
     public function test_store_allows_store_id_zero(): void
