@@ -157,7 +157,7 @@ builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
 builder.Services.AddHealthChecks()
-    .AddDbContextCheck<ImpresorasDbContext>("database");
+    .AddDbContextCheck<ImpresorasDbContext>("database", tags: ["ready"]);
 
 if (!builder.Environment.IsEnvironment("Testing"))
 {
@@ -171,12 +171,17 @@ if (!builder.Environment.IsEnvironment("Testing"))
                 new { error = "Demasiados intentos. Espera un momento e inténtalo de nuevo." },
                 cancellationToken);
         };
-        options.AddFixedWindowLimiter("auth", limiter =>
-        {
-            limiter.Window = TimeSpan.FromMinutes(1);
-            limiter.PermitLimit = 10;
-            limiter.QueueLimit = 0;
-        });
+        // ponytail: partición por RemoteIpAddress — detrás de Nginx actúa como límite global.
+        // Si se necesita por-IP-real, configurar ForwardedHeaders + leer X-Forwarded-For.
+        options.AddPolicy<string>("auth", httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    Window = TimeSpan.FromMinutes(1),
+                    PermitLimit = 10,
+                    QueueLimit = 0,
+                }));
     });
 }
 
@@ -244,6 +249,17 @@ if (app.Environment.IsDevelopment())
 
 app.UseSecurityHeaders();
 
+// Lee o genera X-Correlation-Id, lo devuelve en respuesta y abre scope de log (AUD-22).
+// Debe ir antes de UseHttpsRedirection para que las respuestas 301 también lleven el header.
+app.Use(async (context, next) =>
+{
+    if (!context.Request.Headers.TryGetValue("X-Correlation-Id", out var cid) || string.IsNullOrWhiteSpace(cid))
+        cid = Guid.NewGuid().ToString("N");
+    context.Response.Headers.Append("X-Correlation-Id", cid.ToString());
+    using (app.Logger.BeginScope("CorrelationId:{CorrelationId}", cid.ToString()))
+        await next(context);
+});
+
 app.UseHttpsRedirection();
 
 app.UseCors();
@@ -257,21 +273,26 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapHealthChecks("/health", new HealthCheckOptions
+static Task WriteHealthJson(HttpContext ctx, HealthReport report)
 {
-    ResponseWriter = async (context, report) =>
+    ctx.Response.ContentType = "application/json";
+    return ctx.Response.WriteAsJsonAsync(new
     {
-        context.Response.ContentType = "application/json";
-        var status = report.Status == HealthStatus.Healthy ? "ok" : "degraded";
-        await context.Response.WriteAsJsonAsync(new
-        {
-            status,
-            checks = report.Entries.ToDictionary(
-                entry => entry.Key,
-                entry => entry.Value.Status.ToString())
-        });
-    }
+        status = report.Status == HealthStatus.Healthy ? "ok" : "degraded",
+        checks = report.Entries.ToDictionary(e => e.Key, e => e.Value.Status.ToString())
+    });
+}
+
+// /health/live — solo "¿está vivo el proceso?" (sin deps externas, ideal para reinicios)
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
+// /health/ready — comprueba BD; usar como señal de tráfico en balanceador
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = c => c.Tags.Contains("ready"),
+    ResponseWriter = WriteHealthJson
 });
+// /health — mantiene compatibilidad hacia atrás (mismo comportamiento que antes)
+app.MapHealthChecks("/health", new HealthCheckOptions { ResponseWriter = WriteHealthJson });
 app.MapPost("/bootstrap/first-admin", async (
     BootstrapAdminRequest request,
     ImpresorasDbContext db,

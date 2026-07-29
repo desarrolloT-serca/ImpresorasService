@@ -19,4 +19,12 @@ public interface IRoutingResolver
         string documentType,
         string channel,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Resuelve la impresora para un lote de trabajos cargando reglas e impresoras una sola vez.
+    /// Devuelve una lista paralela al parámetro <paramref name="requests"/>.
+    /// </summary>
+    Task<IReadOnlyList<int?>> ResolveBatchAsync(
+        IReadOnlyList<(int storeId, string documentType, string channel)> requests,
+        CancellationToken cancellationToken = default);
 }

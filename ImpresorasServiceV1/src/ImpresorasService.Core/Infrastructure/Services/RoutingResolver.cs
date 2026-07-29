@@ -24,9 +24,24 @@ public class RoutingResolver : IRoutingResolver
         string channel,
         CancellationToken cancellationToken = default)
     {
-        var now = DateTimeOffset.UtcNow;
+        var rules = await LoadActiveRulesAsync(cancellationToken);
+        return ResolveFromRules(rules, storeId, documentType, channel);
+    }
 
-        var activeOnly = true;
+    public async Task<IReadOnlyList<int?>> ResolveBatchAsync(
+        IReadOnlyList<(int storeId, string documentType, string channel)> requests,
+        CancellationToken cancellationToken = default)
+    {
+        if (requests.Count == 0) return Array.Empty<int?>();
+        var rules = await LoadActiveRulesAsync(cancellationToken);
+        return requests.Select(r => ResolveFromRules(rules, r.storeId, r.documentType, r.channel)).ToArray();
+    }
+
+    private async Task<List<RoutingRule>> LoadActiveRulesAsync(CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        const bool activeOnly = true;
+
         var rules = await _db.RoutingRules
             .AsNoTracking()
             .Where(r => r.IsActive == activeOnly)
@@ -38,25 +53,27 @@ public class RoutingResolver : IRoutingResolver
             .Where(r => r.ValidFromUtc <= now && (r.ValidToUtc == null || r.ValidToUtc >= now))
             .ToList();
 
-        var printerIds = await _db.Printers
+        var activePrinterIds = (await _db.Printers
             .AsNoTracking()
             .Where(p => p.IsActive == activeOnly)
             .Select(p => p.PrinterId)
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken))
+            .ToHashSet();
 
-        var activePrinterIds = printerIds.ToHashSet();
-        rules = rules.Where(r => activePrinterIds.Contains(r.PrinterId)).ToList();
+        return rules.Where(r => activePrinterIds.Contains(r.PrinterId)).ToList();
+    }
 
-        var normalizedDocumentType = NormalizeRequired(documentType);
-        var normalizedChannel = NormalizeNullable(channel);
+    private static int? ResolveFromRules(List<RoutingRule> rules, int storeId, string documentType, string channel)
+    {
+        var normDoc = NormalizeRequired(documentType);
+        var normChannel = NormalizeNullable(channel);
 
         // Niveles de especificidad (mayor = más específico). Evaluar de mayor a menor.
-        var match = rules.FirstOrDefault(r => Matches(r, storeId, normalizedDocumentType, normalizedChannel, specificity: 4))
-            ?? rules.FirstOrDefault(r => Matches(r, storeId, normalizedDocumentType, normalizedChannel, specificity: 3))
-            ?? rules.FirstOrDefault(r => Matches(r, storeId, normalizedDocumentType, normalizedChannel, specificity: 2))
-            ?? rules.FirstOrDefault(r => Matches(r, storeId, normalizedDocumentType, normalizedChannel, specificity: 1));
-
-        return match?.PrinterId;
+        return (rules.FirstOrDefault(r => Matches(r, storeId, normDoc, normChannel, specificity: 4))
+            ?? rules.FirstOrDefault(r => Matches(r, storeId, normDoc, normChannel, specificity: 3))
+            ?? rules.FirstOrDefault(r => Matches(r, storeId, normDoc, normChannel, specificity: 2))
+            ?? rules.FirstOrDefault(r => Matches(r, storeId, normDoc, normChannel, specificity: 1)))
+            ?.PrinterId;
     }
 
     /// <summary>

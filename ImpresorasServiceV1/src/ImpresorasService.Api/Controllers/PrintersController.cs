@@ -36,6 +36,8 @@ public class PrintersController : ControllerBase
         IQueryable<Printer> query = _dbContext.Printers.AsNoTracking();
 
         var effectiveStoreId = IsAdmin() ? storeId : GetCurrentUserStoreId();
+        if (!IsAdmin() && !effectiveStoreId.HasValue)
+            return Forbid();
         if (effectiveStoreId.HasValue)
             query = query.Where(x => x.StoreId == effectiveStoreId.Value);
         if (isActive.HasValue)
@@ -429,7 +431,7 @@ public class PrintersController : ControllerBase
 
     private async Task<bool> ActiveStoreExistsAsync(int storeId, CancellationToken cancellationToken)
     {
-        if (storeId <= 0)
+        if (storeId < 0)
             return false;
 
         var activeStoreOnly = true;

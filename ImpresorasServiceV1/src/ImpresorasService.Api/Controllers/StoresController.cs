@@ -209,6 +209,10 @@ public class StoresController : ControllerBase
                 .Where(x => x.StoreId == storeId)
                 .ExecuteDeleteAsync(cancellationToken);
 
+            await _dbContext.StoreAlertStates
+                .Where(x => x.StoreId == storeId)
+                .ExecuteDeleteAsync(cancellationToken);
+
             await _dbContext.Stores
                 .Where(x => x.StoreId == storeId)
                 .ExecuteDeleteAsync(cancellationToken);

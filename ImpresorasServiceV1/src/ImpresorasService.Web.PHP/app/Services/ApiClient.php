@@ -59,6 +59,9 @@ class ApiClient
                 return $this->requestGetCache[$cacheKey] = $decoded;
             },
             function (\Throwable $e) use ($normalizedPath) {
+                if ($e instanceof \Illuminate\Http\Exceptions\HttpResponseException) {
+                    throw $e;
+                }
                 $this->markApiFailure($normalizedPath, $e->getMessage());
 
                 return [];
@@ -82,9 +85,10 @@ class ApiClient
 
             return $this->requestGetCache[$cacheKey] = $decoded;
         } catch (\Throwable $e) {
-            if (! $e instanceof \Illuminate\Http\Exceptions\HttpResponseException) {
-                $this->markApiFailure($normalizedPath, $e->getMessage());
+            if ($e instanceof \Illuminate\Http\Exceptions\HttpResponseException) {
+                throw $e;
             }
+            $this->markApiFailure($normalizedPath, $e->getMessage());
 
             return [];
         }

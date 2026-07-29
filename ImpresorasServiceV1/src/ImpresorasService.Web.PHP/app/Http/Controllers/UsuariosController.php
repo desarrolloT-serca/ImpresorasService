@@ -64,7 +64,7 @@ class UsuariosController extends Controller
             'displayName' => 'nullable|string|max:120',
             'password' => 'required|string|min:6|max:80',
             'role' => 'required|string',
-            'storeId' => 'nullable|integer|min:1',
+            'storeId' => 'nullable|integer|min:0',
         ]);
 
         try {
@@ -102,7 +102,7 @@ class UsuariosController extends Controller
             'displayName' => 'nullable|string|max:120',
             'password' => 'nullable|string|min:6|max:80',
             'role' => 'required|string',
-            'storeId' => 'nullable|integer|min:1',
+            'storeId' => 'nullable|integer|min:0',
         ]);
 
         try {

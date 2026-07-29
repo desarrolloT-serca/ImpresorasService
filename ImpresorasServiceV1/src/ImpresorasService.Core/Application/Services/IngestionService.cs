@@ -128,21 +128,14 @@ public class IngestionService
             duplicatesCount,
             sourceJobIdsToMarkProcessed.Count);
 
-        // Enrutado automático: intentar enrutar cada trabajo recién insertado
-        foreach (var jobId in insertedJobIds)
+        // Enrutado automático: una carga de reglas/impresoras para todo el lote (AUD-17)
+        try
         {
-            try
-            {
-                var routeResult = await _routingService.TryRouteJobAsync(jobId, cancellationToken);
-                if (routeResult.Success)
-                    _logger.LogInformation("Trabajo {JobId} enrutado a impresora {PrinterId}.", jobId, routeResult.PrinterId);
-                else
-                    _logger.LogWarning("Trabajo {JobId} sin regla aplicable: {ErrorCode}.", jobId, routeResult.ErrorCode);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error al enrutar trabajo {JobId}.", jobId);
-            }
+            await _routingService.TryRouteBatchAsync(insertedJobIds, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al enrutar lote de {Count} trabajos.", insertedJobIds.Count);
         }
 
         return insertedCount;

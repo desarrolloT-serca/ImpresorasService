@@ -81,7 +81,7 @@ class PruebasController extends Controller
         $request->validate([
             'name'                   => 'required|string|max:100',
             'batches'                => 'required|array|min:1',
-            'batches.*.storeId'      => 'required|integer|min:1',
+            'batches.*.storeId'      => 'required|integer|min:0',
             'batches.*.documentType' => 'required|string|max:50',
             'batches.*.channel'      => 'nullable|string|max:50',
             'batches.*.count'        => 'required|integer|min:1|max:50',

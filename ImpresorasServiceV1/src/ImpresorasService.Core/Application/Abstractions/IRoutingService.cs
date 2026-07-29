@@ -17,6 +17,11 @@ public interface IRoutingService
     /// Para ErrorFinal con ROUTE_NOT_FOUND, resetea a Pending y vuelve a intentar.
     /// </summary>
     Task<RouteResult> TryRetryRouteAsync(Guid jobId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Enruta todos los trabajos Pending del lote con una sola carga de reglas/impresoras.
+    /// </summary>
+    Task TryRouteBatchAsync(IReadOnlyList<Guid> jobIds, CancellationToken cancellationToken = default);
 }
 
 public record RouteResult(bool Success, int? PrinterId, string? ErrorCode);

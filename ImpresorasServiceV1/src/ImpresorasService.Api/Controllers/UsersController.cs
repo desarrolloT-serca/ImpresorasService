@@ -125,6 +125,17 @@ public class UsersController : ControllerBase
         if (!RoleCatalog.TryNormalize(request.Role, out var role))
             return BadRequest(new { error = "El rol no es valido." });
 
+        if (RoleCatalog.Normalize(user.Role) == RoleCatalog.Admin && role != RoleCatalog.Admin)
+        {
+            var remainingRoles = await _dbContext.Users
+                .AsNoTracking()
+                .Where(x => x.UserId != id)
+                .Select(x => x.Role)
+                .ToListAsync(cancellationToken);
+            if (!remainingRoles.Any(r => RoleCatalog.Normalize(r) == RoleCatalog.Admin))
+                return Conflict(new { error = "No se puede demover al ultimo administrador." });
+        }
+
         user.Login = request.Login.Trim();
         user.DisplayName = string.IsNullOrWhiteSpace(request.DisplayName) ? request.Login.Trim() : request.DisplayName.Trim();
         user.Role = role;
@@ -190,7 +201,7 @@ public class UsersController : ControllerBase
         if (!RoleCatalog.TryNormalize(role, out var normalizedRole))
             return "El rol no es valido.";
 
-        if (NeedsStore(normalizedRole) && (!storeId.HasValue || storeId <= 0))
+        if (NeedsStore(normalizedRole) && (!storeId.HasValue || storeId < 0))
             return "Debe indicar una tienda para el rol seleccionado.";
 
         if (normalizedRole == RoleCatalog.Admin && storeId.HasValue)
@@ -215,7 +226,7 @@ public class UsersController : ControllerBase
         if (NeedsStore(normalizedRole))
         {
             var storeIdValue = storeId.GetValueOrDefault();
-            if (storeIdValue <= 0)
+            if (storeIdValue < 0)
                 return "La tienda seleccionada no existe o esta inactiva.";
 
             var activeStoreOnly = true;

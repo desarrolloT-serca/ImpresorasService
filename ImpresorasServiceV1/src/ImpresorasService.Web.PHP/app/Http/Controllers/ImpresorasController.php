@@ -279,7 +279,7 @@ class ImpresorasController extends Controller
             'printerName' => 'required|string|max:255',
             'spoolQueue' => 'required|string|max:255',
             'host' => 'nullable|string|max:255',
-            'storeId' => $effectiveStore === null ? 'required|integer|min:1' : 'nullable',
+            'storeId' => $effectiveStore === null ? 'required|integer|min:0' : 'nullable',
             'isActive' => 'boolean',
         ]);
 
@@ -325,7 +325,7 @@ class ImpresorasController extends Controller
             'printerName' => 'required|string|max:255',
             'spoolQueue' => 'required|string|max:255',
             'host' => 'nullable|string|max:255',
-            'storeId' => 'required|integer|min:1',
+            'storeId' => 'required|integer|min:0',
             'isActive' => 'boolean',
         ]);
 

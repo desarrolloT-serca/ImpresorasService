@@ -106,37 +106,70 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
         // G5.3: reglas de severidad de 1-3 niveles — fuente única de verdad, compartida con la Api.
         var rules = await _ruleStore.LoadAsync(ct);
 
-        var activeOnly = true;
+        const bool activeOnly = true;
+        var now = _timeProvider.GetUtcNow();
+
         var stores = await db.Stores.AsNoTracking()
             .Where(s => s.IsActive == activeOnly)
             .Select(s => new { s.StoreId, s.Name })
             .ToListAsync(ct);
 
-        var now = _timeProvider.GetUtcNow();
+        if (stores.Count == 0)
+            return;
+
+        // ── Snapshot en batch: una query por recurso, no por tienda (AUD-19) ──
+        var storeIdList = stores.Select(s => s.StoreId).ToList();
+
+        var printersByStore = (await db.Printers.AsNoTracking()
+            .Where(p => p.IsActive == activeOnly && storeIdList.Contains(p.StoreId))
+            .Select(p => new
+            {
+                p.StoreId, p.IsActive, p.LastConnectionOk,
+                p.LastConnectionCheckAtUtc, p.LastConnectionError, p.ConnectionFailuresStreak,
+            })
+            .ToListAsync(ct))
+            .GroupBy(p => p.StoreId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var queuedByStore = await db.PrintJobs.AsNoTracking()
+            .Where(j => storeIdList.Contains(j.StoreId) && DashboardPrintJobPredicates.QueueStatuses.Contains(j.Status))
+            .GroupBy(j => j.StoreId)
+            .Select(g => new { StoreId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.StoreId, x => x.Count, ct);
+
+        // Mismo predicado que DashboardController.BuildStoreRowsAsync (failedWindowStats).
+        // Sin ventana (A-KPI-01): foto de estado actual, no evento — ver comentario original.
+        var failedByStore = await db.PrintJobs.AsNoTracking()
+            .Where(j => storeIdList.Contains(j.StoreId))
+            .Where(DashboardPrintJobPredicates.FailedWithoutRetryCurrent)
+            .GroupBy(j => j.StoreId)
+            .Select(g => new { StoreId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.StoreId, x => x.Count, ct);
+
+        // Sin AsNoTracking: EF debe detectar los cambios para SaveChanges.
+        var alertStates = await db.StoreAlertStates
+            .Where(s => storeIdList.Contains(s.StoreId))
+            .ToDictionaryAsync(s => s.StoreId, ct);
+
+        // ── Evaluación en memoria ─────────────────────────────────────────────
+        const string hr = "—————————————————";
+        var localTime = TimeZoneInfo.ConvertTime(now.UtcDateTime, _businessTimeZone);
+        var ts = localTime.ToString("dd/MM HH:mm");
 
         foreach (var store in stores)
         {
-            var printers = await db.Printers.AsNoTracking()
-                .Where(p => p.IsActive == activeOnly && p.StoreId == store.StoreId)
-                .Select(p => new
-                {
-                    p.IsActive,
-                    p.LastConnectionOk,
-                    p.LastConnectionCheckAtUtc,
-                    p.LastConnectionError,
-                    p.ConnectionFailuresStreak,
-                })
-                .ToListAsync(ct);
-
+            var printers = printersByStore.GetValueOrDefault(store.StoreId) ?? [];
             var connected = printers.Count;
             var missingHost = 0;
             var connWarn = 0;
             var connCrit = 0;
             var connMaxStreak = 0;
+
             foreach (var p in printers)
             {
                 var descriptor = PrinterConnectivityState.FromSnapshot(
-                    p.IsActive, p.LastConnectionOk, p.LastConnectionCheckAtUtc, p.LastConnectionError, p.ConnectionFailuresStreak);
+                    p.IsActive, p.LastConnectionOk, p.LastConnectionCheckAtUtc,
+                    p.LastConnectionError, p.ConnectionFailuresStreak);
 
                 if (descriptor.ConnectivityStatus == PrinterConnectivityState.StatusNoHost)
                     missingHost++;
@@ -150,106 +183,67 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
                     connWarn++;
             }
 
-            var queued = await db.PrintJobs.AsNoTracking()
-                .CountAsync(j => j.StoreId == store.StoreId && DashboardPrintJobPredicates.QueueStatuses.Contains(j.Status), ct);
-
-            // Mismo predicado que DashboardController.BuildStoreRowsAsync (failedWindowStats) — antes
-            // el Worker mantenía su propia copia (IsFailedAfterRetry) que excluía Printing con
-            // reintentos, algo que la Api sí cuenta como fallo. Ver DashboardPrintJobPredicates.
-            // Sin ventana (A-KPI-01): es una foto de estado actual, no un evento — filtrarla por
-            // UpdatedAtUtc la hacía "curarse sola" a medianoche (ErrorFinal es terminal, su
-            // UpdatedAtUtc no vuelve a moverse) y disparaba alertas de recuperación falsas.
-            var failed = await db.PrintJobs.AsNoTracking()
-                .Where(j => j.StoreId == store.StoreId)
-                .Where(DashboardPrintJobPredicates.FailedWithoutRetryCurrent)
-                .CountAsync(ct);
+            queuedByStore.TryGetValue(store.StoreId, out var queued);
+            failedByStore.TryGetValue(store.StoreId, out var failed);
 
             var (health, reason) = StoreHealthEvaluator.Compute(
                 connected, queued, failed, missingHost, connMaxStreak, connCrit, connWarn, rules);
 
-            await ProcessStoreAlertAsync(db, store.StoreId, store.Name,
-                health, reason, queued, failed, minSeverity, notifyOnRecovery, now, ct);
-        }
-    }
+            if (!alertStates.TryGetValue(store.StoreId, out var alertState))
+            {
+                alertState = new StoreAlertState { StoreId = store.StoreId, CheckedAtUtc = now };
+                db.StoreAlertStates.Add(alertState);
+                alertStates[store.StoreId] = alertState;
+            }
 
-    private async Task ProcessStoreAlertAsync(
-        ImpresorasDbContext db,
-        int storeId,
-        string storeName,
-        string currentHealth,
-        string reason,
-        int queued,
-        int failed,
-        string minSeverity,
-        bool notifyOnRecovery,
-        DateTimeOffset now,
-        CancellationToken ct)
-    {
-        var alertState = await db.StoreAlertStates
-            .SingleOrDefaultAsync(s => s.StoreId == storeId, ct);
+            var previousNotifiedHealth = alertState.NotifiedHealth ?? "healthy";
+            bool isAlertLevel = SeverityReached(health, minSeverity);
+            bool wasAlertLevel = SeverityReached(previousNotifiedHealth, minSeverity);
+            bool isEscalation = isAlertLevel && wasAlertLevel
+                && SeverityRank(health) > SeverityRank(previousNotifiedHealth);
 
-        if (alertState is null)
-        {
-            alertState = new StoreAlertState { StoreId = storeId, CheckedAtUtc = now };
-            await db.StoreAlertStates.AddAsync(alertState, ct);
-        }
+            string? message = null;
 
-        var previousNotifiedHealth = alertState.NotifiedHealth ?? "healthy";
-        bool isAlertLevel = SeverityReached(currentHealth, minSeverity);
-        bool wasAlertLevel = SeverityReached(previousNotifiedHealth, minSeverity);
-        bool isEscalation = isAlertLevel && wasAlertLevel
-            && SeverityRank(currentHealth) > SeverityRank(previousNotifiedHealth);
+            if (isAlertLevel && (!wasAlertLevel || isEscalation))
+            {
+                var icon = health == "critical" ? "🔴" : "🟡";
+                var label = health == "critical" ? "CRÍTICA" : "WARNING";
+                message =
+                    $"{hr}\n\n" +
+                    $"{icon} <b>{label}</b> · <b>{store.Name}</b> <code>#{store.StoreId}</code>\n" +
+                    $"{reason}\n\n" +
+                    $"📦 Cola <b>{queued}</b> · ❌ Fallos <b>{failed}</b>\n" +
+                    $"🕒 {ts}\n\n" +
+                    $"{hr}";
+            }
+            else if (!isAlertLevel && wasAlertLevel && notifyOnRecovery)
+            {
+                message =
+                    $"{hr}\n\n" +
+                    $"🟢 <b>RECUPERADA</b> · <b>{store.Name}</b> <code>#{store.StoreId}</code>\n" +
+                    $"<code>{previousNotifiedHealth}</code> → <b>saludable</b>\n\n" +
+                    $"🕒 {ts}\n\n" +
+                    $"{hr}";
+            }
 
-        var localTime = TimeZoneInfo.ConvertTime(now.UtcDateTime, _businessTimeZone);
-        var ts = localTime.ToString("dd/MM HH:mm");
+            alertState.LastHealth = health;
+            alertState.CheckedAtUtc = now;
 
-        string? message = null;
+            if (message is not null)
+            {
+                // Fase 1.7: persistir ANTES de enviar — evita reenvío si el proceso cae entre save y send.
+                alertState.NotifiedHealth = health;
+                alertState.NotifiedAtUtc = now;
+                await db.SaveChangesAsync(ct);
 
-        const string hr = "—————————————————";
-
-        if (isAlertLevel && (!wasAlertLevel || isEscalation))
-        {
-            var icon = currentHealth == "critical" ? "🔴" : "🟡";
-            var label = currentHealth == "critical" ? "CRÍTICA" : "WARNING";
-            message =
-                $"{hr}\n\n" +
-                $"{icon} <b>{label}</b> · <b>{storeName}</b> <code>#{storeId}</code>\n" +
-                $"{reason}\n\n" +
-                $"📦 Cola <b>{queued}</b> · ❌ Fallos <b>{failed}</b>\n" +
-                $"🕒 {ts}\n\n" +
-                $"{hr}";
-        }
-        else if (!isAlertLevel && wasAlertLevel && notifyOnRecovery)
-        {
-            message =
-                $"{hr}\n\n" +
-                $"🟢 <b>RECUPERADA</b> · <b>{storeName}</b> <code>#{storeId}</code>\n" +
-                $"<code>{previousNotifiedHealth}</code> → <b>saludable</b>\n\n" +
-                $"🕒 {ts}\n\n" +
-                $"{hr}";
+                await _telegram.SendAlertAsync(message, ct, store.StoreId);
+                _logger.LogInformation("Alerta Telegram enviada para tienda {StoreId} ({Name}): {Health}.",
+                    store.StoreId, store.Name, health);
+            }
         }
 
-        alertState.LastHealth = currentHealth;
-        alertState.CheckedAtUtc = now;
-
-        if (message is not null)
-        {
-            // Fase 1.7: persistir el nuevo NotifiedHealth ANTES de enviar. Un crash entre el
-            // envío y el guardado reenviaba la misma alerta en el siguiente ciclo (spam); con
-            // este orden, en el peor caso una notificación no llega a enviarse pero el estado
-            // queda consistente (no hay reenvío duplicado).
-            alertState.NotifiedHealth = currentHealth;
-            alertState.NotifiedAtUtc = now;
-            await db.SaveChangesAsync(ct);
-
-            await _telegram.SendAlertAsync(message, ct, storeId);
-            _logger.LogInformation("Alerta Telegram enviada para tienda {StoreId} ({Name}): {Health}.",
-                storeId, storeName, currentHealth);
-        }
-        else
-        {
-            await db.SaveChangesAsync(ct);
-        }
+        // Un SaveChanges final para tiendas sin alerta (LastHealth/CheckedAtUtc acumulados)
+        await db.SaveChangesAsync(ct);
     }
 
     private static bool SeverityReached(string health, string minSeverity) => minSeverity switch

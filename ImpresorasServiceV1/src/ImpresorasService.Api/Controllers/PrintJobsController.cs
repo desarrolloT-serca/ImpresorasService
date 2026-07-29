@@ -38,10 +38,10 @@ public class PrintJobsController : ControllerBase
         IQueryable<PrintJob> query = _dbContext.PrintJobs.AsNoTracking();
 
         var effectiveStoreId = IsAdmin() ? storeId : GetCurrentUserStoreId();
+        if (!IsAdmin() && !effectiveStoreId.HasValue)
+            return Forbid();
         if (effectiveStoreId.HasValue)
-        {
             query = query.Where(x => x.StoreId == effectiveStoreId.Value);
-        }
 
         if (status.HasValue)
         {
@@ -56,7 +56,7 @@ public class PrintJobsController : ControllerBase
 
         // Protege la UI de cargas masivas accidentales (polling + tablas grandes).
         var safeLimit = Math.Clamp(limit ?? 100, 1, 500);
-        var safePage = Math.Max(page ?? 1, 1);
+        var safePage = Math.Clamp(page ?? 1, 1, int.MaxValue / safeLimit); // evita overflow en Skip
 
         var projectedQuery =
             from job in query
