@@ -4,6 +4,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Login - Impresoras Service</title>
+    <link rel="icon" type="image/svg+xml" href="{{ asset('img/serca-logo.svg') }}">
+    <link rel="icon" type="image/png" href="{{ asset('img/serca-logo.png') }}">
+    <meta name="theme-color" content="#1b2f82">
     @if (file_exists(public_path('build/manifest.json')) || file_exists(public_path('hot')))
         @vite(['resources/css/app.css', 'resources/js/app.js'])
         @vite('resources/css/dbx.css')
