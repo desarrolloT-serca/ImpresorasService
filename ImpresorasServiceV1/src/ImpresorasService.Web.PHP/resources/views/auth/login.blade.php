@@ -4,8 +4,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Login - Impresoras Service</title>
-    <link rel="preconnect" href="https://fonts.bunny.net">
-    <link href="https://fonts.bunny.net/css?family=poppins:400,500,600,700" rel="stylesheet" />
+    <link rel="icon" type="image/svg+xml" href="{{ asset('img/serca-logo.svg') }}">
+    <link rel="icon" type="image/png" href="{{ asset('img/serca-logo.png') }}">
+    <meta name="theme-color" content="#1b2f82">
     @if (file_exists(public_path('build/manifest.json')) || file_exists(public_path('hot')))
         @vite(['resources/css/app.css', 'resources/js/app.js'])
         @vite('resources/css/dbx.css')
@@ -56,7 +57,7 @@
                     @csrf
                     <div>
                         <label for="login" class="form-label">Usuario</label>
-                        <input type="text" name="login" id="login" value="{{ old('login') }}" required autofocus
+                        <input type="text" name="login" id="login" value="{{ old('login') }}" required autofocus autocomplete="username"
                             class="input @error('login') border-red-500 @enderror">
                         @error('login')
                             <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
@@ -64,7 +65,7 @@
                     </div>
                     <div>
                         <label for="password" class="form-label">Contrase&ntilde;a</label>
-                        <input type="password" name="password" id="password" required
+                        <input type="password" name="password" id="password" required autocomplete="current-password"
                             class="input @error('password') border-red-500 @enderror">
                         @error('password')
                             <p class="mt-1 text-sm text-red-600">{{ $message }}</p>

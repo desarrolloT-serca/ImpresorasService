@@ -1,4 +1,4 @@
-/* Final design-system layer.
+﻿/* Final design-system layer.
    Loaded after legacy app/dbx styles so these tokens and component rules are authoritative. */
 
 :root {
@@ -26,33 +26,35 @@
     --ui-nav-strong: #f4f6fa;
     --ui-radius: 6px;
     --ui-radius-sm: 4px;
+    --ui-radius-pill: 999px;
     --ui-shadow: 0 10px 24px rgba(27, 47, 130, 0.08);
     --ui-shadow-soft: 0 1px 4px rgba(27, 47, 130, 0.08);
     --ui-focus: 0 0 0 3px rgba(27, 47, 130, 0.22);
 }
 
 html.dark {
-    --ui-bg: #0c1324;
-    --ui-surface: #121c31;
-    --ui-surface-soft: #0f172a;
-    --ui-surface-raised: #17233b;
-    --ui-text: #f4f6fb;
-    --ui-text-muted: #b2bfd2;
-    --ui-border: #2d3956;
-    --ui-border-strong: #445272;
-    --ui-primary: #91a0ff;
-    --ui-primary-strong: #bbc4ff;
-    --ui-primary-soft: #1b2758;
-    --ui-accent: #ff4b60;
-    --ui-accent-soft: #451620;
-    --ui-success: #39c88c;
-    --ui-warning: #f2b84b;
-    --ui-danger: #ff5a70;
-    --ui-nav: #111a2e;
-    --ui-nav-strong: #0c1324;
-    --ui-shadow: 0 12px 30px rgba(0, 0, 0, 0.32);
-    --ui-shadow-soft: 0 1px 6px rgba(0, 0, 0, 0.28);
-    --ui-focus: 0 0 0 3px rgba(145, 160, 255, 0.32);
+    /* GitHub Dark Default — paleta oficial, valores exactos */
+    --ui-bg: #0d1117;
+    --ui-surface: #161b22;
+    --ui-surface-soft: #010409;
+    --ui-surface-raised: #21262d;
+    --ui-text: #e6edf3;
+    --ui-text-muted: #8b949e;
+    --ui-border: #30363d;
+    --ui-border-strong: #484f58;
+    --ui-primary: #58a6ff;
+    --ui-primary-strong: #79c0ff;
+    --ui-primary-soft: #0c2d6b;
+    --ui-accent: #ff7b72;
+    --ui-accent-soft: #490202;
+    --ui-success: #3fb950;
+    --ui-warning: #d29922;
+    --ui-danger: #f85149;
+    --ui-nav: #010409;
+    --ui-nav-strong: #010409;
+    --ui-shadow: 0 12px 30px rgba(1, 4, 9, 0.8);
+    --ui-shadow-soft: 0 2px 8px rgba(1, 4, 9, 0.5);
+    --ui-focus: 0 0 0 3px rgba(88, 166, 255, 0.4);
 }
 
 html {
@@ -74,13 +76,11 @@ body {
 }
 
 html.dark body {
-    background:
-        linear-gradient(135deg, color-mix(in srgb, var(--ui-primary-soft) 50%, transparent) 0 20rem, transparent 20rem),
-        linear-gradient(180deg, #111a2e 0%, var(--ui-bg) 18rem);
+    background: #0d1117;
 }
 
 .app-shell .app-sidebar {
-    width: 284px !important;
+    width: 248px !important;
     padding: 16px 14px;
     background: linear-gradient(180deg, var(--ui-nav) 0%, var(--ui-nav-strong) 100%) !important;
     border-right: 1px solid var(--ui-border);
@@ -89,12 +89,12 @@ html.dark body {
 }
 
 html.dark .app-shell .app-sidebar {
-    box-shadow: 8px 0 28px rgba(0, 0, 0, 0.28);
+    box-shadow: 8px 0 28px rgba(0, 0, 0, 0.45);
 }
 
 @media (min-width: 1025px) {
     .app-shell .app-content {
-        margin-left: 284px !important;
+        margin-left: 248px !important;
     }
 }
 
@@ -105,19 +105,21 @@ html.dark .app-shell .app-sidebar {
     border-bottom: 1px solid var(--ui-border);
 }
 
-.app-brand span {
+.app-brand-name {
     color: var(--ui-text) !important;
     font-size: 0.85rem;
     font-weight: 800;
     letter-spacing: 0.03em;
     line-height: 1.15;
-    text-transform: uppercase;
+    flex: 1 1 0;
+    min-width: 0;
 }
 
 .app-logo {
-    width: 92px;
-    height: 38px;
+    width: 44px;
+    height: 44px;
     object-fit: contain;
+    flex-shrink: 0;
 }
 
 .app-nav {
@@ -137,7 +139,20 @@ html.dark .app-shell .app-sidebar {
     font-weight: 800;
     letter-spacing: 0.025em;
     padding: 9px 10px;
-    text-transform: uppercase;
+}
+
+.app-nav-group-title {
+    display: block;
+    margin: 14px 10px 4px;
+    color: var(--ui-text-muted);
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    opacity: 0.65;
+}
+
+.app-nav-group-title:first-child {
+    margin-top: 2px;
 }
 
 .nav-icon {
@@ -161,9 +176,7 @@ html.dark .app-shell .app-sidebar {
 .app-nav-link-active {
     background: var(--ui-primary) !important;
     border-color: var(--ui-primary) !important;
-    border-left-color: var(--ui-accent) !important;
     color: #ffffff !important;
-    box-shadow: var(--ui-shadow-soft);
 }
 
 .app-nav-link-active::after {
@@ -201,7 +214,6 @@ html.dark .app-shell .app-sidebar {
     font-weight: 850;
     letter-spacing: 0.015em;
     line-height: 1.2;
-    text-transform: uppercase;
 }
 
 .app-topbar-title h1::before,
@@ -239,7 +251,6 @@ html.dark .app-shell .app-sidebar {
     font-size: 1rem;
     font-weight: 850;
     letter-spacing: 0.02em;
-    text-transform: uppercase;
 }
 
 .dbx-subtle,
@@ -277,7 +288,7 @@ html.dark .app-shell .app-sidebar {
     width: 36px;
     height: 20px;
     border: 1px solid var(--ui-border-strong);
-    border-radius: 10px;
+    border-radius: var(--ui-radius-pill);
     background: var(--ui-surface-soft);
     cursor: pointer;
     position: relative;
@@ -331,7 +342,6 @@ html.dark .dbx-toggle input[type="checkbox"]::after {
     gap: 6px;
     letter-spacing: 0.02em;
     padding: 7px 11px;
-    text-transform: uppercase;
     transform: none;
     transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
 }
@@ -409,7 +419,6 @@ input:hover {
     font-size: 0.72rem;
     font-weight: 850;
     letter-spacing: 0.05em;
-    text-transform: uppercase;
 }
 
 .badge,
@@ -423,7 +432,6 @@ input:hover {
     letter-spacing: 0.035em;
     line-height: 1.15;
     padding: 4px 7px;
-    text-transform: uppercase;
 }
 
 .badge-neutral,
@@ -480,7 +488,6 @@ input:hover {
     font-size: 0.72rem;
     font-weight: 850;
     letter-spacing: 0.035em;
-    text-transform: uppercase;
 }
 
 .dbx-table td,
@@ -686,16 +693,6 @@ html.dark input {
     background: linear-gradient(90deg, var(--ui-primary) 0%, var(--ui-primary-strong) 100%) !important;
 }
 
-.app-nav-link-active::before {
-    content: "";
-    position: absolute;
-    top: 8px;
-    bottom: 8px;
-    left: -4px;
-    width: 4px;
-    background: var(--ui-accent);
-}
-
 .dbx-table-wrap,
 .table-wrap,
 .local-printer-table {
@@ -778,8 +775,59 @@ input[type="radio"]:focus-visible {
 }
 
 html.dark .app-shell .app-sidebar {
-    background:
-        linear-gradient(180deg, color-mix(in srgb, var(--ui-primary-soft) 26%, var(--ui-nav)) 0%, var(--ui-nav-strong) 100%) !important;
+    background: linear-gradient(180deg, var(--ui-surface) 0%, var(--ui-nav) 100%) !important;
+    border-right-color: var(--ui-border) !important;
+}
+
+/* Neutraliza hardcodes de app.css — todos los elementos del shell */
+html.dark .app-topbar {
+    background: var(--ui-surface) !important;
+    border-top-color: var(--ui-border) !important;
+    border-bottom-color: var(--ui-border) !important;
+    box-shadow: 0 1px 0 var(--ui-border) !important;
+}
+
+html.dark .app-topbar-title h1 {
+    color: var(--ui-text) !important;
+}
+
+html.dark .app-nav-link {
+    color: var(--ui-text-muted) !important;
+}
+
+html.dark .app-nav-link:hover {
+    background: rgba(177, 186, 196, 0.08) !important;
+    color: var(--ui-text) !important;
+}
+
+html.dark .app-nav-link-active {
+    background: color-mix(in srgb, var(--ui-primary) 14%, transparent) !important;
+    color: var(--ui-primary-strong) !important;
+    border-left-color: var(--ui-primary) !important;
+}
+
+html.dark .app-nav-link-active::before {
+    background: var(--ui-primary) !important;
+}
+
+html.dark .app-nav-link-active::after {
+    border-right-color: var(--ui-nav) !important;
+}
+
+html.dark .app-brand {
+    border-bottom-color: var(--ui-border) !important;
+}
+
+html.dark .app-brand-name,
+html.dark .app-brand span {
+    color: var(--ui-text) !important;
+}
+
+html.dark .app-topbar .badge-neutral,
+html.dark .badge-neutral {
+    background: var(--ui-surface-raised) !important;
+    border-color: var(--ui-border-strong) !important;
+    color: var(--ui-text-muted) !important;
 }
 
 html.dark .app-topbar::before,
@@ -1000,7 +1048,6 @@ html.dark .btn-warning {
     font-weight: 800;
     letter-spacing: 0.02em;
     padding: 5px 9px;
-    text-transform: uppercase;
 }
 
 .bulk-action-control {
@@ -1066,7 +1113,6 @@ html.dark .btn-warning {
     color: var(--ui-text-muted);
     font-size: 0.82rem;
     font-weight: 800;
-    text-transform: uppercase;
 }
 
 .dbx-pagination .is-disabled {
@@ -1183,7 +1229,6 @@ html.dark .btn-warning {
     font-size: 0.72rem;
     font-weight: 850;
     letter-spacing: 0.05em;
-    text-transform: uppercase;
 }
 
 .dbx-health-ring-copy {
@@ -1252,7 +1297,6 @@ html.dark .btn-warning {
     font-weight: 800;
     letter-spacing: 0.035em;
     line-height: 1.15;
-    text-transform: uppercase;
 }
 
 .dbx-health-legend-row strong {
@@ -1418,7 +1462,6 @@ html.dark .btn-warning {
     line-height: 1.05;
     overflow: hidden;
     text-overflow: ellipsis;
-    text-transform: uppercase;
     white-space: nowrap;
 }
 
@@ -1568,7 +1611,6 @@ html.dark .btn-warning {
     line-height: 1.05;
     overflow: hidden;
     text-overflow: ellipsis;
-    text-transform: uppercase;
     white-space: nowrap;
 }
 
@@ -1735,7 +1777,6 @@ html.dark .btn-warning {
     line-height: 1;
     padding: 7px 11px;
     text-decoration: none;
-    text-transform: uppercase;
     white-space: nowrap;
 }
 
@@ -1778,7 +1819,6 @@ html.dark .btn-warning {
     font-weight: 900;
     letter-spacing: 0.055em;
     line-height: 1;
-    text-transform: uppercase;
 }
 
 .dbx-store-summary-group p {
@@ -2023,7 +2063,6 @@ html.dark .dbx-printer-summary {
     letter-spacing: 0.02em;
     line-height: 1.1;
     padding: 6px 4px;
-    text-transform: uppercase;
     transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease, box-shadow 0.14s ease;
 }
 
@@ -2104,7 +2143,6 @@ html.dark .severity-picker {
     font-size: 0.72rem;
     font-weight: 850;
     letter-spacing: 0.04em;
-    text-transform: uppercase;
 }
 
 .threshold-rule-head span:nth-child(2) {
@@ -2314,9 +2352,10 @@ html.dark .dbx-selectable-row.is-selected td {
 }
 
 .app-logo {
-    width: 108px;
-    height: 54px;
+    width: 44px;
+    height: 44px;
     object-fit: contain;
+    flex-shrink: 0;
 }
 
 .app-nav {
@@ -2325,10 +2364,46 @@ html.dark .dbx-selectable-row.is-selected td {
 
 .app-sidebar-footer {
     display: flex;
+    flex-direction: column;
+    gap: 10px;
     justify-content: flex-start;
     margin-top: auto;
     padding: 14px 4px 2px;
     border-top: 1px solid var(--ui-border);
+}
+
+.app-sidebar-identity {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 0 6px;
+    min-width: 0;
+}
+
+.app-sidebar-identity-name {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--ui-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.app-sidebar-identity-role {
+    align-self: flex-start;
+}
+
+.app-sidebar-footer-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.app-sidebar-footer-actions .btn {
+    width: 40px;
+    height: 40px;
+    min-height: 40px;
+    padding: 0;
 }
 
 .theme-toggle {
@@ -2475,7 +2550,6 @@ html.dark .theme-icon-moon {
     font-size: 0.72rem;
     font-weight: 850;
     letter-spacing: 0.1em;
-    text-transform: uppercase;
 }
 
 .login-brand-copy h1 {
@@ -2484,7 +2558,6 @@ html.dark .theme-icon-moon {
     font-size: clamp(2rem, 4vw, 3.3rem);
     font-weight: 850;
     line-height: 0.98;
-    text-transform: uppercase;
 }
 
 .login-brand-copy p {
@@ -2512,7 +2585,6 @@ html.dark .theme-icon-moon {
     font-size: 0.72rem;
     font-weight: 850;
     letter-spacing: 0.09em;
-    text-transform: uppercase;
 }
 
 .login-access h2 {
@@ -2521,7 +2593,6 @@ html.dark .theme-icon-moon {
     font-size: 1.75rem;
     font-weight: 850;
     line-height: 1.1;
-    text-transform: uppercase;
 }
 
 .login-access p {
@@ -2680,7 +2751,6 @@ html.dark .login-logo-frame {
     font-size: 0.63rem;
     font-weight: 850;
     line-height: 1.2;
-    text-transform: uppercase;
     white-space: nowrap;
 }
 
@@ -2750,11 +2820,6 @@ html.dark .login-logo-frame {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-}
-
-.dbx-printers-table .dbx-table {
-    width: 100%;
-    table-layout: fixed;
 }
 
 .dbx-printers-table .dbx-table th.text-col:nth-child(1),
@@ -2830,7 +2895,6 @@ html.dark .login-logo-frame {
     color: var(--ui-danger);
     font-size: 0.72rem;
     font-weight: 850;
-    text-transform: uppercase;
 }
 
 .dbx-rule-form-section {
@@ -2858,7 +2922,6 @@ html.dark .login-logo-frame {
     color: var(--ui-primary);
     font-size: 0.92rem;
     font-weight: 850;
-    text-transform: uppercase;
 }
 
 .dbx-rule-form-section-title span {
@@ -2936,7 +2999,6 @@ html.dark .login-logo-frame {
 .dbx-bar-label {
     font-size: 11px !important;
     font-weight: 750 !important;
-    text-transform: uppercase;
     letter-spacing: 0.025em;
     display: flex;
     align-items: center;
@@ -3110,23 +3172,24 @@ html.dark .dbx-table .dbx-alert-row-warning td {
     }
 }
 
-/* ===== Collapsible sidebar ===== */
+/* ===== Sidebar: pin + hover auto-expand ===== */
 
-/* Footer gap for the new compact-toggle button */
+/* Footer gap */
 .app-sidebar-footer {
     gap: 8px;
 }
 
-/* Brand title: transitionable overflow for compact collapse */
-.app-brand > span {
+/* Brand title: transitions for collapse/expand */
+.app-brand > span,
+.app-brand-name {
     overflow: hidden;
     white-space: nowrap;
     max-width: 200px;
     opacity: 1;
-    transition: max-width 0.22s ease, opacity 0.16s ease;
+    transition: max-width 0.28s ease-in-out, opacity 0.22s ease-in-out;
 }
 
-/* Nav label: collapses horizontally with smooth transition */
+/* Nav label */
 .nav-label {
     overflow: hidden;
     white-space: nowrap;
@@ -3134,7 +3197,7 @@ html.dark .dbx-table .dbx-alert-row-warning td {
     opacity: 1;
     flex-shrink: 1;
     min-width: 0;
-    transition: max-width 0.22s ease, opacity 0.16s ease;
+    transition: max-width 0.28s ease-in-out, opacity 0.22s ease-in-out;
 }
 
 /* Tooltip: shown only in compact mode on hover */
@@ -3151,7 +3214,6 @@ html.dark .dbx-table .dbx-alert-row-warning td {
     font-size: 0.72rem;
     font-weight: 850;
     letter-spacing: 0.03em;
-    text-transform: uppercase;
     white-space: nowrap;
     z-index: 9999;
     pointer-events: none;
@@ -3179,8 +3241,8 @@ html.dark .nav-tooltip::before {
     border-right-color: var(--ui-primary-strong);
 }
 
-/* Compact sidebar toggle button */
-.sidebar-compact-btn {
+/* Pin button (replaces compact-btn) */
+.sidebar-pin-btn {
     width: 40px;
     height: 40px;
     min-height: 40px !important;
@@ -3188,28 +3250,29 @@ html.dark .nav-tooltip::before {
     flex-shrink: 0;
 }
 
-.sidebar-compact-btn svg {
+.sidebar-pin-btn svg {
     width: 16px;
     height: 16px;
     flex-shrink: 0;
 }
 
 @media (max-width: 1024px) {
-    .sidebar-compact-btn {
+    .sidebar-pin-btn {
         display: none !important;
     }
 }
 
-/* Desktop: updated width (248px) + smooth width transition */
+/* Desktop: width + transition */
 @media (min-width: 1025px) {
     .app-shell .app-sidebar {
         width: 248px !important;
-        transition: width 0.24s ease !important;
+        overflow: hidden;
+        transition: width 0.28s ease-in-out !important;
     }
 
     .app-shell .app-content {
         margin-left: 248px !important;
-        transition: margin-left 0.24s ease !important;
+        transition: margin-left 0.28s ease-in-out !important;
     }
 
     body.sidebar-compact .app-shell .app-sidebar {
@@ -3219,37 +3282,56 @@ html.dark .nav-tooltip::before {
     body.sidebar-compact .app-shell .app-content {
         margin-left: 72px !important;
     }
+
+    /* Pinned: sidebar always at 248px, content offset restores */
+    body.sidebar-pinned .app-shell .app-sidebar,
+    html.sidebar-pinned .app-shell .app-sidebar {
+        width: 248px !important;
+    }
+
+    body.sidebar-pinned .app-shell .app-content,
+    html.sidebar-pinned .app-shell .app-content {
+        margin-left: 248px !important;
+    }
 }
 
-/* Compact mode: hide labels and brand title */
+/* Compact: hide labels and brand title */
 body.sidebar-compact .nav-label {
     max-width: 0 !important;
     opacity: 0 !important;
 }
 
-body.sidebar-compact .app-brand > span {
+body.sidebar-compact .app-brand > span,
+body.sidebar-compact .app-brand-name {
     max-width: 0 !important;
     opacity: 0 !important;
 }
 
-/* Compact mode: center brand area */
+body.sidebar-compact .app-nav-group-title {
+    display: none;
+}
+
+body.sidebar-compact .app-sidebar-identity {
+    display: none;
+}
+
 body.sidebar-compact .app-brand {
     justify-content: center;
 }
 
-/* Compact mode: shrink logo to fit 72px sidebar */
-body.sidebar-compact .app-logo {
+/* Compact: shrink real logo to fit 72px sidebar */
+body.sidebar-compact .app-logo-full {
     width: 44px !important;
     height: 36px !important;
 }
 
-/* Compact mode: reduce sidebar horizontal padding so logo/icons center properly */
+/* Compact: shrink sidebar padding */
 body.sidebar-compact .app-shell .app-sidebar {
     padding-left: 6px !important;
     padding-right: 6px !important;
 }
 
-/* Compact mode: normalize border to 1px all sides (removes 4px left-border bias) */
+/* Compact: center nav items */
 body.sidebar-compact .app-nav-link {
     justify-content: center !important;
     padding: 9px !important;
@@ -3265,7 +3347,7 @@ body.sidebar-compact .app-nav-link-active::before {
     display: none !important;
 }
 
-/* Compact mode: tooltip only on hover — display:none prevents layout overflow/scrollbar */
+/* Compact: tooltip on hover */
 @keyframes nav-tooltip-in {
     from { opacity: 0; transform: translateY(-50%) translateX(-6px); }
     to   { opacity: 1; transform: translateY(-50%); }
@@ -3274,57 +3356,102 @@ body.sidebar-compact .app-nav-link-active::before {
 body.sidebar-compact .app-nav-link:hover .nav-tooltip,
 body.sidebar-compact .app-nav-link:focus-visible .nav-tooltip {
     display: block;
-    opacity: 1;
     transform: translateY(-50%);
-    animation: nav-tooltip-in 0.15s ease;
+    animation: nav-tooltip-in 0.15s ease 0.35s forwards;
 }
 
-/* Compact mode: stack footer buttons vertically */
+/* Compact: stack footer buttons vertically */
 body.sidebar-compact .app-sidebar-footer {
-    flex-direction: column;
     align-items: center;
     justify-content: center;
 }
 
-/* ---- Preload state: set compact instantly on page load (no flash, no animation) ---- */
-/* html.sc-init is added by the <head> inline script before first paint.              */
-/* initSidebarCollapse() removes it after applying body.sidebar-compact.               */
+body.sidebar-compact .app-sidebar-footer-actions {
+    flex-direction: column;
+}
 
+/* Pinned: full expand state (overrides compact on same body) */
+body.sidebar-pinned .nav-label,
+html.sidebar-pinned .nav-label {
+    max-width: 200px !important;
+    opacity: 1 !important;
+}
+
+body.sidebar-pinned .app-brand > span,
+body.sidebar-pinned .app-brand-name,
+html.sidebar-pinned .app-brand > span,
+html.sidebar-pinned .app-brand-name {
+    max-width: 200px !important;
+    opacity: 1 !important;
+}
+
+body.sidebar-pinned .app-nav-group-title,
+html.sidebar-pinned .app-nav-group-title {
+    display: block;
+}
+
+body.sidebar-pinned .app-sidebar-identity,
+html.sidebar-pinned .app-sidebar-identity {
+    display: flex;
+}
+
+body.sidebar-pinned .app-brand,
+html.sidebar-pinned .app-brand {
+    justify-content: flex-start;
+}
+
+body.sidebar-pinned .app-logo-full,
+html.sidebar-pinned .app-logo-full {
+    width: 80px !important;
+    height: 38px !important;
+}
+
+body.sidebar-pinned .app-shell .app-sidebar,
+html.sidebar-pinned .app-shell .app-sidebar {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+}
+
+body.sidebar-pinned .app-nav-link,
+html.sidebar-pinned .app-nav-link {
+    justify-content: flex-start !important;
+    padding: 9px 10px !important;
+    border: 1px solid transparent !important;
+    border-left: 4px solid transparent !important;
+    overflow: hidden;
+}
+
+body.sidebar-pinned .app-sidebar-footer,
+html.sidebar-pinned .app-sidebar-footer {
+    align-items: stretch;
+    justify-content: flex-start;
+}
+
+body.sidebar-pinned .app-sidebar-footer-actions,
+html.sidebar-pinned .app-sidebar-footer-actions {
+    flex-direction: row;
+}
+
+/* ---- Preload: html.sidebar-pinned set by head script for pinned users (no flash) ---- */
 @media (min-width: 1025px) {
-    html.sc-init .app-shell .app-sidebar {
-        width: 72px !important;
-        padding-left: 6px !important;
-        padding-right: 6px !important;
+    html.sidebar-pinned .app-shell .app-sidebar,
+    html.sidebar-pinned .app-shell .app-content {
         transition: none !important;
-    }
-
-    html.sc-init .app-shell .app-content {
-        margin-left: 72px !important;
-        transition: none !important;
-    }
-
-    html.sc-init .app-nav-link {
-        justify-content: center !important;
-        padding: 9px !important;
-        border: 1px solid transparent !important;
     }
 }
 
-html.sc-init .nav-label,
-html.sc-init .app-brand > span {
-    max-width: 0 !important;
-    opacity: 0 !important;
+html.sidebar-pinned .nav-label,
+html.sidebar-pinned .app-brand > span,
+html.sidebar-pinned .app-brand-name {
     transition: none !important;
 }
 
-html.sc-init .app-brand {
-    justify-content: center;
-}
-
-/* Mobile/tablet: reset all compact overrides — sidebar uses drawer mode */
+/* Mobile/tablet: reset all compact overrides */
 @media (max-width: 1024px) {
     body.sidebar-compact .app-shell .app-sidebar {
         width: 284px !important;
+        padding-left: 14px !important;
+        padding-right: 14px !important;
     }
 
     body.sidebar-compact .app-shell .app-content {
@@ -3336,18 +3463,27 @@ html.sc-init .app-brand {
         opacity: 1 !important;
     }
 
-    body.sidebar-compact .app-brand > span {
+    body.sidebar-compact .app-brand > span,
+    body.sidebar-compact .app-brand-name {
         max-width: 200px !important;
         opacity: 1 !important;
+    }
+
+    body.sidebar-compact .app-nav-group-title {
+        display: block;
+    }
+
+    body.sidebar-compact .app-sidebar-identity {
+        display: flex;
     }
 
     body.sidebar-compact .app-brand {
         justify-content: flex-start;
     }
 
-    body.sidebar-compact .app-logo {
-        width: 108px !important;
-        height: 54px !important;
+    body.sidebar-compact .app-logo-full {
+        width: 80px !important;
+        height: 38px !important;
     }
 
     body.sidebar-compact .app-nav-link {
@@ -3359,13 +3495,37 @@ html.sc-init .app-brand {
     }
 
     body.sidebar-compact .app-sidebar-footer {
-        flex-direction: row;
-        align-items: center;
+        align-items: stretch;
         justify-content: flex-start;
+    }
+
+    body.sidebar-compact .app-sidebar-footer-actions {
+        flex-direction: row;
     }
 
     body.sidebar-compact .nav-tooltip {
         display: none !important;
+    }
+}
+
+/* Topbar logout: hide text on narrow screens */
+@media (max-width: 640px) {
+    .btn-logout .btn-logout-text {
+        display: none;
+    }
+}
+
+/* Prefers reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    .app-brand > span,
+    .app-brand-name,
+    .nav-label,
+    .app-shell .app-sidebar,
+    .app-shell .app-content,
+    .nav-label,
+    .nav-tooltip {
+        transition: none !important;
+        animation: none !important;
     }
 }
 
@@ -3395,7 +3555,6 @@ html.sc-init .app-brand {
     line-height: 1.2;
     text-align: center;
     text-decoration: none;
-    text-transform: uppercase;
     white-space: nowrap;
     cursor: pointer;
     user-select: none;
@@ -3647,7 +3806,7 @@ html.sc-init .app-brand {
     font-size: 0.72rem;
     gap: 4px;
     letter-spacing: 0.015em;
-    border-radius: 5px;
+    border-radius: var(--ui-radius-sm);
 }
 
 /* .btn-md = same as default .btn, no overrides needed */
@@ -3772,8 +3931,6 @@ html.dark .btn-outline {
    ===================================================================== */
 
 :root {
-    --btn-radius: 7px;
-    --btn-radius-sm: 6px;
     --btn-glass-shadow: 0 3px 10px rgba(27, 47, 130, 0.10);
     --btn-glass-shadow-hover: 0 7px 18px rgba(27, 47, 130, 0.16);
     --btn-glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.58);
@@ -3800,7 +3957,7 @@ html.dark .btn-outline {
     min-height: 32px;
     padding: 6px 12px;
     border: 1px solid var(--btn-border);
-    border-radius: var(--btn-radius);
+    border-radius: var(--ui-radius);
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0) 42%),
         linear-gradient(135deg, var(--btn-bg-a), var(--btn-bg-b));
@@ -3815,7 +3972,6 @@ html.dark .btn-outline {
     line-height: 1.15;
     text-align: center;
     text-decoration: none;
-    text-transform: uppercase;
     white-space: nowrap;
     cursor: pointer;
     user-select: none;
@@ -3838,7 +3994,7 @@ html.dark .btn-outline {
     position: absolute;
     inset: 1px 1px auto;
     height: 42%;
-    border-radius: calc(var(--btn-radius) - 2px);
+    border-radius: calc(var(--ui-radius) - 2px);
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0));
     pointer-events: none;
     z-index: -1;
@@ -3963,7 +4119,7 @@ html.dark .btn-outline {
 .table td .btn {
     min-height: 28px;
     padding: 4px 9px;
-    border-radius: var(--btn-radius-sm);
+    border-radius: var(--ui-radius-sm);
     font-size: 0.69rem;
     gap: 4px;
 }
@@ -4001,7 +4157,7 @@ html.dark .btn-outline {
 .app-topbar-actions .select,
 .app-context-badge {
     min-height: 34px;
-    border-radius: var(--btn-radius);
+    border-radius: var(--ui-radius);
 }
 
 .app-topbar-actions .select {
@@ -4109,7 +4265,7 @@ html.dark .app-context-badge {
     backdrop-filter: blur(10px) saturate(1.08);
     background: linear-gradient(180deg, var(--btn-bg-a) 0%, var(--btn-bg-b) 100%);
     border: 1px solid var(--btn-border);
-    border-radius: 7px;
+    border-radius: var(--ui-radius);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.72),
         0 1px 2px rgba(15, 23, 42, 0.08),
@@ -4130,7 +4286,6 @@ html.dark .app-context-badge {
     position: relative;
     text-align: center;
     text-decoration: none;
-    text-transform: uppercase;
     transition:
         transform 160ms ease,
         box-shadow 160ms ease,
@@ -4314,7 +4469,7 @@ html.dark .app-context-badge {
 .app-topbar-actions .btn,
 .app-topbar-actions .select,
 .app-context-badge {
-    border-radius: 7px;
+    border-radius: var(--ui-radius);
     min-height: 34px;
 }
 
@@ -4339,7 +4494,6 @@ html.dark .app-context-badge {
     font-weight: 850;
     letter-spacing: 0.018em;
     padding-inline: 12px;
-    text-transform: uppercase;
 }
 
 .app-topbar-actions .select {
@@ -4370,7 +4524,7 @@ html.dark .app-context-badge {
     backdrop-filter: blur(10px) saturate(1.08);
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(247, 250, 255, 0.68));
     border: 1px solid rgba(32, 55, 141, 0.28);
-    border-radius: 7px;
+    border-radius: var(--ui-radius);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.72),
         0 6px 16px rgba(24, 47, 122, 0.06);
@@ -4384,7 +4538,6 @@ html.dark .app-context-badge {
     padding: 7px 13px;
     position: relative;
     text-decoration: none;
-    text-transform: uppercase;
     transition:
         transform 160ms ease,
         border-color 160ms ease,
@@ -4423,7 +4576,7 @@ html.dark .app-context-badge {
     backdrop-filter: blur(10px) saturate(1.08);
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(247, 250, 255, 0.68));
     border: 1px solid rgba(32, 55, 141, 0.28);
-    border-radius: 7px;
+    border-radius: var(--ui-radius);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.72),
         0 6px 16px rgba(24, 47, 122, 0.06);
@@ -4494,6 +4647,60 @@ html.dark .dbx-store-view-tab.is-active {
     color: #ffffff;
 }
 
+.dbx-bulk-bar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: 0 0 14px;
+    padding: 10px 14px;
+    border: 1px solid color-mix(in srgb, var(--ui-primary) 30%, var(--ui-border));
+    border-radius: var(--ui-radius);
+    background: var(--ui-primary-soft);
+}
+
+.dbx-bulk-bar-count {
+    font-weight: 800;
+    font-size: 0.82rem;
+    color: var(--ui-primary-strong);
+    white-space: nowrap;
+}
+
+.dbx-bulk-bar-hint {
+    font-size: 0.8rem;
+    color: var(--ui-text-muted);
+    flex: 1 1 auto;
+}
+
+.dbx-bulk-bar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.dbx-count-link {
+    color: var(--ui-primary-strong);
+    text-decoration: none;
+    font-weight: 700;
+    border-radius: var(--ui-radius-sm);
+}
+
+.dbx-count-link:hover {
+    text-decoration: underline;
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
     .btn,
     .dbx-tab,
@@ -4541,7 +4748,7 @@ html.dark .dbx-store-view-tab.is-active {
         linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.04) 46%, rgba(255, 255, 255, 0.12)),
         linear-gradient(135deg, var(--glass-bg), var(--glass-bg-tint));
     border: 1px solid var(--glass-border);
-    border-radius: 8px;
+    border-radius: var(--ui-radius);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.58),
         inset 0 -1px 0 color-mix(in srgb, var(--glass-accent) 12%, transparent),
@@ -4664,13 +4871,13 @@ html.dark .dbx-store-view-tab.is-active {
 .action-buttons .btn,
 .dbx-table td .btn,
 .table td .btn {
-    border-radius: 7px;
+    border-radius: var(--ui-radius-sm);
     min-height: 28px;
     padding: 4px 9px;
 }
 
 .btn-icon {
-    border-radius: 8px;
+    border-radius: var(--ui-radius-sm);
 }
 
 .app-context-badge,
@@ -5106,14 +5313,14 @@ html.dark .table-alerts tbody tr.dbx-alert-row-healthy:hover td {
     min-width: 100%;
 }
 
-.dbx-printers-table .dbx-table {
-    width: 100%;
-    table-layout: fixed;
-}
-
 .dbx-printers-table .dbx-table th,
 .dbx-printers-table .dbx-table td {
     max-width: none;
+}
+
+.dbx-printers-table td.text-col,
+.dbx-printers-table th.text-col {
+    white-space: nowrap;
 }
 
 .dbx-table th,
@@ -5179,6 +5386,12 @@ html.dark .table-alerts tbody tr.dbx-alert-row-healthy:hover td {
 .dbx-routing-layout {
     display: grid;
     grid-template-columns: minmax(200px, 260px) minmax(0, 1fr) !important;
+}
+
+@media (max-width: 900px) {
+    .dbx-routing-layout {
+        grid-template-columns: 1fr !important;
+    }
 }
 
 .dbx-store-summary-groups,
@@ -5360,7 +5573,7 @@ html.dark .table-alerts tbody tr.dbx-alert-row-healthy:hover td {
     padding: 0.75rem 0.85rem;
     border: 1px solid rgba(239, 68, 68, 0.34);
     border-left: 4px solid var(--danger);
-    border-radius: 8px;
+    border-radius: var(--ui-radius);
     background: rgba(254, 242, 242, 0.9);
     color: #991b1b;
     font-size: 0.86rem;
@@ -5413,7 +5626,6 @@ html.dark .dynamic-panel-error {
     font-weight: 800;
     color: var(--ui-text-muted);
     letter-spacing: 0.04em;
-    text-transform: uppercase;
     white-space: nowrap;
 }
 
@@ -5550,7 +5762,6 @@ html.dark .dynamic-panel-error {
 .dbx-summary-mini-label {
     font-size: 8px !important;
     letter-spacing: 0.07em !important;
-    text-transform: uppercase !important;
     color: var(--ui-text-muted) !important;
     font-weight: 800 !important;
 }
@@ -5808,6 +6019,63 @@ html.dark .app-toast {
     background: var(--ui-surface-raised);
     border-color: var(--ui-border-strong);
     box-shadow: var(--ui-shadow);
+}
+
+/* ── Confirm dialog (sustituye a confirm() nativo) ───────────────────── */
+.app-confirm-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    background: rgba(15, 23, 42, 0.44);
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.app-confirm-overlay.is-open {
+    display: flex;
+}
+
+.app-confirm-dialog {
+    width: 100%;
+    max-width: 420px;
+    background: var(--ui-surface-raised);
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius);
+    box-shadow: var(--ui-shadow);
+    padding: 20px;
+}
+
+.app-confirm-title {
+    margin: 0 0 8px;
+    font-size: 1rem;
+    font-weight: 800;
+    color: var(--ui-text);
+}
+
+.app-confirm-message {
+    margin: 0;
+    font-size: 0.86rem;
+    line-height: 1.5;
+    color: var(--ui-text-muted);
+    word-break: break-word;
+}
+
+.app-confirm-type {
+    margin-top: 12px;
+    width: 100%;
+}
+
+.app-confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 18px;
+}
+
+.app-confirm-dialog.is-danger .app-confirm-title {
+    color: var(--ui-danger);
 }
 
 /* Cola: contador de seleccionados fijo en esquina superior derecha del banner. */

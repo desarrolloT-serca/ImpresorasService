@@ -120,10 +120,11 @@
     };
 @endphp
 
-<span id="autoRefreshCountdown" class="dbx-auto-refresh-status" hidden aria-live="polite" title="Próximo refresco automático"></span>
+<span id="autoRefreshCountdown" class="dbx-auto-refresh-status" hidden aria-hidden="true" title="Próximo refresco automático"></span>
+<span id="dashboardLiveStatus" class="sr-only" aria-live="polite" aria-atomic="true"></span>
 
 @fragment('dashboard-content')
-<div class="dbx-dashboard-page" data-dashboard-dynamic aria-live="polite">
+<div class="dbx-dashboard-page" data-dashboard-dynamic>
 @include('dashboard.partials.filters')
 
 <section class="dbx-wrap">
@@ -1001,6 +1002,12 @@
         return document.querySelector('[data-dashboard-dynamic]');
     }
 
+    function announceDashboardUpdated() {
+        const el = document.getElementById('dashboardLiveStatus');
+        if (!el) return;
+        el.textContent = 'Dashboard actualizado, ' + new Date().toLocaleTimeString();
+    }
+
     function initStatsToggle(root) {
         const toggle = root.querySelector('#dbx-stats-toggle');
         if (!toggle || toggle.dataset.dynamicBound === '1') return;
@@ -1128,6 +1135,8 @@
             if (pushState) {
                 history.pushState({ dynamicPanel: 'dashboard' }, '', url);
             }
+
+            announceDashboardUpdated();
         } catch (error) {
             if (error.name === 'AbortError') return;
             const root = getDashboardRoot();

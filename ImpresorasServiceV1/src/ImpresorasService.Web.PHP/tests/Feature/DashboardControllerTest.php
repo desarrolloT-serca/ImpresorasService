@@ -36,6 +36,13 @@ class DashboardControllerTest extends TestCase
                 return $this->responseFor($path);
             }
 
+            public function getQuiet(string $path): array
+            {
+                $this->paths[] = $path;
+
+                return $this->responseFor($path);
+            }
+
             /**
              * @return array<int|string, mixed>
              */

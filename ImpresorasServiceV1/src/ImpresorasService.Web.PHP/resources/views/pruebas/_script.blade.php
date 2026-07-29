@@ -147,7 +147,10 @@
 
     document.getElementById('btn-eliminar-escenario')?.addEventListener('click', async e => {
         const id = e.currentTarget.dataset.id;
-        if (!confirm('¿Eliminar este escenario?')) return;
+        const ok = window.confirmDialog
+            ? await window.confirmDialog('Se eliminara este escenario de prueba.', { title: 'Eliminar escenario', confirmLabel: 'Eliminar', danger: true })
+            : confirm('¿Eliminar este escenario?');
+        if (!ok) return;
         const url = '{{ url('/pruebas/scenarios') }}/' + encodeURIComponent(id);
         const { ok, data } = await apiFetch(url, { method: 'DELETE' });
         if (ok) {

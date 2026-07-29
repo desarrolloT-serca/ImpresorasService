@@ -5,11 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'Impresoras Service')</title>
+    <link rel="icon" type="image/svg+xml" href="{{ asset('img/serca-logo.svg') }}">
+    <link rel="icon" type="image/png" href="{{ asset('img/serca-logo.png') }}">
+    <meta name="theme-color" id="theme-color-meta" content="#1b2f82">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @yield('page_styles')
     @vite('resources/css/dbx.css')
     @vite('resources/css/system.css')
-    <script>if(localStorage.getItem('sidebar-compact')==='true'){document.documentElement.classList.add('sc-init');}</script>
+    <script>if(localStorage.getItem('sidebar-pinned')==='true'){document.documentElement.classList.add('sidebar-pinned');}</script>
 </head>
 <body class="min-h-screen">
     <div class="app-shell">
@@ -17,20 +20,21 @@
         <aside class="app-sidebar" id="app-sidebar">
             <div class="app-brand">
                 @if(file_exists(public_path('img/serca-logo.png')))
-                    <img src="{{ asset('img/serca-logo.png') }}" alt="AD Serca" class="app-logo">
+                    <img src="{{ asset('img/serca-logo.png') }}" alt="AD Serca" class="app-logo app-logo-full">
                 @elseif(file_exists(public_path('img/serca-logo.svg')))
-                    <img src="{{ asset('img/serca-logo.svg') }}" alt="AD Serca" class="app-logo">
+                    <img src="{{ asset('img/serca-logo.svg') }}" alt="AD Serca" class="app-logo app-logo-full">
                 @elseif(file_exists(public_path('img/ad-logo.svg')))
-                    <img src="{{ asset('img/ad-logo.svg') }}" alt="AD Serca" class="app-logo">
+                    <img src="{{ asset('img/ad-logo.svg') }}" alt="AD Serca" class="app-logo app-logo-full">
                 @elseif(file_exists(public_path('img/logo.png')))
-                    <img src="{{ asset('img/logo.png') }}" alt="Logo" class="app-logo">
+                    <img src="{{ asset('img/logo.png') }}" alt="Logo" class="app-logo app-logo-full">
                 @else
-                    <div class="app-logo-fallback">AD</div>
+                    <div class="app-logo-fallback app-logo-full">AD</div>
                 @endif
-                <span class="text-white font-semibold">Impresoras Service</span>
+                <span class="app-brand-name">Impresoras Service</span>
             </div>
 
             <nav class="app-nav">
+                <span class="app-nav-group-title">Operación</span>
                 <a href="{{ route('dashboard') }}" class="app-nav-link {{ request()->routeIs('dashboard') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('dashboard')) aria-current="page" @endif data-label="Dashboard">
                     <svg class="nav-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
                     <span class="nav-label">Dashboard</span>
@@ -41,6 +45,11 @@
                     <span class="nav-label">Cola</span>
                     <span class="nav-tooltip" aria-hidden="true">Cola</span>
                 </a>
+                <a href="{{ route('alertas.index') }}" class="app-nav-link {{ request()->routeIs('alertas.index') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('alertas.index')) aria-current="page" @endif data-label="Alertas">
+                    <svg class="nav-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                    <span class="nav-label">Alertas</span>
+                    <span class="nav-tooltip" aria-hidden="true">Alertas</span>
+                </a>
                 @if(($isStoreManager ?? false) || ($isAdmin ?? false))
                     <a href="{{ route('impresoras.index') }}" class="app-nav-link {{ request()->routeIs('impresoras.*') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('impresoras.*')) aria-current="page" @endif data-label="Impresoras">
                         <svg class="nav-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>
@@ -49,8 +58,9 @@
                     </a>
                 @endif
                 @if($isAdmin ?? false)
+                    <span class="app-nav-group-title">Configuración</span>
                     <a href="{{ route('reglas.index') }}" class="app-nav-link {{ request()->routeIs('reglas.*') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('reglas.*')) aria-current="page" @endif data-label="Reglas">
-                        <svg class="nav-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="12" y2="18"/><polyline points="15 15 18 18 21 15"/><line x1="18" y1="18" x2="18" y2="11"/></svg>
+                        <svg class="nav-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="12" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="18" cy="18" r="2"/><path d="M8 12h4"/><path d="M12 12l4-6"/><path d="M12 12l4 6"/></svg>
                         <span class="nav-label">Reglas</span>
                         <span class="nav-tooltip" aria-hidden="true">Reglas</span>
                     </a>
@@ -64,53 +74,56 @@
                         <span class="nav-label">Usuarios</span>
                         <span class="nav-tooltip" aria-hidden="true">Usuarios</span>
                     </a>
+                    <span class="app-nav-group-title">Sistema</span>
                     <a href="{{ route('ajustes.index') }}" class="app-nav-link {{ request()->routeIs('ajustes.*') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('ajustes.*')) aria-current="page" @endif data-label="Ajustes">
                         <svg class="nav-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                         <span class="nav-label">Ajustes</span>
                         <span class="nav-tooltip" aria-hidden="true">Ajustes</span>
-                    </a>
-                    <a href="{{ route('pruebas.index') }}" class="app-nav-link {{ request()->routeIs('pruebas.*') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('pruebas.*')) aria-current="page" @endif data-label="Pruebas">
-                        <svg class="nav-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/><line x1="9" y1="11" x2="15" y2="11"/></svg>
-                        <span class="nav-label">Pruebas</span>
-                        <span class="nav-tooltip" aria-hidden="true">Pruebas</span>
                     </a>
                     <a href="{{ route('alertas.configuracion') }}" class="app-nav-link {{ request()->routeIs('alertas.configuracion') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('alertas.configuracion')) aria-current="page" @endif data-label="Telegram">
                         <svg class="nav-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                         <span class="nav-label">Telegram</span>
                         <span class="nav-tooltip" aria-hidden="true">Telegram</span>
                     </a>
+                    <span class="app-nav-group-title">Desarrollo</span>
+                    <a href="{{ route('pruebas.index') }}" class="app-nav-link {{ request()->routeIs('pruebas.*') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('pruebas.*')) aria-current="page" @endif data-label="Pruebas">
+                        <svg class="nav-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+                        <span class="nav-label">Pruebas</span>
+                        <span class="nav-tooltip" aria-hidden="true">Pruebas</span>
+                    </a>
                 @endif
-                <a href="{{ route('alertas.index') }}" class="app-nav-link {{ request()->routeIs('alertas.index') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('alertas.index')) aria-current="page" @endif data-label="Alertas">
-                    <svg class="nav-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-                    <span class="nav-label">Alertas</span>
-                    <span class="nav-tooltip" aria-hidden="true">Alertas</span>
-                </a>
             </nav>
             <div class="app-sidebar-footer">
-                <button type="button" id="theme-toggle" class="btn btn-ghost theme-toggle" title="Cambiar tema" aria-label="Cambiar tema">
-                    <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                        <circle cx="12" cy="12" r="4" />
-                        <path d="M12 2v2" />
-                        <path d="M12 20v2" />
-                        <path d="M4.93 4.93l1.41 1.41" />
-                        <path d="M17.66 17.66l1.41 1.41" />
-                        <path d="M2 12h2" />
-                        <path d="M20 12h2" />
-                        <path d="M4.93 19.07l1.41-1.41" />
-                        <path d="M17.66 6.34l1.41-1.41" />
-                    </svg>
-                    <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                        <path d="M21 12.79A8.5 8.5 0 1 1 11.21 3a6.8 6.8 0 0 0 9.79 9.79Z" />
-                    </svg>
-                </button>
-                <button type="button" id="sidebar-compact-toggle" class="btn btn-ghost sidebar-compact-btn" title="Contraer menú" aria-label="Contraer menú">
-                    <svg class="icon-collapse" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/>
-                    </svg>
-                    <svg class="icon-expand" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
-                        <polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/>
-                    </svg>
-                </button>
+                <div class="app-sidebar-identity">
+                    <span class="app-sidebar-identity-name">{{ $authUser['displayName'] ?? $authUser['login'] ?? 'Usuario' }}</span>
+                    <span class="badge badge-neutral app-sidebar-identity-role">{{ $authRoleLabel ?? 'Empleado' }}</span>
+                </div>
+                <div class="app-sidebar-footer-actions">
+                    <button type="button" id="theme-toggle" class="btn btn-ghost theme-toggle" title="Cambiar tema" aria-label="Cambiar tema">
+                        <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                            <circle cx="12" cy="12" r="4" />
+                            <path d="M12 2v2" />
+                            <path d="M12 20v2" />
+                            <path d="M4.93 4.93l1.41 1.41" />
+                            <path d="M17.66 17.66l1.41 1.41" />
+                            <path d="M2 12h2" />
+                            <path d="M20 12h2" />
+                            <path d="M4.93 19.07l1.41-1.41" />
+                            <path d="M17.66 6.34l1.41-1.41" />
+                        </svg>
+                        <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                            <path d="M21 12.79A8.5 8.5 0 1 1 11.21 3a6.8 6.8 0 0 0 9.79 9.79Z" />
+                        </svg>
+                    </button>
+                    <button type="button" id="sidebar-pin-toggle" class="btn btn-ghost sidebar-pin-btn" title="Fijar menú abierto" aria-label="Fijar menú abierto">
+                        <svg class="icon-unpinned" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/>
+                        </svg>
+                        <svg class="icon-pinned" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none" aria-hidden="true" style="display:none">
+                            <line x1="12" y1="17" x2="12" y2="22" stroke="currentColor" stroke-width="2" fill="none"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/>
+                        </svg>
+                    </button>
+                </div>
             </div>
         </aside>
         <main class="app-content">
@@ -152,7 +165,10 @@
                     </span>
                     <form action="{{ route('logout') }}" method="POST" class="inline">
                         @csrf
-                        <button type="submit" class="btn btn-danger">Cerrar sesi&oacute;n</button>
+                        <button type="submit" class="btn btn-danger btn-logout" title="Cerrar sesión" aria-label="Cerrar sesión">
+                            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                            <span class="btn-logout-text">Cerrar sesión</span>
+                        </button>
                     </form>
                 </div>
             </header>
@@ -191,6 +207,8 @@
                     toggle.setAttribute('aria-label', isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro');
                     toggle.setAttribute('title', isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro');
                 }
+                const meta = document.getElementById('theme-color-meta');
+                if (meta) meta.setAttribute('content', isDark ? '#1b1b1f' : '#1b2f82');
             }
 
             function syncServerRenderedControls() {
@@ -236,32 +254,82 @@
                 });
             }
 
-            function initSidebarCollapse() {
-                const compact = localStorage.getItem('sidebar-compact') === 'true';
-                if (compact) document.body.classList.add('sidebar-compact');
-                document.documentElement.classList.remove('sc-init');
+            function initSidebarPin() {
+                const sidebar = document.getElementById('app-sidebar');
+                if (!sidebar) return;
+                const body = document.body;
+                const isPinned = localStorage.getItem('sidebar-pinned') === 'true';
 
-                const btn = document.getElementById('sidebar-compact-toggle');
-                if (!btn) return;
-
-                const iconCollapse = btn.querySelector('.icon-collapse');
-                const iconExpand = btn.querySelector('.icon-expand');
-
-                function syncCompactBtn() {
-                    const isCompact = document.body.classList.contains('sidebar-compact');
-                    if (iconCollapse) iconCollapse.style.display = isCompact ? 'none' : '';
-                    if (iconExpand) iconExpand.style.display = isCompact ? '' : 'none';
-                    btn.title = isCompact ? 'Expandir menú' : 'Contraer menú';
-                    btn.setAttribute('aria-label', isCompact ? 'Expandir menú' : 'Contraer menú');
+                document.documentElement.classList.remove('sidebar-pinned');
+                if (isPinned) {
+                    body.classList.add('sidebar-pinned');
+                } else {
+                    body.classList.add('sidebar-compact');
                 }
 
-                syncCompactBtn();
+                var collapseTimer = null;
+                const sidebarFooter = sidebar.querySelector('.app-sidebar-footer');
 
-                btn.addEventListener('click', function() {
-                    document.body.classList.toggle('sidebar-compact');
-                    const isCompact = document.body.classList.contains('sidebar-compact');
-                    localStorage.setItem('sidebar-compact', isCompact ? 'true' : 'false');
-                    syncCompactBtn();
+                function expand() {
+                    clearTimeout(collapseTimer);
+                    if (!body.classList.contains('sidebar-pinned')) body.classList.remove('sidebar-compact');
+                }
+
+                function scheduleCollapse() {
+                    if (!body.classList.contains('sidebar-pinned')) {
+                        collapseTimer = setTimeout(function() { body.classList.add('sidebar-compact'); }, 500);
+                    }
+                }
+
+                // Expand on nav/brand hover only — NOT on footer hover
+                [sidebar.querySelector('.app-brand'), sidebar.querySelector('.app-nav')].forEach(function(el) {
+                    if (el) el.addEventListener('mouseenter', expand);
+                });
+
+                // Footer: cancel pending collapse but do not expand
+                if (sidebarFooter) {
+                    sidebarFooter.addEventListener('mouseenter', function() { clearTimeout(collapseTimer); });
+                }
+
+                // Collapse when leaving the whole sidebar
+                sidebar.addEventListener('mouseleave', scheduleCollapse);
+
+                // Keyboard focus: expand only when focus enters nav/brand, not footer
+                sidebar.addEventListener('focusin', function(e) {
+                    if (sidebarFooter && sidebarFooter.contains(e.target)) {
+                        clearTimeout(collapseTimer);
+                        return;
+                    }
+                    expand();
+                });
+                sidebar.addEventListener('focusout', function(e) {
+                    if (!body.classList.contains('sidebar-pinned') && !sidebar.contains(e.relatedTarget)) {
+                        collapseTimer = setTimeout(function() { body.classList.add('sidebar-compact'); }, 400);
+                    }
+                });
+
+                const pinBtn = document.getElementById('sidebar-pin-toggle');
+                if (!pinBtn) return;
+
+                const iconPinned = pinBtn.querySelector('.icon-pinned');
+                const iconUnpinned = pinBtn.querySelector('.icon-unpinned');
+
+                function syncPinBtn() {
+                    const pinned = body.classList.contains('sidebar-pinned');
+                    pinBtn.setAttribute('title', pinned ? 'Desfijar menú' : 'Fijar menú abierto');
+                    pinBtn.setAttribute('aria-label', pinned ? 'Desfijar menú' : 'Fijar menú abierto');
+                    if (iconPinned) iconPinned.style.display = pinned ? '' : 'none';
+                    if (iconUnpinned) iconUnpinned.style.display = pinned ? 'none' : '';
+                }
+
+                syncPinBtn();
+
+                pinBtn.addEventListener('click', function() {
+                    const wasPinned = body.classList.contains('sidebar-pinned');
+                    body.classList.toggle('sidebar-pinned', !wasPinned);
+                    body.classList.toggle('sidebar-compact', wasPinned);
+                    localStorage.setItem('sidebar-pinned', wasPinned ? 'false' : 'true');
+                    syncPinBtn();
                 });
             }
 
@@ -269,7 +337,7 @@
             applyTheme(stored === 'dark');
             syncServerRenderedControls();
             initAutoFilters();
-            initSidebarCollapse();
+            initSidebarPin();
             document.getElementById('sidebar-toggle')?.addEventListener('click', toggleSidebar);
             document.getElementById('sidebar-overlay')?.addEventListener('click', closeSidebar);
             window.addEventListener('resize', function() {
@@ -389,6 +457,119 @@
     window.__toastQueue.forEach(function (item, i) {
         setTimeout(function () { if (window.showToast) window.showToast(item.message, item.type); }, i * 130);
     });
+    </script>
+    <div id="app-confirm-overlay" class="app-confirm-overlay" role="presentation">
+        <div class="app-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="app-confirm-title" aria-describedby="app-confirm-message">
+            <h2 class="app-confirm-title" id="app-confirm-title"></h2>
+            <p class="app-confirm-message" id="app-confirm-message"></p>
+            <input type="text" class="input app-confirm-type" id="app-confirm-type-input" autocomplete="off" hidden>
+            <div class="app-confirm-actions">
+                <button type="button" class="btn btn-ghost" id="app-confirm-cancel">Cancelar</button>
+                <button type="button" class="btn btn-danger" id="app-confirm-accept">Confirmar</button>
+            </div>
+        </div>
+    </div>
+    <script>
+    (function () {
+        var overlay = document.getElementById('app-confirm-overlay');
+        var dialog = overlay.querySelector('.app-confirm-dialog');
+        var titleEl = document.getElementById('app-confirm-title');
+        var messageEl = document.getElementById('app-confirm-message');
+        var typeInput = document.getElementById('app-confirm-type-input');
+        var cancelBtn = document.getElementById('app-confirm-cancel');
+        var acceptBtn = document.getElementById('app-confirm-accept');
+        var activeResolve = null;
+        var lastFocused = null;
+
+        function close(result) {
+            overlay.classList.remove('is-open');
+            document.removeEventListener('keydown', onKeydown);
+            if (lastFocused) lastFocused.focus();
+            var resolve = activeResolve;
+            activeResolve = null;
+            if (resolve) resolve(result);
+        }
+
+        function onKeydown(e) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                close(false);
+                return;
+            }
+            if (e.key === 'Tab') {
+                var focusable = [cancelBtn, acceptBtn];
+                var idx = focusable.indexOf(document.activeElement);
+                if (e.shiftKey && idx <= 0) {
+                    e.preventDefault();
+                    focusable[focusable.length - 1].focus();
+                } else if (!e.shiftKey && idx === focusable.length - 1) {
+                    e.preventDefault();
+                    focusable[0].focus();
+                }
+            }
+        }
+
+        function syncTypeGate() {
+            if (typeInput.hidden) return;
+            acceptBtn.disabled = typeInput.value.trim() !== typeInput.dataset.expected;
+        }
+
+        typeInput.addEventListener('input', syncTypeGate);
+        overlay.addEventListener('click', function (e) {
+            if (e.target === overlay) close(false);
+        });
+        cancelBtn.addEventListener('click', function () { close(false); });
+        acceptBtn.addEventListener('click', function () { close(true); });
+
+        window.confirmDialog = function (message, opts) {
+            opts = opts || {};
+            return new Promise(function (resolve) {
+                activeResolve = resolve;
+                lastFocused = document.activeElement;
+                titleEl.textContent = opts.title || 'Confirmar accion';
+                messageEl.textContent = message || '';
+                acceptBtn.textContent = opts.confirmLabel || 'Confirmar';
+                dialog.classList.toggle('is-danger', !!opts.danger);
+                acceptBtn.classList.toggle('btn-danger', !!opts.danger);
+                acceptBtn.classList.toggle('btn-primary', !opts.danger);
+
+                if (opts.typeToConfirm) {
+                    typeInput.hidden = false;
+                    typeInput.value = '';
+                    typeInput.dataset.expected = opts.typeToConfirm;
+                    acceptBtn.disabled = true;
+                } else {
+                    typeInput.hidden = true;
+                    acceptBtn.disabled = false;
+                }
+
+                overlay.classList.add('is-open');
+                document.addEventListener('keydown', onKeydown);
+                (opts.typeToConfirm ? typeInput : cancelBtn).focus();
+            });
+        };
+
+        document.addEventListener('submit', function (e) {
+            var form = e.target;
+            if (!(form instanceof HTMLFormElement) || !form.dataset.confirmMessage) return;
+            if (form.dataset.confirming === '1') {
+                delete form.dataset.confirming;
+                return;
+            }
+            e.preventDefault();
+            window.confirmDialog(form.dataset.confirmMessage, {
+                title: form.dataset.confirmTitle,
+                confirmLabel: form.dataset.confirmLabel,
+                danger: form.dataset.confirmDanger === '1',
+                typeToConfirm: form.dataset.confirmType || null,
+            }).then(function (ok) {
+                if (!ok) return;
+                form.dataset.confirming = '1';
+                if (typeof form.requestSubmit === 'function') form.requestSubmit();
+                else form.submit();
+            });
+        });
+    })();
     </script>
 </body>
 </html>

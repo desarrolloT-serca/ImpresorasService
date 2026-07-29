@@ -32,19 +32,19 @@
             @if(($isAdmin ?? false) || ($isStoreManager ?? false))
                 <div class="dbx-bulk-toolbar">
                     <span id="bulk-selected-count" class="dbx-selection-count bulk-action-control bulk-selected-counter" aria-live="polite">0 seleccionados</span>
-                    <form id="bulk-reintentar-form" method="POST" action="{{ route('cola.reintentar_masivo') }}" class="inline">
+                    <form id="bulk-reintentar-form" method="POST" action="{{ route('cola.reintentar_masivo') }}" class="inline"
+                        data-confirm-message="Se reintentaran los trabajos seleccionados." data-confirm-title="Reintentar masivo" data-confirm-label="Reintentar">
                         @csrf
                         <div id="bulk-reintentar-jobIds"></div>
-                        <button type="submit" id="bulk-reintentar-submit" class="btn btn-ghost bulk-action-control" disabled
-                            onclick="return confirm('¿Reintentar masivamente los trabajos seleccionados?')">
+                        <button type="submit" id="bulk-reintentar-submit" class="btn btn-ghost bulk-action-control" disabled>
                             Reintentar masivo
                         </button>
                     </form>
-                    <form id="bulk-cancelar-form" method="POST" action="{{ route('cola.cancelar_masivo') }}" class="inline">
+                    <form id="bulk-cancelar-form" method="POST" action="{{ route('cola.cancelar_masivo') }}" class="inline"
+                        data-confirm-message="Se cancelaran los trabajos seleccionados." data-confirm-title="Cancelar masivo" data-confirm-label="Cancelar" data-confirm-danger="1">
                         @csrf
                         <div id="bulk-cancelar-jobIds"></div>
-                        <button type="submit" id="bulk-cancelar-submit" class="btn btn-danger bulk-action-control" disabled
-                            onclick="return confirm('¿Cancelar masivamente los trabajos seleccionados?')">
+                        <button type="submit" id="bulk-cancelar-submit" class="btn btn-danger bulk-action-control" disabled>
                             Cancelar masivo
                         </button>
                     </form>
@@ -97,7 +97,8 @@
                         @csrf
                         <button type="submit" class="btn btn-ghost">Reintentar</button>
                     </form>
-                    <form action="{{ url("/cola/{$jobId}/cancelar") }}" method="POST" class="inline" onsubmit="return confirm('¿Cancelar este trabajo?')">
+                    <form action="{{ url("/cola/{$jobId}/cancelar") }}" method="POST" class="inline"
+                        data-confirm-message="Se cancelara el trabajo #{{ $jobId }}." data-confirm-title="Cancelar trabajo" data-confirm-label="Cancelar" data-confirm-danger="1">
                         @csrf
                         <button type="submit" class="btn btn-danger">Cancelar</button>
                     </form>

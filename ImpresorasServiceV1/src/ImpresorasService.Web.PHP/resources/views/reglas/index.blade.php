@@ -106,19 +106,26 @@
                             <td class="status-col">{{ $r['channel'] ?? $r['Channel'] ?? '-' }}</td>
                             <td class="text-col">{{ ($r['printer'] ?? null) ? ($r['printer']['printerName'] ?? $r['printer']['PrinterName'] ?? $r['printerId'] ?? $r['PrinterId']) : ($r['printerId'] ?? $r['PrinterId'] ?? '-') }}</td>
                             <td class="status-col">
-                                <span class="badge status-chip {{ $isActive ? 'badge-success' : 'badge-danger' }}" aria-label="{{ $isActive ? 'Regla activa' : 'Regla inactiva' }}">
+                                <x-ui.status :level="$isActive ? 'healthy' : 'critical'" aria-label="{{ $isActive ? 'Regla activa' : 'Regla inactiva' }}">
                                     {{ $isActive ? 'Sí' : 'No' }}
-                                </span>
+                                </x-ui.status>
                             </td>
                             <td class="actions-col">
                                 @if($id)
                                 <x-ui.action-buttons>
                                     <a href="{{ route('reglas.edit', $id) }}" class="btn btn-ghost">Editar</a>
-                                    <form action="{{ route('reglas.destroy', $id) }}" method="POST" onsubmit="return confirm('&iquest;Eliminar?')">
-                                        @csrf
-                                        @method('DELETE')
-                                        <button type="submit" class="btn btn-danger">Eliminar</button>
-                                    </form>
+                                    <x-ui.confirm-form
+                                        :action="route('reglas.destroy', $id)"
+                                        method="DELETE"
+                                        title="Eliminar regla"
+                                        message="Se eliminara la regla de prioridad {{ $r['priority'] ?? $r['Priority'] ?? '-' }} ({{ $r['documentType'] ?? $r['DocumentType'] ?? '-' }} / {{ $r['channel'] ?? $r['Channel'] ?? '-' }}). Esta accion no se puede deshacer."
+                                        confirm-label="Eliminar"
+                                        danger
+                                    >
+                                        <x-slot:trigger>
+                                            <button type="submit" class="btn btn-danger">Eliminar</button>
+                                        </x-slot:trigger>
+                                    </x-ui.confirm-form>
                                 </x-ui.action-buttons>
                                 @endif
                             </td>

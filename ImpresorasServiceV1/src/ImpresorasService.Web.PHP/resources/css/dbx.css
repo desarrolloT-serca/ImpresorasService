@@ -1,4 +1,4 @@
-@media (min-width: 1025px) {
+﻿@media (min-width: 1025px) {
     .app-shell {
         display: block;
     }
@@ -27,12 +27,11 @@
 .dbx-wrap { display: grid; gap: 14px; }
 .dbx-dashboard-page {
     width: 100%;
-    max-width: 1420px;
     margin: 0 auto;
     display: grid;
     gap: 14px;
 }
-.dbx-card { background: var(--ui-surface); border: 1px solid var(--ui-border); border-radius: 12px; box-shadow: var(--ui-shadow-soft); }
+.dbx-card { background: var(--ui-surface); border: 1px solid var(--ui-border); border-radius: var(--ui-radius); box-shadow: var(--ui-shadow-soft); }
 .dbx-card-body { padding: 14px; position: relative; }
 .dbx-checkbox-col { width: 40px; }
 .dbx-toolbar {
@@ -45,19 +44,18 @@
 }
 .dbx-filters { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
 .dbx-filter-item { display: grid; gap: 4px; min-width: 100px; }
-.dbx-filter-label { font-size: 11px; font-weight: 700; color: var(--ui-text-muted); text-transform: uppercase; letter-spacing: .04em; }
+.dbx-filter-label { font-size: 11px; font-weight: 700; color: var(--ui-text-muted); letter-spacing: .04em; }
 .dbx-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ui-text-muted); }
 .dbx-toggle input { accent-color: var(--ui-primary); }
 .dbx-tabs { display: inline-flex; gap: 8px; background: var(--ui-surface-soft); border: 1px solid var(--ui-border); border-radius: 999px; padding: 4px; }
 .dbx-tab { border-radius: 999px; padding: 6px 12px; font-size: 12px; color: var(--ui-text-muted); text-decoration: none; font-weight: 700; }
 .dbx-tab.is-active { background: var(--ui-primary); color: #fff; }
 .dbx-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 10px; }
-.dbx-kpi { min-height: 92px; border-radius: 10px; border: 1px solid var(--ui-border); background: var(--ui-surface); padding: 10px; display: flex; flex-direction: column; justify-content: space-between; }
+.dbx-kpi { min-height: 92px; border-radius: var(--ui-radius); border: 1px solid var(--ui-border); background: var(--ui-surface); padding: 10px; display: flex; flex-direction: column; justify-content: space-between; }
 .dbx-kpi-label {
     font-size: 10px;
     font-weight: 700;
     color: var(--ui-text-muted);
-    text-transform: uppercase;
     line-height: 1.25;
     text-align: justify !important;
     text-justify: inter-word;
@@ -67,7 +65,6 @@
 .dbx-kpi-meta {
     font-size: 10px;
     color: var(--ui-text-muted);
-    text-transform: uppercase;
     text-align: justify !important;
     text-justify: inter-word;
     text-align-last: left;
@@ -115,7 +112,7 @@
     display: block;
 }
 .dbx-donut strong { font-size: 28px; line-height: 1; color: var(--ui-text); }
-.dbx-donut small { margin-top: 4px; font-size: 11px; color: var(--ui-text-muted); text-transform: uppercase; }
+.dbx-donut small { margin-top: 4px; font-size: 11px; color: var(--ui-text-muted); }
 .dbx-chart-legend { display: grid; gap: 8px; min-width: 190px; }
 .dbx-chart-legend > div {
     display: grid;
@@ -138,7 +135,7 @@
 }
 .dbx-store-focus-item {
     border: 1px solid var(--ui-border);
-    border-radius: 10px;
+    border-radius: var(--ui-radius);
     padding: 10px;
     background: var(--ui-surface-soft);
     display: grid;
@@ -147,7 +144,6 @@
 .dbx-store-focus-item span {
     font-size: 10px;
     color: var(--ui-text-muted);
-    text-transform: uppercase;
 }
 .dbx-store-focus-item strong {
     font-size: 18px;
@@ -159,7 +155,7 @@
 .dbx-store-health.critical { color: #b91c1c; }
 .dbx-store-reason-box {
     border: 1px solid var(--ui-border);
-    border-radius: 10px;
+    border-radius: var(--ui-radius);
     background: var(--ui-surface);
     padding: 10px;
     margin-top: 8px;
@@ -168,7 +164,6 @@
     display: block;
     font-size: 10px;
     color: var(--ui-text-muted);
-    text-transform: uppercase;
     margin-bottom: 4px;
 }
 .dbx-store-reason-box p {
@@ -233,7 +228,7 @@
 .dbx-bar-fill.danger { background: #ef4444; }
 .dbx-bar-fill.warning { background: #f59e0b; }
 .dbx-bar-value { font-size: 14px; color: var(--ui-text); text-align: center; font-weight: 700; }
-.dbx-table-wrap { overflow: auto; border: 1px solid var(--ui-border); border-radius: 10px; }
+.dbx-table-wrap { overflow: auto; border: 1px solid var(--ui-border); border-radius: var(--ui-radius); }
 .dbx-alerts-wrap {
     /* Crece hasta N filas visibles y luego aplica scroll vertical */
     max-height: min(72vh, calc(42px + (var(--dbx-visible-rows, 10) * 44px)));
@@ -244,7 +239,7 @@
 .dbx-table th { background: var(--ui-surface-soft); color: var(--ui-text-muted); text-transform: uppercase; letter-spacing: .04em; font-size: 10px; border-top: none; }
 .dbx-alert-group-cont td { border-top: none; }
 .dbx-alert-group-start td { border-top: 1px solid var(--ui-border); }
-.dbx-pill { display: inline-flex; align-items: center; border-radius: 999px; padding: 2px 8px; font-size: 10px; font-weight: 800; text-transform: uppercase; }
+.dbx-pill { display: inline-flex; align-items: center; border-radius: 999px; padding: 2px 8px; font-size: 10px; font-weight: 800; }
 .dbx-pill.critical { color: #b91c1c; background: #fee2e2; border: 1px solid #fecaca; }
 .dbx-pill.warning { color: #a16207; background: #fef3c7; border: 1px solid #fde68a; }
 .dbx-pill.healthy { color: #166534; background: #dcfce7; border: 1px solid #bbf7d0; }
@@ -254,17 +249,17 @@
 .dbx-store-grid.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .dbx-store-grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .dbx-store-grid.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.dbx-store { border: 1px solid var(--ui-border); border-radius: 12px; background: var(--ui-surface); overflow: hidden; }
+.dbx-store { border: 1px solid var(--ui-border); border-radius: var(--ui-radius); background: var(--ui-surface); overflow: hidden; }
 .dbx-store-head { display: flex; justify-content: space-between; gap: 10px; align-items: start; padding: 12px; border-bottom: 1px solid var(--ui-border); }
 .dbx-store-title { margin: 0; font-size: 16px; font-weight: 800; color: var(--ui-text); line-height: 1.2; word-break: break-word; }
 .dbx-store-reason { margin: 4px 0 0; font-size: 12px; color: var(--ui-text-muted); }
 .dbx-mini-kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--ui-border); background: var(--ui-surface-soft); }
-.dbx-mini-kpis > div { border: 1px solid var(--ui-border); border-radius: 8px; background: var(--ui-surface); padding: 6px; }
-.dbx-mini-kpis span { display: block; font-size: 9px; color: var(--ui-text-muted); text-transform: uppercase; }
+.dbx-mini-kpis > div { border: 1px solid var(--ui-border); border-radius: var(--ui-radius-sm); background: var(--ui-surface); padding: 6px; }
+.dbx-mini-kpis span { display: block; font-size: 9px; color: var(--ui-text-muted); }
 .dbx-mini-kpis strong { font-size: 13px; color: var(--ui-text); line-height: 1; }
 .dbx-printers { padding: 0 12px 12px; }
 .dbx-printers-head, .dbx-printer-row { display: grid; grid-template-columns: minmax(0, 1fr) 84px 46px; gap: 8px; align-items: center; padding: 8px 0; font-size: 12px; }
-.dbx-printers-head { color: var(--ui-text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: .04em; font-weight: 700; }
+.dbx-printers-head { color: var(--ui-text-muted); font-size: 10px; letter-spacing: .04em; font-weight: 700; }
 .dbx-printer-row { border-top: 1px solid var(--ui-border); }
 .dbx-printer-state { display: inline-flex; justify-content: center; padding: 1px 6px; border-radius: 999px; font-size: 9px; font-weight: 800; white-space: nowrap; }
 .dbx-printer-state.ok { color: #166534; background: #dcfce7; border: 1px solid #bbf7d0; }
@@ -559,7 +554,7 @@ html.dark .dbx-donut::after {
     margin-top: 4px;
 }
 .dbx-summary-mini {
-    border-radius: 10px;
+    border-radius: var(--ui-radius);
     border: 1px solid var(--ui-border);
     background: var(--ui-surface-soft);
     padding: 8px 10px;
@@ -568,7 +563,6 @@ html.dark .dbx-donut::after {
 .dbx-summary-mini-label {
     display: block;
     font-size: 10px;
-    text-transform: uppercase;
     letter-spacing: .04em;
     color: var(--ui-text-muted);
     margin-bottom: 4px;
@@ -585,7 +579,6 @@ html.dark .dbx-donut::after {
 }
 
 .ajustes-wrap {
-    max-width: 1280px;
     margin: 0 auto;
 }
 
@@ -662,10 +655,6 @@ html.dark .dbx-donut::after {
 .dbx-wrap,
 .dbx-dashboard-page {
     gap: 12px;
-}
-
-.dbx-dashboard-page {
-    max-width: 1440px;
 }
 
 .dbx-card {
@@ -1022,10 +1011,6 @@ html.dark .dbx-donut::after {
     background: color-mix(in srgb, var(--ui-warning) 15%, var(--ui-surface));
 }
 
-.ajustes-wrap {
-    max-width: 1320px;
-}
-
 .ajustes-grid {
     gap: 12px;
 }
@@ -1377,7 +1362,6 @@ html.dark .dbx-table tbody tr:hover td {
 .dbx-filter-label,
 .form-label {
     color: var(--ui-primary);
-    text-transform: uppercase;
 }
 
 .dbx-form-actions,
@@ -1450,7 +1434,6 @@ html.dark .dbx-table tbody tr:hover td {
     border: 1px solid var(--ui-border-strong);
     background: var(--ui-surface);
     color: var(--ui-primary);
-    text-transform: uppercase;
     letter-spacing: 0.03em;
 }
 
@@ -1479,7 +1462,6 @@ html.dark .dbx-table tbody tr:hover td {
 
 .dbx-title {
     color: var(--ui-primary);
-    text-transform: uppercase;
     letter-spacing: 0.02em;
 }
 
@@ -1650,7 +1632,6 @@ html.dark .dbx-store-head {
     color: var(--ui-primary);
     font-size: 0.98rem;
     line-height: 1.18;
-    text-transform: uppercase;
     letter-spacing: 0.015em;
 }
 
@@ -1747,7 +1728,6 @@ html.dark .dbx-store-head {
 .dbx-printer-state {
     min-width: 5.4rem;
     padding: 0.18rem 0.45rem;
-    text-transform: uppercase;
     letter-spacing: 0.035em;
 }
 
@@ -2019,7 +1999,6 @@ html.dark .dbx-printer-state.off {
     font-size: 11px;
     font-weight: 850;
     letter-spacing: 0.05em;
-    text-transform: uppercase;
 }
 
 .local-hero h2 {
@@ -2027,7 +2006,6 @@ html.dark .dbx-printer-state.off {
     color: var(--ui-primary);
     font-size: 28px;
     line-height: 1.08;
-    text-transform: uppercase;
 }
 
 .local-hero p {
@@ -2101,7 +2079,6 @@ html.dark .dbx-printer-state.off {
     color: var(--ui-text-muted);
     font-size: 11px;
     font-weight: 750;
-    text-transform: uppercase;
 }
 
 .local-kpi strong {
@@ -2150,7 +2127,6 @@ html.dark .dbx-printer-state.off {
 .local-attention-item strong {
     color: var(--ui-text);
     font-size: 13px;
-    text-transform: uppercase;
 }
 
 .local-attention-item span {
@@ -2169,7 +2145,6 @@ html.dark .dbx-printer-state.off {
 
 .local-empty-state strong {
     color: var(--ui-success);
-    text-transform: uppercase;
 }
 
 .local-empty-state span {
@@ -2234,7 +2209,6 @@ html.dark .dbx-printer-state.off {
     color: #fff;
     font-size: 11px;
     font-weight: 850;
-    text-transform: uppercase;
 }
 
 .local-printer-row {

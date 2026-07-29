@@ -16,6 +16,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddWindowsService(options => options.ServiceName = "ImpresorasService.Api");
 var appCultureName = builder.Configuration["Globalization:Culture"] ?? "es-ES";
 var appCulture = CultureInfo.GetCultureInfo(appCultureName);
 CultureInfo.DefaultThreadCurrentCulture = appCulture;

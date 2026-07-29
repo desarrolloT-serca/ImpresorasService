@@ -15,6 +15,40 @@ public sealed class StoresControllerTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task Create_StoreIdZero_ReturnsCreated()
+    {
+        await DeleteStoreIfExistsAsync(0);
+
+        var response = await Client.PostAsJsonAsync("/api/stores", new
+        {
+            storeId = 0,
+            name = "Almacen Central",
+            isActive = true
+        });
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+        using var scope = Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
+        var store = await db.Stores.AsNoTracking().SingleAsync(x => x.StoreId == 0);
+        Assert.Equal("Almacen Central", store.Name);
+        Assert.True(store.IsActive);
+    }
+
+    [Fact]
+    public async Task Create_NegativeStoreId_ReturnsBadRequest()
+    {
+        var response = await Client.PostAsJsonAsync("/api/stores", new
+        {
+            storeId = -1,
+            name = "No valida",
+            isActive = true
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
     public async Task SoftDelete_ActiveStore_DeactivatesStoreAndActivePrinters()
     {
         await SeedStoreAsync(88, isActive: true);
@@ -73,6 +107,18 @@ public sealed class StoresControllerTests : IntegrationTestBase
         }
 
         await db.SaveChangesAsync();
+    }
+
+    private async Task DeleteStoreIfExistsAsync(int storeId)
+    {
+        using var scope = Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
+        var store = await db.Stores.FindAsync(storeId);
+        if (store is not null)
+        {
+            db.Stores.Remove(store);
+            await db.SaveChangesAsync();
+        }
     }
 
     private async Task SeedPrinterAsync(int storeId, bool isActive)

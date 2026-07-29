@@ -60,29 +60,6 @@
                 <a href="{{ url('/cola') }}" class="btn btn-ghost">Limpiar</a>
             </div>
         </form>
-
-        @if(($isAdmin ?? false) || ($isStoreManager ?? false))
-            <div class="dbx-bulk-toolbar">
-                <form id="bulk-reintentar-form" method="POST" action="{{ route('cola.reintentar_masivo') }}" class="inline"
-                    data-cola-action="reintentar-masivo"
-                    data-confirm="¿Reintentar masivamente los trabajos seleccionados?">
-                    @csrf
-                    <div id="bulk-reintentar-jobIds"></div>
-                    <button type="submit" id="bulk-reintentar-submit" class="btn btn-ghost bulk-action-control" disabled>
-                        Reintentar
-                    </button>
-                </form>
-                <form id="bulk-cancelar-form" method="POST" action="{{ route('cola.cancelar_masivo') }}" class="inline"
-                    data-cola-action="cancelar-masivo"
-                    data-confirm="¿Cancelar masivamente los trabajos seleccionados?">
-                    @csrf
-                    <div id="bulk-cancelar-jobIds"></div>
-                    <button type="submit" id="bulk-cancelar-submit" class="btn btn-danger bulk-action-control" disabled>
-                        Cancelar
-                    </button>
-                </form>
-            </div>
-        @endif
     </div>
 </x-ui.card>
 
@@ -90,9 +67,6 @@
 <div class="dbx-cola-section-header">
     <div class="dbx-cola-section-header-top">
         <h2 class="dbx-title">Trabajos de cola</h2>
-        @if(($isAdmin ?? false) || ($isStoreManager ?? false))
-            <span id="bulk-selected-count" class="dbx-selection-count bulk-action-control bulk-selected-counter" aria-live="polite">0 seleccionados</span>
-        @endif
     </div>
     <div class="dbx-cola-section-header-bottom">
         <span class="dbx-subtle">
@@ -104,6 +78,33 @@
         <span class="dbx-subtle">Selecciona filas para acciones masivas</span>
     </div>
 </div>
+
+@if(($isAdmin ?? false) || ($isStoreManager ?? false))
+    <div id="cola-bulk-bar" class="dbx-bulk-bar" hidden>
+        <span id="bulk-selected-count" class="dbx-bulk-bar-count" aria-live="polite">0 seleccionados</span>
+        <span class="dbx-bulk-bar-hint">Se aplicara la accion a los trabajos seleccionados.</span>
+        <div class="dbx-bulk-bar-actions">
+            <form id="bulk-reintentar-form" method="POST" action="{{ route('cola.reintentar_masivo') }}" class="inline"
+                data-cola-action="reintentar-masivo"
+                data-confirm="¿Reintentar masivamente los trabajos seleccionados?">
+                @csrf
+                <div id="bulk-reintentar-jobIds"></div>
+                <button type="submit" id="bulk-reintentar-submit" class="btn btn-ghost bulk-action-control" disabled>
+                    Reintentar
+                </button>
+            </form>
+            <form id="bulk-cancelar-form" method="POST" action="{{ route('cola.cancelar_masivo') }}" class="inline"
+                data-cola-action="cancelar-masivo"
+                data-confirm="¿Cancelar masivamente los trabajos seleccionados?">
+                @csrf
+                <div id="bulk-cancelar-jobIds"></div>
+                <button type="submit" id="bulk-cancelar-submit" class="btn btn-danger bulk-action-control" disabled>
+                    Cancelar
+                </button>
+            </form>
+        </div>
+    </div>
+@endif
 <x-ui.table class="dbx-actions-table">
         <caption class="sr-only">Listado operativo de trabajos de impresion en cola</caption>
         <thead>
@@ -221,6 +222,7 @@
     const retrySubmit = document.getElementById('bulk-reintentar-submit');
     const cancelSubmit = document.getElementById('bulk-cancelar-submit');
     const selectedCount = document.getElementById('bulk-selected-count');
+    const bulkBar = document.getElementById('cola-bulk-bar');
 
     function getRowCheckboxes() {
         return Array.from(document.querySelectorAll('.bulk-row'));
@@ -258,6 +260,9 @@
         if (cancelSubmit) cancelSubmit.disabled = count === 0;
         if (selectedCount) {
             selectedCount.textContent = count + (count === 1 ? ' seleccionado' : ' seleccionados');
+        }
+        if (bulkBar) {
+            bulkBar.hidden = count === 0;
         }
         if (headerCb) {
             const selectableCount = rowCbs.filter(cb => !cb.disabled).length;
@@ -356,8 +361,11 @@
         }
 
         const confirmMessage = form.dataset.confirm;
-        if (confirmMessage && !window.confirm(confirmMessage)) {
-            return;
+        if (confirmMessage) {
+            const ok = window.confirmDialog
+                ? await window.confirmDialog(confirmMessage, { title: 'Confirmar accion', danger: form.dataset.colaAction === 'cancelar-masivo' || form.dataset.colaAction === 'cancelar' })
+                : window.confirm(confirmMessage);
+            if (!ok) return;
         }
 
         const action = form.dataset.colaAction;

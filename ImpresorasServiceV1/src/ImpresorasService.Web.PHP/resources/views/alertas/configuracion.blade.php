@@ -36,9 +36,9 @@
                 <div class="dbx-form-grid">
                     <div class="dbx-form-group">
                         <span class="dbx-filter-label">Estado del servicio</span>
-                        <span class="badge {{ $enabled ? 'badge-success' : 'badge-neutral' }}">
+                        <x-ui.status :level="$enabled ? 'healthy' : 'neutral'">
                             {{ $enabled ? 'Alertas activas' : 'Alertas desactivadas' }}
-                        </span>
+                        </x-ui.status>
                     </div>
 
                     <div class="dbx-form-group">
@@ -109,16 +109,12 @@
                             @endif
                         </td>
                         <td class="status-col">
-                            @if($active)
-                                <span class="badge badge-success">Activo</span>
-                            @else
-                                <span class="badge badge-neutral">Inactivo</span>
-                            @endif
+                            <x-ui.status :level="$active ? 'healthy' : 'neutral'">{{ $active ? 'Activo' : 'Inactivo' }}</x-ui.status>
                         </td>
                         <td class="date-col">{{ $createdAt ? \App\Helpers\DateTimeFormat::localDateTime($createdAt) : '-' }}</td>
                         <td class="actions-col">
                             <form method="POST" action="{{ route('alertas.chats.delete', ['chatId' => $chatId]) }}"
-                                onsubmit="return confirm('¿Eliminar el chat {{ $chatId }}?')">
+                                data-confirm-message="Se eliminara el chat {{ $chatId }} y dejara de recibir alertas." data-confirm-title="Eliminar chat" data-confirm-label="Eliminar" data-confirm-danger="1">
                                 @csrf
                                 <button type="submit" class="btn btn-danger btn-sm">Eliminar</button>
                             </form>
@@ -172,10 +168,10 @@
                 <h2 class="dbx-title">Prueba de envío</h2>
                 <span class="dbx-subtle">Envía un mensaje de prueba a todos los chats activos.</span>
             </div>
-            <form method="POST" action="{{ route('alertas.test') }}" class="mt-3">
+            <form method="POST" action="{{ route('alertas.test') }}" class="mt-3"
+                data-confirm-message="Se enviara un mensaje de prueba a todos los chats activos." data-confirm-title="Enviar prueba" data-confirm-label="Enviar">
                 @csrf
-                <button type="submit" class="btn btn-ghost"
-                    onclick="return confirm('¿Enviar mensaje de prueba a todos los chats activos?')">
+                <button type="submit" class="btn btn-ghost">
                     Enviar prueba
                 </button>
             </form>
