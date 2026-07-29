@@ -73,8 +73,10 @@ public sealed class DashboardThresholdRuleStore : IDashboardThresholdRuleStore
         if (!string.IsNullOrEmpty(directory))
             Directory.CreateDirectory(directory);
 
-        await using var stream = File.Create(_filePath);
-        await JsonSerializer.SerializeAsync(stream, ToDto(normalized), JsonOptions, ct);
+        var tmp = _filePath + ".tmp";
+        await using (var stream = File.Create(tmp))
+            await JsonSerializer.SerializeAsync(stream, ToDto(normalized), JsonOptions, ct);
+        File.Move(tmp, _filePath, overwrite: true);
         return Array.Empty<string>();
     }
 
