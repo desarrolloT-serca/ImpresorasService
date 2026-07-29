@@ -81,14 +81,14 @@ public class RoutingRulesController : ControllerBase
                 return BadRequest(new { error = "La tienda especificada no existe o esta inactiva." });
         }
 
-        var printerExists = await _dbContext.Printers
-            .Where(x => x.PrinterId == request.PrinterId)
-            .Select(x => x.PrinterId)
-            .Take(1)
-            .CountAsync(cancellationToken) > 0;
+        var printerQuery = _dbContext.Printers.Where(x => x.PrinterId == request.PrinterId);
+        if (request.StoreId.HasValue)
+            printerQuery = printerQuery.Where(x => x.StoreId == request.StoreId.Value);
 
-        if (!printerExists)
-            return BadRequest(new { error = "La impresora especificada no existe." });
+        if (!await printerQuery.AnyAsync(cancellationToken))
+            return BadRequest(new { error = request.StoreId.HasValue
+                ? "La impresora no existe o no pertenece a la tienda indicada."
+                : "La impresora especificada no existe." });
 
         var rule = new RoutingRule
         {
@@ -132,14 +132,14 @@ public class RoutingRulesController : ControllerBase
                 return BadRequest(new { error = "La tienda especificada no existe o esta inactiva." });
         }
 
-        var printerExists = await _dbContext.Printers
-            .Where(x => x.PrinterId == request.PrinterId)
-            .Select(x => x.PrinterId)
-            .Take(1)
-            .CountAsync(cancellationToken) > 0;
+        var printerQueryUpdate = _dbContext.Printers.Where(x => x.PrinterId == request.PrinterId);
+        if (request.StoreId.HasValue)
+            printerQueryUpdate = printerQueryUpdate.Where(x => x.StoreId == request.StoreId.Value);
 
-        if (!printerExists)
-            return BadRequest(new { error = "La impresora especificada no existe." });
+        if (!await printerQueryUpdate.AnyAsync(cancellationToken))
+            return BadRequest(new { error = request.StoreId.HasValue
+                ? "La impresora no existe o no pertenece a la tienda indicada."
+                : "La impresora especificada no existe." });
 
         rule.Priority = request.Priority;
         rule.StoreId = request.StoreId;
