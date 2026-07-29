@@ -171,12 +171,15 @@ if (!builder.Environment.IsEnvironment("Testing"))
                 new { error = "Demasiados intentos. Espera un momento e inténtalo de nuevo." },
                 cancellationToken);
         };
-        options.AddFixedWindowLimiter("auth", limiter =>
-        {
-            limiter.Window = TimeSpan.FromMinutes(1);
-            limiter.PermitLimit = 10;
-            limiter.QueueLimit = 0;
-        });
+        options.AddPolicy<string>("auth", httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    Window = TimeSpan.FromMinutes(1),
+                    PermitLimit = 10,
+                    QueueLimit = 0,
+                }));
     });
 }
 
