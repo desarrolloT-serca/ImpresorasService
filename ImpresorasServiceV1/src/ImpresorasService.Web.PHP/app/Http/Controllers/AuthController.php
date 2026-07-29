@@ -58,6 +58,7 @@ class AuthController extends Controller
             'login' => $user['login'] ?? $user['Login'] ?? '',
         ], $user);
 
+        $request->session()->regenerate();
         Session::put('impresoras_token', $token);
         Session::put('impresoras_user', $user);
 
@@ -72,9 +73,10 @@ class AuthController extends Controller
         return redirect()->intended('/');
     }
 
-    public function logout(): RedirectResponse
+    public function logout(Request $request): RedirectResponse
     {
-        Session::forget(['impresoras_token', 'impresoras_user']);
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
         return redirect()->route('login');
     }
 }
