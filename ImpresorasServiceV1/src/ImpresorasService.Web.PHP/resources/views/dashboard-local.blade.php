@@ -58,6 +58,9 @@
     if ($connWarning > 0) {
         $attentionItems[] = ['level' => 'warning', 'title' => 'Conectividad inestable', 'text' => $connWarning . ' impresora(s) acumulan fallos de conexion.', 'href' => url('/impresoras?storeId=' . $storeId . '&isActive=true')];
     }
+    if (!empty($partialData)) {
+        $attentionItems[] = ['level' => 'warning', 'title' => 'Datos parciales', 'text' => 'El resumen agregado no esta disponible; se muestran como maximo 500 trabajos recientes.', 'href' => null];
+    }
 
     $sortedPrinters = $printers;
     usort($sortedPrinters, function (array $a, array $b): int {
@@ -164,7 +167,7 @@
                 <div class="local-attention-list">
                     @foreach($attentionItems as $item)
                         @php
-                            $href = ($canOperate || !str_contains($item['href'], '/impresoras')) ? $item['href'] : null;
+                            $href = $item['href'] !== null && ($canOperate || !str_contains($item['href'], '/impresoras')) ? $item['href'] : null;
                         @endphp
                         <div class="local-attention-item is-{{ $item['level'] }}">
                             <div>

@@ -18,12 +18,20 @@ public class SapHanaJobSourceAdapter : IJobSourceAdapter
     private readonly string _workerId;
     private readonly string _sourceSystem;
 
+    // Token del último claim emitido por esta instancia (Scoped: una instancia = un ciclo de
+    // polling = un FetchPendingJobsAsync seguido de su Mark/Renew). Exigirlo en ACK y renovación
+    // (Fase 1.5) evita operar sobre una fila cuyo lease expiró y fue reclamada por otro worker.
+    private string? _lastClaimToken;
+    private readonly TimeProvider _timeProvider;
+
     public SapHanaJobSourceAdapter(
         IOptions<SourceOptions> options,
         IOptions<SapHanaOptions> hanaOptions,
         ImpresorasDbContext dbContext,
-        ILogger<SapHanaJobSourceAdapter> logger)
+        ILogger<SapHanaJobSourceAdapter> logger,
+        TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _options = options.Value;
         _hanaOptions = hanaOptions.Value;
         _dbContext = dbContext;
@@ -43,26 +51,27 @@ public class SapHanaJobSourceAdapter : IJobSourceAdapter
             return Array.Empty<IncomingPrintJob>();
 
         var claimToken = Guid.NewGuid().ToString("N");
-        var now = DateTimeOffset.UtcNow;
+        var now = _timeProvider.GetUtcNow();
         var leaseSeconds = Math.Max(15, _hanaOptions.LeaseSeconds);
         var leaseEnd = now.AddSeconds(leaseSeconds);
 
         await using var tx = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
 
         var pendingOnly = false;
-        var preCandidates = await _dbContext.SourcePrintJobs
-            .Where(x => x.IsProcessed == pendingOnly)
-            .OrderBy(x => x.Id)
-            .Take(batchSize * 5)
-            .ToListAsync(cancellationToken);
 
-        var candidateIds = preCandidates
-            .Where(x => x.ClaimedUntilUtc == null || x.ClaimedUntilUtc <= now)
+        // Selección de candidatos: proyección escalar sin PdfBlob (Fase 1.3) y filtro de
+        // disponibilidad de claim + orden empujados a SQL antes del Take (Fase 1.2). Antes,
+        // Take(batchSize*5) cortaba por Id antes de filtrar por claim: si las primeras filas
+        // estaban reclamadas por otro worker, se perdía el ciclo aunque hubiera libres después,
+        // y además se cargaba el blob completo de filas que ni siquiera se iban a reclamar.
+        var candidateIds = await _dbContext.SourcePrintJobs
+            .Where(x => x.IsProcessed == pendingOnly
+                && (x.ClaimedUntilUtc == null || x.ClaimedUntilUtc <= now))
             .OrderBy(x => x.CreatedAtUtc)
             .ThenBy(x => x.Id)
             .Select(x => x.Id)
             .Take(batchSize)
-            .ToList();
+            .ToListAsync(cancellationToken);
 
         if (candidateIds.Count == 0)
         {
@@ -70,6 +79,8 @@ public class SapHanaJobSourceAdapter : IJobSourceAdapter
             return Array.Empty<IncomingPrintJob>();
         }
 
+        // Recarga con entidad completa (incluye PdfBlob) solo de las filas ya seleccionadas,
+        // y re-verifica disponibilidad para reducir la ventana de carrera con otro worker.
         var claimedRows = (await _dbContext.SourcePrintJobs
             .Where(x => candidateIds.Contains(x.Id) && x.IsProcessed == pendingOnly)
             .ToListAsync(cancellationToken))
@@ -91,6 +102,7 @@ public class SapHanaJobSourceAdapter : IJobSourceAdapter
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
+        _lastClaimToken = claimToken;
 
         var jobs = claimedRows
             .OrderBy(x => x.CreatedAtUtc)
@@ -120,9 +132,14 @@ public class SapHanaJobSourceAdapter : IJobSourceAdapter
         if (sourceJobIds is null || sourceJobIds.Count == 0)
             return;
 
+        // Sin claim propio emitido en este ciclo no hay nada que confirmar (Fase 1.5).
+        if (_lastClaimToken is null)
+            return;
+
         var ids = sourceJobIds.Distinct().ToArray();
+        var expectedToken = _lastClaimToken;
         var rows = await _dbContext.SourcePrintJobs
-            .Where(x => ids.Contains(x.Id) && x.ClaimedBy == _workerId)
+            .Where(x => ids.Contains(x.Id) && x.ClaimedBy == _workerId && x.ClaimToken == expectedToken)
             .ToListAsync(cancellationToken);
 
         foreach (var row in rows)
@@ -153,12 +170,17 @@ public class SapHanaJobSourceAdapter : IJobSourceAdapter
         if (sourceJobIds is null || sourceJobIds.Count == 0)
             return;
 
+        // Sin claim propio emitido en este ciclo no hay nada que renovar (Fase 1.5).
+        if (_lastClaimToken is null)
+            return;
+
         var leaseSeconds = Math.Max(15, _hanaOptions.LeaseSeconds);
-        var newExpiry = DateTimeOffset.UtcNow.AddSeconds(leaseSeconds);
+        var newExpiry = _timeProvider.GetUtcNow().AddSeconds(leaseSeconds);
         var ids = sourceJobIds.Distinct().ToArray();
+        var expectedToken = _lastClaimToken;
 
         await _dbContext.SourcePrintJobs
-            .Where(x => ids.Contains(x.Id) && x.ClaimedBy == _workerId)
+            .Where(x => ids.Contains(x.Id) && x.ClaimedBy == _workerId && x.ClaimToken == expectedToken)
             .ExecuteUpdateAsync(
                 s => s.SetProperty(x => x.ClaimedUntilUtc, newExpiry),
                 cancellationToken);

@@ -120,6 +120,12 @@
     };
 @endphp
 
+@if(!empty($partialData))
+    <div style="margin-bottom:12px;padding:10px 14px;border:1px solid var(--ui-warning);border-radius:8px;background:color-mix(in srgb, var(--ui-warning) 12%, transparent);font-size:0.9rem;">
+        Datos parciales: el resumen agregado no esta disponible; se muestran como maximo 500 trabajos recientes por tienda.
+    </div>
+@endif
+
 <span id="autoRefreshCountdown" class="dbx-auto-refresh-status" hidden aria-hidden="true" title="Próximo refresco automático"></span>
 <span id="dashboardLiveStatus" class="sr-only" aria-live="polite" aria-atomic="true"></span>
 
@@ -275,7 +281,7 @@
                         </span>
                     </div>
                     <div class="dbx-bar-row dbx-bar-row-danger">
-                        <span class="dbx-bar-label">Sin reenviar</span>
+                        <span class="dbx-bar-label" title="Estado actual, no depende del periodo seleccionado arriba">Sin reenviar <small class="dbx-subtle">(actual)</small></span>
                         <div class="dbx-bar-track"><div class="dbx-bar-fill danger" style="width: {{ (int) round(($failedNoRetryVal / $base) * 100) }}%"></div></div>
                         <span class="dbx-bar-value">
                             <span class="dbx-bar-value-number">{{ $failedNoRetryVal }}</span>

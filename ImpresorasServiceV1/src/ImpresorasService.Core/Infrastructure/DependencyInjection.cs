@@ -8,6 +8,7 @@ using ImpresorasService.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using System.Reflection;
 using System.Runtime.InteropServices;
 
@@ -19,9 +20,20 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        // Fase 1.9: TimeProvider inyectable en los servicios de ejecución/watchdog/ingesta/alertas
+        // en vez de DateTimeOffset.UtcNow directo, para habilitar tests deterministas de tiempo.
+        services.AddSingleton(TimeProvider.System);
+
         services.Configure<SourceOptions>(configuration.GetSection(SourceOptions.SectionName));
         services.Configure<IngestionOptions>(configuration.GetSection(IngestionOptions.SectionName));
-        services.Configure<PrintExecutionOptions>(configuration.GetSection(PrintExecutionOptions.SectionName));
+        services.AddOptions<PrintExecutionOptions>()
+            .Bind(configuration.GetSection(PrintExecutionOptions.SectionName))
+            // Fase 1.6: fallar rápido al arrancar en vez de IndexOutOfRangeException en el
+            // primer reintento (BackoffSeconds[Math.Min(intento-1, Length-1)] con Length=0).
+            .Validate(o => o.BackoffSeconds is { Length: > 0 }, "PrintExecution:BackoffSeconds no puede estar vacío.")
+            .Validate(o => o.BackoffSeconds is null || o.BackoffSeconds.All(s => s >= 0), "PrintExecution:BackoffSeconds no admite valores negativos.")
+            .Validate(o => o.MaxAttempts > 0, "PrintExecution:MaxAttempts debe ser mayor que 0.")
+            .ValidateOnStart();
         services.Configure<SapHanaOptions>(configuration.GetSection(SapHanaOptions.SectionName));
 
         string provider = configuration.GetValue<string>("Database:Provider") ?? "Hana";
@@ -60,6 +72,12 @@ public static class DependencyInjection
 
         services.Configure<TelegramOptions>(configuration.GetSection(TelegramOptions.SectionName));
         services.AddSingleton<ITelegramNotifier, TelegramNotifierService>();
+
+        services.Configure<WorkerLockOptions>(configuration.GetSection(WorkerLockOptions.SectionName));
+        services.AddScoped<IWorkerLockCoordinator, WorkerLockCoordinator>();
+
+        services.Configure<DashboardThresholdRulesOptions>(configuration.GetSection(DashboardThresholdRulesOptions.SectionName));
+        services.AddSingleton<IDashboardThresholdRuleStore, DashboardThresholdRuleStore>();
 
         return services;
     }

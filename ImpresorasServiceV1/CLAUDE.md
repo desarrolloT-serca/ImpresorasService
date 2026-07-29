@@ -136,7 +136,7 @@ Variables de entorno que sobreescriben appsettings (patrón `Section__Key`):
 
 ---
 
-## Estado actual (rama `IU` — 2026-06-29)
+## Estado actual (rama `develop` — 2026-07-20)
 
 ### Implementado y en producción
 - Ingesta SAP HANA con claim/ack
@@ -145,16 +145,16 @@ Variables de entorno que sobreescriben appsettings (patrón `Section__Key`):
 - Monitoreo de conectividad de impresoras
 - API REST con JWT, rate limiting, security headers
 - Frontend Laravel cola + dashboard con salud de tiendas
-- Dashboard con umbrales configurables en BD
+- Dashboard con umbrales configurables en BD, KPIs por periodo (contrato en `docs/contrato-kpi-dashboard.md`) y timezone de negocio configurable (`Dashboard:BusinessTimeZone`)
+- **IPP**: `IIppConfirmationService`/`IppConfirmationService`, `IppSupported` en `Printer`, sondeo desde `PrinterConnectivityMonitorService`, filtro en el watchdog, badge en UI PHP (`resources/views/impresoras/index.blade.php`)
+- **Telegram**: `TelegramNotifierService`, `StoreHealthAlertBackgroundService`, `TelegramController` (API), UI PHP de configuración/gestión de chats (`AlertasController` + `resources/views/alertas/`). `Telegram:Enabled=false` por defecto en `Worker/appsettings.json`; activar en producción con `BotToken` real.
 
-### En desarrollo (sin commitear en rama `IU`)
-- **IPP**: confirmación real del estado de trabajos impresos
-  - `IIppConfirmationService` + `IppConfirmationService` implementados
-  - `IppSupported` en `Printer` implementado
-  - Faltan: badge en UI PHP + tests e2e
-- **Telegram**: alertas de salud de tiendas
-  - `TelegramNotifierService`, `StoreHealthAlertBackgroundService`, entidades BD implementados
-  - Faltan: endpoints API gestión de chats, UI PHP, pruebas con bot real
+### Pendiente
+- Confirmación IPP **por trabajo** (hoy solo consulta `printer-state` global, no `job-id`) — Fase 3 de `docs/roadmapimpresoras.md`
+- Claim atómico de `PrintJob` (UPDATE condicional en `PrintExecutionService`) — Fase 2.2 de `docs/roadmapimpresoras.md`, aún no implementado
+- Aplicar `scripts/sql/create_worker_lock.sql` en HANA y verificar en staging con 2 procesos Worker reales (código del lock de instancia única ya implementado, G4.1)
+- Tests e2e de IPP/watchdog/conectividad
+- Pruebas con bot Telegram real en producción (operativo, no código)
 
 ### DDL pendiente de aplicar en producción
 ```sql

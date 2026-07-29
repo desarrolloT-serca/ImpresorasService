@@ -1,10 +1,12 @@
 using ImpresorasService.Application.Abstractions;
 using ImpresorasService.Application.Services;
 using ImpresorasService.Domain;
+using ImpresorasService.Domain.Connectivity;
 using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure.Options;
 using ImpresorasService.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -18,28 +20,31 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
     private readonly ITelegramNotifier _telegram;
     private readonly IOptions<TelegramOptions> _telegramOptions;
     private readonly ILogger<StoreHealthAlertBackgroundService> _logger;
-
-    private static readonly TimeZoneInfo _spainTz =
-        TimeZoneInfo.FindSystemTimeZoneById(
-            OperatingSystem.IsWindows() ? "Romance Standard Time" : "Europe/Madrid");
-
-    // Debe mantenerse idéntico a DashboardController.QueueStatuses.
-    private static readonly PrintJobStatus[] QueueStatuses =
-    [
-        PrintJobStatus.Pending, PrintJobStatus.Routed,
-        PrintJobStatus.Printing, PrintJobStatus.RetryScheduled
-    ];
+    private readonly TimeProvider _timeProvider;
+    private readonly TimeZoneInfo _businessTimeZone;
+    private readonly WorkerLockState _lockState;
+    private readonly IDashboardThresholdRuleStore _ruleStore;
 
     public StoreHealthAlertBackgroundService(
         IServiceScopeFactory scopeFactory,
         ITelegramNotifier telegram,
         IOptions<TelegramOptions> telegramOptions,
-        ILogger<StoreHealthAlertBackgroundService> logger)
+        ILogger<StoreHealthAlertBackgroundService> logger,
+        TimeProvider timeProvider,
+        IConfiguration configuration,
+        WorkerLockState lockState,
+        IDashboardThresholdRuleStore ruleStore)
     {
         _scopeFactory = scopeFactory;
         _telegram = telegram;
         _telegramOptions = telegramOptions;
         _logger = logger;
+        _timeProvider = timeProvider;
+        _lockState = lockState;
+        _ruleStore = ruleStore;
+        // Misma clave que DashboardController (Api) — KPI-P2-004: dashboard y alertas deben usar
+        // el mismo reloj de negocio, no que uno lea Europe/Madrid y el otro medianoche UTC.
+        _businessTimeZone = BusinessTimeZoneClock.Resolve(configuration["Dashboard:BusinessTimeZone"], logger);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -48,6 +53,13 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            // G4.1: sin el lock de instancia única, esta réplica no evalúa/notifica (evita alertas Telegram duplicadas).
+            if (!_lockState.IsHolder)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+                continue;
+            }
+
             try
             {
                 await RunOnceAsync(stoppingToken);
@@ -82,16 +94,17 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
         var minSeverity = config.MinSeverity.Trim().ToLowerInvariant();
         var notifyOnRecovery = config.NotifyOnRecovery;
 
+        // Umbrales legacy (2 niveles): siguen en BD, solo se usan aquí para el criterio OR de
+        // connWarning/connCritical (mismo criterio que usaba PHP junto a la clasificación de
+        // conectividad — ver LoadConnectivityStatsAsync en DashboardController.cs, Api).
         var thresholdRow = await db.DashboardThresholds.AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == 1, ct);
 
-        int warnQueue = thresholdRow?.WarningQueueMin ?? 10;
-        int critQueue = thresholdRow?.CriticalQueueMin ?? 30;
-        int warnFailed = thresholdRow?.WarningFailedWithoutRetryMin ?? 1;
-        int critFailed = thresholdRow?.CriticalFailedWithoutRetryMin ?? 5;
-        int missingHostMin = thresholdRow?.MissingHostMin ?? 1;
         int connWarnMin = thresholdRow?.ConnWarningFailuresMin ?? 2;
         int connCritMin = thresholdRow?.ConnCriticalFailuresMin ?? 3;
+
+        // G5.3: reglas de severidad de 1-3 niveles — fuente única de verdad, compartida con la Api.
+        var rules = await _ruleStore.LoadAsync(ct);
 
         var activeOnly = true;
         var stores = await db.Stores.AsNoTracking()
@@ -99,8 +112,7 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
             .Select(s => new { s.StoreId, s.Name })
             .ToListAsync(ct);
 
-        var now = DateTimeOffset.UtcNow;
-        var windowStart = now.Date;
+        var now = _timeProvider.GetUtcNow();
 
         foreach (var store in stores)
         {
@@ -108,45 +120,56 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
                 .Where(p => p.IsActive == activeOnly && p.StoreId == store.StoreId)
                 .Select(p => new
                 {
-                    p.Host,
-                    p.SpoolQueue,
+                    p.IsActive,
+                    p.LastConnectionOk,
+                    p.LastConnectionCheckAtUtc,
+                    p.LastConnectionError,
                     p.ConnectionFailuresStreak,
                 })
                 .ToListAsync(ct);
 
             var connected = printers.Count;
-            var missingHost = printers.Count(p => string.IsNullOrEmpty(p.Host) && !HasImplicitHost(p.SpoolQueue));
-            var connWarn = printers.Count(p => p.ConnectionFailuresStreak >= connWarnMin);
-            var connCrit = printers.Count(p => p.ConnectionFailuresStreak >= connCritMin);
+            var missingHost = 0;
+            var connWarn = 0;
+            var connCrit = 0;
+            var connMaxStreak = 0;
+            foreach (var p in printers)
+            {
+                var descriptor = PrinterConnectivityState.FromSnapshot(
+                    p.IsActive, p.LastConnectionOk, p.LastConnectionCheckAtUtc, p.LastConnectionError, p.ConnectionFailuresStreak);
+
+                if (descriptor.ConnectivityStatus == PrinterConnectivityState.StatusNoHost)
+                    missingHost++;
+
+                connMaxStreak = Math.Max(connMaxStreak, p.ConnectionFailuresStreak);
+
+                if (descriptor.ConnectivitySeverity == PrinterConnectivityState.SeverityCritical || p.ConnectionFailuresStreak >= connCritMin)
+                    connCrit++;
+                else if ((descriptor.ConnectivitySeverity == PrinterConnectivityState.SeverityWarning && descriptor.ConnectivityStatus != PrinterConnectivityState.StatusNoHost)
+                         || p.ConnectionFailuresStreak >= connWarnMin)
+                    connWarn++;
+            }
 
             var queued = await db.PrintJobs.AsNoTracking()
-                .CountAsync(j => j.StoreId == store.StoreId && QueueStatuses.Contains(j.Status), ct);
+                .CountAsync(j => j.StoreId == store.StoreId && DashboardPrintJobPredicates.QueueStatuses.Contains(j.Status), ct);
 
-            // Alineado con DashboardController.BuildStoreRowsAsync: failedWindowStats usa UpdatedAtUtc
-            // y cuenta ErrorFinal más jobs con múltiples intentos aún sin éxito.
-            var updatedJobs = await db.PrintJobs.AsNoTracking()
-                .Where(j => j.StoreId == store.StoreId && j.UpdatedAtUtc >= windowStart)
-                .Select(j => new { j.Status, j.AttemptCount })
-                .ToListAsync(ct);
-
-            var failed = updatedJobs.Count(j => j.Status == PrintJobStatus.ErrorFinal || IsFailedAfterRetry(j.Status, j.AttemptCount));
+            // Mismo predicado que DashboardController.BuildStoreRowsAsync (failedWindowStats) — antes
+            // el Worker mantenía su propia copia (IsFailedAfterRetry) que excluía Printing con
+            // reintentos, algo que la Api sí cuenta como fallo. Ver DashboardPrintJobPredicates.
+            // Sin ventana (A-KPI-01): es una foto de estado actual, no un evento — filtrarla por
+            // UpdatedAtUtc la hacía "curarse sola" a medianoche (ErrorFinal es terminal, su
+            // UpdatedAtUtc no vuelve a moverse) y disparaba alertas de recuperación falsas.
+            var failed = await db.PrintJobs.AsNoTracking()
+                .Where(j => j.StoreId == store.StoreId)
+                .Where(DashboardPrintJobPredicates.FailedWithoutRetryCurrent)
+                .CountAsync(ct);
 
             var (health, reason) = StoreHealthEvaluator.Compute(
-                connected, queued, failed, missingHost, connWarn, connCrit,
-                warnQueue, critQueue, warnFailed, critFailed, missingHostMin, connWarnMin, connCritMin,
-                thresholdRow?.ConnCriticalSeverity ?? "critical",
-                thresholdRow?.FailedCriticalSeverity ?? "critical",
-                thresholdRow?.QueueCriticalSeverity ?? "critical",
-                thresholdRow?.ConnWarningSeverity ?? "warning",
-                thresholdRow?.MissingHostSeverity ?? "warning",
-                thresholdRow?.FailedWarningSeverity ?? "warning",
-                thresholdRow?.QueueWarningSeverity ?? "warning");
+                connected, queued, failed, missingHost, connMaxStreak, connCrit, connWarn, rules);
 
             await ProcessStoreAlertAsync(db, store.StoreId, store.Name,
                 health, reason, queued, failed, minSeverity, notifyOnRecovery, now, ct);
         }
-
-        await db.SaveChangesAsync(ct);
     }
 
     private async Task ProcessStoreAlertAsync(
@@ -177,8 +200,8 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
         bool isEscalation = isAlertLevel && wasAlertLevel
             && SeverityRank(currentHealth) > SeverityRank(previousNotifiedHealth);
 
-        var spainTime = TimeZoneInfo.ConvertTime(now.UtcDateTime, _spainTz);
-        var ts = spainTime.ToString("dd/MM HH:mm");
+        var localTime = TimeZoneInfo.ConvertTime(now.UtcDateTime, _businessTimeZone);
+        var ts = localTime.ToString("dd/MM HH:mm");
 
         string? message = null;
 
@@ -211,11 +234,21 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
 
         if (message is not null)
         {
-            await _telegram.SendAlertAsync(message, ct, storeId);
+            // Fase 1.7: persistir el nuevo NotifiedHealth ANTES de enviar. Un crash entre el
+            // envío y el guardado reenviaba la misma alerta en el siguiente ciclo (spam); con
+            // este orden, en el peor caso una notificación no llega a enviarse pero el estado
+            // queda consistente (no hay reenvío duplicado).
             alertState.NotifiedHealth = currentHealth;
             alertState.NotifiedAtUtc = now;
+            await db.SaveChangesAsync(ct);
+
+            await _telegram.SendAlertAsync(message, ct, storeId);
             _logger.LogInformation("Alerta Telegram enviada para tienda {StoreId} ({Name}): {Health}.",
                 storeId, storeName, currentHealth);
+        }
+        else
+        {
+            await db.SaveChangesAsync(ct);
         }
     }
 
@@ -232,18 +265,6 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
         "critical" => 2,
         _ => 0
     };
-
-    private static bool IsFailedAfterRetry(PrintJobStatus status, int attemptCount)
-        => status != PrintJobStatus.RetryScheduled
-            && status != PrintJobStatus.SpoolAccepted
-            && status != PrintJobStatus.Printing
-            && status != PrintJobStatus.PrintedConfirmed
-            && status != PrintJobStatus.PrintedUnknown
-            && attemptCount > 1;
-
-    private static bool HasImplicitHost(string? spoolQueue)
-        => !string.IsNullOrEmpty(spoolQueue)
-            && spoolQueue.StartsWith(@"\\", StringComparison.Ordinal);
 
     private async Task<int> GetCheckIntervalAsync(CancellationToken ct)
     {

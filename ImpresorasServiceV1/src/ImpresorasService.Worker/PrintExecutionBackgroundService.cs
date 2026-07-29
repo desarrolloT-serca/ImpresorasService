@@ -9,15 +9,18 @@ public sealed class PrintExecutionBackgroundService : BackgroundService
     private readonly IServiceProvider _serviceProvider;
     private readonly IOptions<PrintExecutionOptions> _options;
     private readonly ILogger<PrintExecutionBackgroundService> _logger;
+    private readonly WorkerLockState _lockState;
 
     public PrintExecutionBackgroundService(
         IServiceProvider serviceProvider,
         IOptions<PrintExecutionOptions> options,
-        ILogger<PrintExecutionBackgroundService> logger)
+        ILogger<PrintExecutionBackgroundService> logger,
+        WorkerLockState lockState)
     {
         _serviceProvider = serviceProvider;
         _options = options;
         _logger = logger;
+        _lockState = lockState;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -26,6 +29,13 @@ public sealed class PrintExecutionBackgroundService : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            // G4.1: sin el lock de instancia única, esta réplica no envía al spooler (evita impresiones duplicadas).
+            if (!_lockState.IsHolder)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+                continue;
+            }
+
             try
             {
                 using var scope = _serviceProvider.CreateScope();

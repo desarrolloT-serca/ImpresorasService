@@ -79,7 +79,8 @@ public sealed class PrintExecutionServiceFlowTests
             spooler,
             NullLogger<PrintExecutionService>.Instance,
             options,
-            new DummyRoutingResolver());
+            new DummyRoutingResolver(),
+            TimeProvider.System);
 
         var processed = await service.ExecuteBatchAsync(batchSize: 1, CancellationToken.None);
         Assert.Equal(1, processed);
@@ -165,7 +166,8 @@ public sealed class PrintExecutionServiceFlowTests
             spooler,
             NullLogger<PrintExecutionService>.Instance,
             options,
-            new DummyRoutingResolver());
+            new DummyRoutingResolver(),
+            TimeProvider.System);
 
         var before = DateTimeOffset.UtcNow;
         var processed = await service.ExecuteBatchAsync(batchSize: 1, CancellationToken.None);
@@ -243,7 +245,8 @@ public sealed class PrintExecutionServiceFlowTests
             spooler,
             NullLogger<PrintExecutionService>.Instance,
             options,
-            new DummyRoutingResolver());
+            new DummyRoutingResolver(),
+            TimeProvider.System);
         var processed = await service.ExecuteBatchAsync(batchSize: 1, CancellationToken.None);
         Assert.Equal(1, processed);
 
@@ -310,7 +313,8 @@ public sealed class PrintExecutionServiceFlowTests
             spooler,
             NullLogger<PrintExecutionService>.Instance,
             options,
-            new DummyRoutingResolver());
+            new DummyRoutingResolver(),
+            TimeProvider.System);
         var processed = await service.ExecuteBatchAsync(batchSize: 1, CancellationToken.None);
         Assert.Equal(1, processed);
 
@@ -381,7 +385,8 @@ public sealed class PrintExecutionServiceFlowTests
             spooler,
             NullLogger<PrintExecutionService>.Instance,
             options,
-            new DummyRoutingResolver());
+            new DummyRoutingResolver(),
+            TimeProvider.System);
 
         var processed = await service.ExecuteBatchAsync(batchSize: 1, CancellationToken.None);
         Assert.Equal(1, processed);
@@ -447,7 +452,8 @@ public sealed class PrintExecutionServiceFlowTests
             spooler,
             NullLogger<PrintExecutionService>.Instance,
             options,
-            new DummyRoutingResolver());
+            new DummyRoutingResolver(),
+            TimeProvider.System);
 
         var processed = await service.ExecuteBatchAsync(batchSize: 1, CancellationToken.None);
         Assert.Equal(1, processed);
@@ -516,7 +522,8 @@ public sealed class PrintExecutionServiceFlowTests
             spooler,
             NullLogger<PrintExecutionService>.Instance,
             options,
-            new DummyRoutingResolver());
+            new DummyRoutingResolver(),
+            TimeProvider.System);
 
         var processed = await service.ExecuteBatchAsync(batchSize: 1, CancellationToken.None);
         Assert.Equal(1, processed);

@@ -62,7 +62,7 @@ public sealed class PrintJobsControllerCancelFlowTests
         });
         await db.SaveChangesAsync();
 
-        var controller = new PrintJobsController(db, new DummyRoutingService());
+        var controller = new PrintJobsController(db, new DummyRoutingService(), TimeProvider.System);
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext
@@ -124,7 +124,7 @@ public sealed class PrintJobsControllerCancelFlowTests
         });
         await db.SaveChangesAsync();
 
-        var controller = new PrintJobsController(db, new DummyRoutingService());
+        var controller = new PrintJobsController(db, new DummyRoutingService(), TimeProvider.System);
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext
@@ -173,7 +173,7 @@ public sealed class PrintJobsControllerCancelFlowTests
         });
         await db.SaveChangesAsync();
 
-        var controller = new PrintJobsController(db, new DummyRoutingService());
+        var controller = new PrintJobsController(db, new DummyRoutingService(), TimeProvider.System);
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext
@@ -228,7 +228,7 @@ public sealed class PrintJobsControllerCancelFlowTests
         });
         await db.SaveChangesAsync();
 
-        var controller = new PrintJobsController(db, new DummyRoutingService());
+        var controller = new PrintJobsController(db, new DummyRoutingService(), TimeProvider.System);
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext
@@ -273,7 +273,7 @@ public sealed class PrintJobsControllerCancelFlowTests
         });
         await db.SaveChangesAsync();
 
-        var controller = new PrintJobsController(db, new DummyRoutingService());
+        var controller = new PrintJobsController(db, new DummyRoutingService(), TimeProvider.System);
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext
@@ -333,7 +333,7 @@ public sealed class PrintJobsControllerCancelFlowTests
         });
         await db.SaveChangesAsync();
 
-        var controller = new PrintJobsController(db, new DummyRoutingService());
+        var controller = new PrintJobsController(db, new DummyRoutingService(), TimeProvider.System);
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext

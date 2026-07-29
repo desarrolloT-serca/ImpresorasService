@@ -76,7 +76,9 @@ class DashboardController extends Controller
             $storeSort = 'severity';
         }
 
-        $jobsPath     = 'api/printjobs?limit=5000' . ($effectiveStore !== null ? '&storeId=' . $effectiveStore : '');
+        // limit=500: coincide con el clamp real de la Api (PrintJobsController); usado solo como
+        // fallback si el overview no responde (ver F2.2, docs/roadmap-kpi-dashboard.md).
+        $jobsPath     = 'api/printjobs?limit=500' . ($effectiveStore !== null ? '&storeId=' . $effectiveStore : '');
         $printersPath = 'api/printers?isActive=true' . ($effectiveStore !== null ? '&storeId=' . $effectiveStore : '');
 
         $batch2 = [
@@ -153,70 +155,94 @@ class DashboardController extends Controller
                 'connectivityDetail' => (string) ($printer['connectivityDetail'] ?? $printer['ConnectivityDetail'] ?? $printer['lastConnectionError'] ?? $printer['LastConnectionError'] ?? ''),
                 'queueCurrent' => 0,
                 'failedWindow' => 0,
-                'totalWindow' => 0,
+                'receivedWindow' => 0,
             ];
         }
 
-        foreach ($jobs as $job) {
-            $status = $job['status'] ?? $job['Status'] ?? null;
-            $attemptCount = (int) ($job['attemptCount'] ?? $job['AttemptCount'] ?? 0);
-            $statusInt = $this->normalizePrintJobStatus($status);
-            $isPrintedStatus = in_array($statusInt, [3, 4, 5], true);
-            // Documento con señal de fallo: fallo final, reintento programado o impreso tras reintentos.
-            $hasFailureSignal = $statusInt === 8 || $statusInt === 6 || ($isPrintedStatus && $attemptCount > 1);
-            $storeId = (int) ($job['storeId'] ?? $job['StoreId'] ?? 0);
-            $printerId = (int) ($job['printerId'] ?? $job['PrinterId'] ?? 0);
-            $createdAtRaw = $job['createdAtUtc'] ?? $job['CreatedAtUtc'] ?? $job['created_at_utc'] ?? null;
-            $updatedAtRaw = $job['updatedAtUtc'] ?? $job['UpdatedAtUtc'] ?? $job['updated_at_utc'] ?? $createdAtRaw;
-            $createdAtTs = $this->parseUtcTimestamp($createdAtRaw);
-            $updatedAtTs = $this->parseUtcTimestamp($updatedAtRaw);
-            $createdInWindow = $this->isTimestampInWindow($createdAtTs, $windowStart, $windowEnd);
-            $updatedInWindow = $this->isTimestampInWindow($updatedAtTs, $windowStart, $windowEnd);
+        // F2.2: si el overview responde, sus valores sustituyen íntegramente a este cálculo
+        // (applyOverviewStores/applyOverviewPrinters/applyOverviewKpis más abajo), así que agregar
+        // sobre $jobs aquí sería trabajo desechado. Solo se calcula como fallback ante caída de la Api,
+        // y en ese caso limit=500 (arriba) puede truncar tiendas con mucha cola: ver $partialData.
+        //
+        // Fase 2 (docs/prompt-roadmap-kpi-dashboard.md, KPI-P1-001/002 aplicado aquí): printed/failed
+        // en la Api leen PrintJobEvents (primera transición a estado impreso / señal de fallo,
+        // deduplicado por JobId). `api/printjobs` no expone eventos, solo el snapshot actual del job
+        // (Status/UpdatedAtUtc) — este fallback es una APROXIMACIÓN por diseño, no puede replicar la
+        // deduplicación por evento. Puede sobre-contar un job que cambió de estado impreso más de una
+        // vez dentro de esta misma ventana. Aceptable porque solo se activa con la Api caída.
+        $partialData = false;
+        if ($overview === null) {
+            $partialData = count($jobs) >= 500;
 
-            // El dashboard operativo solo debe mostrar tiendas activas.
-            // Excluimos jobs historicos de tiendas inactivas/eliminadas.
-            if (!isset($activeStoreIds[$storeId])) {
-                continue;
-            }
+            foreach ($jobs as $job) {
+                $status = $job['status'] ?? $job['Status'] ?? null;
+                $attemptCount = (int) ($job['attemptCount'] ?? $job['AttemptCount'] ?? 0);
+                $statusInt = $this->normalizePrintJobStatus($status);
+                $isPrintedStatus = in_array($statusInt, [3, 4, 5], true);
+                // Documento con señal de fallo: fallo final, reintento programado o impreso tras reintentos.
+                $hasFailureSignal = $statusInt === 8 || $statusInt === 6 || ($isPrintedStatus && $attemptCount > 1);
+                // Contrato (docs/contrato-kpi-dashboard.md): ErrorFinal, o no-terminal/Cancelled/PrinterBlocked
+                // con reintentos ya consumidos. Independiente de hasFailureSignal (VAL-P2-006).
+                $isFailedWithoutRetryStatus = $statusInt === 8
+                    || (in_array($statusInt, [0, 1, 2, 7, 9], true) && $attemptCount > 1);
+                $storeId = (int) ($job['storeId'] ?? $job['StoreId'] ?? 0);
+                $printerId = (int) ($job['printerId'] ?? $job['PrinterId'] ?? 0);
+                $createdAtRaw = $job['createdAtUtc'] ?? $job['CreatedAtUtc'] ?? $job['created_at_utc'] ?? null;
+                $updatedAtRaw = $job['updatedAtUtc'] ?? $job['UpdatedAtUtc'] ?? $job['updated_at_utc'] ?? $createdAtRaw;
+                $createdAtTs = $this->parseUtcTimestamp($createdAtRaw);
+                $updatedAtTs = $this->parseUtcTimestamp($updatedAtRaw);
+                $createdInWindow = $this->isTimestampInWindow($createdAtTs, $windowStart, $windowEnd);
+                $updatedInWindow = $this->isTimestampInWindow($updatedAtTs, $windowStart, $windowEnd);
 
-            if (!isset($storeStats[$storeId])) {
-                $storeStats[$storeId] = $this->makeEmptyStore($storeId, $storeNameById);
-            }
-
-            if ($createdInWindow) {
-                $received++;
-                $storeStats[$storeId]['received']++;
-                if ($printerId > 0) {
-                    if (!isset($printerStatsByStore[$storeId][$printerId])) {
-                        $printerStatsByStore[$storeId][$printerId] = [
-                            'printerId' => $printerId,
-                            'printerName' => 'Impresora ' . $printerId,
-                            'spoolQueue' => '-',
-                            'isActive' => false,
-                            'lastConnectionOk' => null,
-                            'lastConnectionCheckAtUtc' => '',
-                            'lastConnectionTransport' => '',
-                            'lastConnectionError' => '',
-                            'connectionFailuresStreak' => 0,
-                            'queueCurrent' => 0,
-                            'failedWindow' => 0,
-                            'totalWindow' => 0,
-                        ];
-                    }
-                    $printerStatsByStore[$storeId][$printerId]['totalWindow'] = ($printerStatsByStore[$storeId][$printerId]['totalWindow'] ?? 0) + 1;
+                // El dashboard operativo solo debe mostrar tiendas activas.
+                // Excluimos jobs historicos de tiendas inactivas/eliminadas.
+                if (!isset($activeStoreIds[$storeId])) {
+                    continue;
                 }
-            }
 
-            if ($isPrintedStatus && $updatedInWindow) {
-                $printed++;
-                $storeStats[$storeId]['printed']++;
-            }
+                if (!isset($storeStats[$storeId])) {
+                    $storeStats[$storeId] = $this->makeEmptyStore($storeId, $storeNameById);
+                }
 
-            if ($hasFailureSignal && $updatedInWindow) {
-                $failed++;
-                $storeStats[$storeId]['failed']++;
-                // "Sin reenviar": fallidos que siguen sin terminar impresos.
-                if (!$isPrintedStatus && $statusInt !== 6) {
+                if ($createdInWindow) {
+                    $received++;
+                    $storeStats[$storeId]['received']++;
+                    if ($printerId > 0) {
+                        if (!isset($printerStatsByStore[$storeId][$printerId])) {
+                            $printerStatsByStore[$storeId][$printerId] = [
+                                'printerId' => $printerId,
+                                'printerName' => 'Impresora ' . $printerId,
+                                'spoolQueue' => '-',
+                                'isActive' => false,
+                                'lastConnectionOk' => null,
+                                'lastConnectionCheckAtUtc' => '',
+                                'lastConnectionTransport' => '',
+                                'lastConnectionError' => '',
+                                'connectionFailuresStreak' => 0,
+                                'queueCurrent' => 0,
+                                'failedWindow' => 0,
+                                'receivedWindow' => 0,
+                            ];
+                        }
+                        $printerStatsByStore[$storeId][$printerId]['receivedWindow'] = ($printerStatsByStore[$storeId][$printerId]['receivedWindow'] ?? 0) + 1;
+                    }
+                }
+
+                if ($isPrintedStatus && $updatedInWindow) {
+                    $printed++;
+                    $storeStats[$storeId]['printed']++;
+                }
+
+                if ($hasFailureSignal && $updatedInWindow) {
+                    $failed++;
+                    $storeStats[$storeId]['failed']++;
+                }
+
+                // Sin ventana (A-KPI-01, docs/auditoria-integral-2026-07-21.md): es una foto de
+                // estado actual, no un evento — un ErrorFinal es terminal y su UpdatedAtUtc no
+                // vuelve a moverse, así que exigir updatedInWindow lo hacía "desaparecer" al cruzar
+                // medianoche aunque el job siguiera roto. Coherente con DashboardController.cs.
+                if ($isFailedWithoutRetryStatus) {
                     $failedWithoutRetryCurrent++;
                     $storeStats[$storeId]['failedWithoutRetryCurrent']++;
                     if ($printerId > 0) {
@@ -233,37 +259,37 @@ class DashboardController extends Controller
                                 'connectionFailuresStreak' => 0,
                                 'queueCurrent' => 0,
                                 'failedWindow' => 0,
-                                'totalWindow' => 0,
+                                'receivedWindow' => 0,
                             ];
                         }
                         $printerStatsByStore[$storeId][$printerId]['failedWindow'] = ($printerStatsByStore[$storeId][$printerId]['failedWindow'] ?? 0) + 1;
                     }
                 }
-            }
 
-            if (in_array($statusInt, [0, 1, 2, 6], true)) {
-                $queueCurrent++;
-                $storeStats[$storeId]['queuedCurrent']++;
-                if ($printerId > 0) {
-                    if (!isset($printerStatsByStore[$storeId][$printerId])) {
-                        $printerStatsByStore[$storeId][$printerId] = [
-                            'printerId' => $printerId,
-                            'printerName' => 'Impresora ' . $printerId,
-                            'spoolQueue' => '-',
-                            'isActive' => false,
-                            'lastConnectionOk' => null,
-                            'lastConnectionCheckAtUtc' => '',
-                            'lastConnectionTransport' => '',
-                            'lastConnectionError' => '',
-                            'connectionFailuresStreak' => 0,
-                            'queueCurrent' => 0,
-                            'failedWindow' => 0,
-                            'totalWindow' => 0,
-                        ];
+                if (in_array($statusInt, [0, 1, 2, 6], true)) {
+                    $queueCurrent++;
+                    $storeStats[$storeId]['queuedCurrent']++;
+                    if ($printerId > 0) {
+                        if (!isset($printerStatsByStore[$storeId][$printerId])) {
+                            $printerStatsByStore[$storeId][$printerId] = [
+                                'printerId' => $printerId,
+                                'printerName' => 'Impresora ' . $printerId,
+                                'spoolQueue' => '-',
+                                'isActive' => false,
+                                'lastConnectionOk' => null,
+                                'lastConnectionCheckAtUtc' => '',
+                                'lastConnectionTransport' => '',
+                                'lastConnectionError' => '',
+                                'connectionFailuresStreak' => 0,
+                                'queueCurrent' => 0,
+                                'failedWindow' => 0,
+                                'receivedWindow' => 0,
+                            ];
+                        }
+                        $printerStatsByStore[$storeId][$printerId]['queueCurrent'] = ($printerStatsByStore[$storeId][$printerId]['queueCurrent'] ?? 0) + 1;
+                    } else {
+                        $unassignedQueueByStore[$storeId] = ($unassignedQueueByStore[$storeId] ?? 0) + 1;
                     }
-                    $printerStatsByStore[$storeId][$printerId]['queueCurrent'] = ($printerStatsByStore[$storeId][$printerId]['queueCurrent'] ?? 0) + 1;
-                } else {
-                    $unassignedQueueByStore[$storeId] = ($unassignedQueueByStore[$storeId] ?? 0) + 1;
                 }
             }
         }
@@ -318,7 +344,12 @@ class DashboardController extends Controller
             $stores = array_values(array_filter($stores, fn (array $row): bool => ($row['health'] ?? '') === $health));
         }
 
-        $alerts = $this->buildPrioritizedAlerts($stores, $thresholds);
+        // G5.3: la Api calcula las alertas con el mismo motor de reglas que stores[].health (una
+        // sola fuente de verdad) — buildPrioritizedAlerts() solo se usa si la Api no respondió
+        // (fallback ya documentado como aproximación, igual que applyOverviewKpis/Stores).
+        $alerts = $overview !== null && is_array($overview['alerts'] ?? $overview['Alerts'] ?? null)
+            ? $this->mapOverviewAlerts($overview['alerts'] ?? $overview['Alerts'])
+            : $this->buildPrioritizedAlerts($stores, $thresholds);
 
         $kpis = [
             'received' => $received,
@@ -364,6 +395,7 @@ class DashboardController extends Controller
             'summary' => $summary,
             'alerts' => $alerts,
             'stores' => $stores,
+            'partialData' => $partialData,
         ]);
 
         return $request->ajax() && $viewName === 'dashboard'
@@ -397,10 +429,13 @@ class DashboardController extends Controller
             return back()->withErrors(['thresholds' => implode(' ', $ruleErrors)])->withInput();
         }
 
-        $legacyPayload = $this->deriveLegacyThresholdPayload($rules);
-
         try {
-            $this->api->put('api/dashboard/thresholds', $legacyPayload);
+            // G5.3: la Api es la fuente única de verdad de las reglas de severidad (ya entiende
+            // 1-3 niveles de forma nativa, api/dashboard/threshold-rules) — ya no hace falta
+            // colapsar a 2 niveles para el endpoint legacy.
+            $this->api->put('api/dashboard/threshold-rules', $rules);
+            // Cache local: mantiene el fallback de este método operativo si la Api está caída
+            // en el momento en que se carga /dashboard (ver resolveHealthThresholds).
             $this->storeDynamicThresholdRules($rules);
 
             return back()->with('success', 'Umbrales de salud actualizados.');
@@ -438,6 +473,22 @@ class DashboardController extends Controller
     /**
      * @param array<string, int> $kpis
      * @param array<string, mixed> $overview
+     * @param array<int, array<string, mixed>> $overviewAlerts
+     * @return array<int, array<string, mixed>>
+     */
+    private function mapOverviewAlerts(array $overviewAlerts): array
+    {
+        return array_values(array_map(fn (array $a): array => [
+            'storeId' => $this->readInt($a, 'storeId'),
+            'storeName' => (string) ($a['storeName'] ?? $a['StoreName'] ?? ''),
+            'health' => (string) ($a['health'] ?? $a['Health'] ?? 'healthy'),
+            'healthReason' => (string) ($a['healthReason'] ?? $a['HealthReason'] ?? ''),
+            'queuedCurrent' => $this->readInt($a, 'queuedCurrent'),
+            'failedWithoutRetryCurrent' => $this->readInt($a, 'failedWithoutRetryCurrent'),
+        ], array_filter($overviewAlerts, 'is_array')));
+    }
+
+    /**
      * @return array<string, int>
      */
     private function applyOverviewKpis(array $kpis, array $overview): array
@@ -447,7 +498,11 @@ class DashboardController extends Controller
             return $kpis;
         }
 
-        foreach (['received', 'printed', 'failed', 'queueCurrent', 'failedWithoutRetryCurrent'] as $key) {
+        // KPI-P2-003: activePrinters/activeStores tambien deben venir del overview cuando existe.
+        // El calculo local de activeStores ("tiendas con >=1 impresora conectada") no es lo mismo
+        // que el de la Api ("tiendas con IsActive=true") — si el overview es la fuente unica, gana
+        // su definicion, no la heuristica local.
+        foreach (['received', 'printed', 'failed', 'queueCurrent', 'failedWithoutRetryCurrent', 'activePrinters', 'activeStores'] as $key) {
             $kpis[$key] = $this->readInt($overviewKpis, $key, $kpis[$key] ?? 0);
         }
 
@@ -488,7 +543,63 @@ class DashboardController extends Controller
             $storeStats[$storeId]['failedWithoutRetryCurrent'] = $this->readInt($overviewStore, 'failedWithoutRetryCurrent', (int) $storeStats[$storeId]['failedWithoutRetryCurrent']);
             $storeStats[$storeId]['health'] = (string) ($overviewStore['health'] ?? $overviewStore['Health'] ?? $storeStats[$storeId]['health']);
             $storeStats[$storeId]['healthReason'] = (string) ($overviewStore['healthReason'] ?? $overviewStore['HealthReason'] ?? $storeStats[$storeId]['healthReason']);
+            $storeStats[$storeId]['unassignedQueueCurrent'] = $this->readInt($overviewStore, 'unassignedQueueCurrent', (int) ($storeStats[$storeId]['unassignedQueueCurrent'] ?? 0));
+
+            $this->applyOverviewPrinters($storeStats[$storeId], $overviewStore);
         }
+    }
+
+    /**
+     * Sustituye los chips por impresora (queueCurrent/failedWindow/receivedWindow) por los del
+     * overview, que no dependen del limit=5000 truncado a 500 del fallback legacy (VAL-P1-004).
+     *
+     * @param array<string, mixed> $storeRow
+     * @param array<string, mixed> $overviewStore
+     */
+    private function applyOverviewPrinters(array &$storeRow, array $overviewStore): void
+    {
+        $overviewPrinters = $overviewStore['printers'] ?? $overviewStore['Printers'] ?? null;
+        if (!is_array($overviewPrinters)) {
+            return;
+        }
+
+        $byPrinterId = [];
+        foreach ((array) ($storeRow['printers'] ?? []) as $printerRow) {
+            $pid = (int) ($printerRow['printerId'] ?? 0);
+            if ($pid > 0) {
+                $byPrinterId[$pid] = $printerRow;
+            }
+        }
+
+        foreach ($overviewPrinters as $overviewPrinter) {
+            if (!is_array($overviewPrinter)) {
+                continue;
+            }
+            $printerId = $this->readInt($overviewPrinter, 'printerId');
+            if ($printerId <= 0) {
+                continue;
+            }
+            if (!isset($byPrinterId[$printerId])) {
+                $byPrinterId[$printerId] = [
+                    'printerId' => $printerId,
+                    'printerName' => 'Impresora ' . $printerId,
+                    'spoolQueue' => '-',
+                    'isActive' => false,
+                    'lastConnectionOk' => null,
+                    'lastConnectionCheckAtUtc' => '',
+                    'lastConnectionTransport' => '',
+                    'lastConnectionError' => '',
+                    'connectionFailuresStreak' => 0,
+                ];
+            }
+            $byPrinterId[$printerId]['queueCurrent'] = $this->readInt($overviewPrinter, 'queueCurrent');
+            $byPrinterId[$printerId]['failedWindow'] = $this->readInt($overviewPrinter, 'failedWindow');
+            $byPrinterId[$printerId]['receivedWindow'] = $this->readInt($overviewPrinter, 'receivedWindow');
+        }
+
+        $printersForStore = array_values($byPrinterId);
+        usort($printersForStore, fn (array $a, array $b): int => ($b['queueCurrent'] <=> $a['queueCurrent']) ?: strcmp((string) ($a['printerName'] ?? ''), (string) ($b['printerName'] ?? '')));
+        $storeRow['printers'] = $printersForStore;
     }
 
     /**
@@ -547,6 +658,7 @@ class DashboardController extends Controller
             'retryscheduled' => 6,
             'cancelled', 'canceled' => 7,
             'errorfinal' => 8,
+            'printerblocked' => 9,
             default => -1,
         };
     }
@@ -768,7 +880,11 @@ class DashboardController extends Controller
                 'connCriticalSeverity' => (string) ($thresholds['connCriticalSeverity'] ?? $thresholds['ConnCriticalSeverity'] ?? $defaults['connCriticalSeverity']),
             ];
 
-            $resolved['thresholdRules'] = $this->loadDynamicThresholdRules() ?? $this->legacyRulesFromThresholds($resolved);
+            // G5.3: la Api es la fuente única de verdad de las reglas de severidad. El fichero local
+            // (loadDynamicThresholdRules) y los campos legacy solo se usan si la Api no responde.
+            $resolved['thresholdRules'] = $this->fetchApiThresholdRules()
+                ?? $this->loadDynamicThresholdRules()
+                ?? $this->legacyRulesFromThresholds($resolved);
 
             return $resolved;
         } catch (\Throwable) {
@@ -883,66 +999,6 @@ class DashboardController extends Controller
         return true;
     }
 
-    private function deriveLegacyThresholdPayload(array $rules): array
-    {
-        $queue = $this->deriveTwoLevelLegacy($rules['queue'] ?? [], 10, 30);
-        $failed = $this->deriveTwoLevelLegacy($rules['failed'] ?? [], 1, 5);
-        $conn = $this->deriveTwoLevelLegacy($rules['conn'] ?? [], 2, 3);
-        $missingHost = $this->deriveSingleLevelLegacy($rules['missingHost'] ?? [], 1, 'warning');
-
-        return [
-            'warningQueueMin' => $queue['warningMin'],
-            'criticalQueueMin' => $queue['criticalMin'],
-            'queueWarningSeverity' => $queue['warningSeverity'],
-            'queueCriticalSeverity' => $queue['criticalSeverity'],
-            'warningFailedWithoutRetryMin' => $failed['warningMin'],
-            'criticalFailedWithoutRetryMin' => $failed['criticalMin'],
-            'failedWarningSeverity' => $failed['warningSeverity'],
-            'failedCriticalSeverity' => $failed['criticalSeverity'],
-            'missingHostMin' => $missingHost['min'],
-            'missingHostSeverity' => $missingHost['severity'],
-            'connWarningFailuresMin' => $conn['warningMin'],
-            'connCriticalFailuresMin' => $conn['criticalMin'],
-            'connWarningSeverity' => $conn['warningSeverity'],
-            'connCriticalSeverity' => $conn['criticalSeverity'],
-        ];
-    }
-
-    private function deriveTwoLevelLegacy(array $rules, int $defaultWarning, int $defaultCritical): array
-    {
-        $rules = $this->normalizeRuleSet($rules ?: [
-            ['min' => $defaultWarning, 'severity' => 'warning'],
-            ['min' => $defaultCritical, 'severity' => 'critical'],
-        ]);
-        $bySeverity = [];
-        foreach ($rules as $rule) {
-            $bySeverity[$rule['severity']] = $rule;
-        }
-
-        $warning = $bySeverity['warning'] ?? $bySeverity['info'] ?? $rules[0];
-        $critical = $bySeverity['critical'] ?? $rules[count($rules) - 1] ?? ['min' => $warning['min'] + 1, 'severity' => $warning['severity']];
-
-        $warningMin = (int) $warning['min'];
-        $criticalMin = (int) $critical['min'];
-        if ($criticalMin <= $warningMin) {
-            $criticalMin = $warningMin + 1;
-        }
-
-        return [
-            'warningMin' => $warningMin,
-            'criticalMin' => $criticalMin,
-            'warningSeverity' => (string) $warning['severity'],
-            'criticalSeverity' => (string) $critical['severity'],
-        ];
-    }
-
-    private function deriveSingleLevelLegacy(array $rules, int $defaultMin, string $defaultSeverity): array
-    {
-        $rules = $this->normalizeRuleSet($rules ?: [['min' => $defaultMin, 'severity' => $defaultSeverity]]);
-        $rule = $rules[0] ?? ['min' => $defaultMin, 'severity' => $defaultSeverity];
-        return ['min' => (int) $rule['min'], 'severity' => (string) $rule['severity']];
-    }
-
     private function matchThresholdRule(array $rules, int $value): ?array
     {
         $rules = $this->normalizeRuleSet($rules);
@@ -953,6 +1009,21 @@ class DashboardController extends Controller
         }
 
         return null;
+    }
+
+    private function fetchApiThresholdRules(): ?array
+    {
+        try {
+            $decoded = $this->api->get('api/dashboard/threshold-rules');
+            if (!is_array($decoded)) {
+                return null;
+            }
+            [$rules, $errors] = $this->normalizeThresholdRules($decoded);
+            return $errors === [] ? $rules : null;
+        } catch (\Throwable $e) {
+            Log::warning('No se pudieron cargar las reglas de dashboard desde la Api', ['error' => $e->getMessage()]);
+            return null;
+        }
     }
 
     private function loadDynamicThresholdRules(): ?array

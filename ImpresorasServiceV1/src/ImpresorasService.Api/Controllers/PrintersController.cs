@@ -165,14 +165,17 @@ public class PrintersController : ControllerBase
                   "\"updated_at_utc\" = {6} " +
                   "WHERE \"printer_id\" = {7}";
 
+            // Host/CapabilitiesJson son columnas nullable; ExecuteSqlRawAsync traduce null a
+            // DBNull sin problema — el `!` solo silencia el warning de nullabilidad del array
+            // `params object[]` (no-nullable), no cambia el comportamiento.
             await _dbContext.Database.ExecuteSqlRawAsync(
                 sql,
                 input.PrinterName,
                 input.SpoolQueue,
-                input.Host,
+                input.Host!,
                 request.StoreId,
                 request.IsActive ? 1 : 0,
-                input.CapabilitiesJson,
+                input.CapabilitiesJson!,
                 nowStr,
                 id);
         }

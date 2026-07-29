@@ -4,11 +4,17 @@ using ImpresorasService.Domain;
 using ImpresorasService.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using Microsoft.Extensions.Logging;
 
 namespace ImpresorasService.Infrastructure.Persistence;
 
 public class ImpresorasDbContext : DbContext
 {
+    // Ventana de la heurística de duplicados (A-ARCH-05, G4.3): mismo JobId+OldStatus+NewStatus en
+    // menos de esto es indicio de doble procesamiento concurrente (2 Workers sin lock, ver G4.1).
+    // ponytail: heurística por tiempo, no una unicidad real — un reintento legítimo muy rápido
+    // (backoff corto) podría dar un falso positivo; subir el umbral si eso genera ruido.
+    private static readonly TimeSpan DuplicateEventDetectionWindow = TimeSpan.FromSeconds(5);
     private static readonly string[] SupportedDateFormats =
     {
         "yyyy-MM-dd HH:mm:ss",
@@ -45,8 +51,11 @@ public class ImpresorasDbContext : DbContext
             toDb => toDb.HasValue ? toDb.Value.ToByteArray() : null,
             fromDb => fromDb == null ? (Guid?)null : new Guid(fromDb));
 
-    public ImpresorasDbContext(DbContextOptions<ImpresorasDbContext> options) : base(options)
+    private readonly ILogger<ImpresorasDbContext>? _logger;
+
+    public ImpresorasDbContext(DbContextOptions<ImpresorasDbContext> options, ILogger<ImpresorasDbContext>? logger = null) : base(options)
     {
+        _logger = logger;
     }
 
     private static DateTimeOffset ParseDateTimeOffset(string value)
@@ -82,14 +91,62 @@ public class ImpresorasDbContext : DbContext
     public override int SaveChanges()
     {
         BumpPrintJobRowVersionsForConcurrency();
+        DetectDuplicatePrintJobEvents();
         return base.SaveChanges();
     }
 
-    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         BumpPrintJobRowVersionsForConcurrency();
-        return base.SaveChangesAsync(cancellationToken);
+        await DetectDuplicatePrintJobEventsAsync(cancellationToken);
+        return await base.SaveChangesAsync(cancellationToken);
     }
+
+    /// <summary>
+    /// Log de warning (A-ARCH-05, G4.3) si un PrintJobEvent nuevo repite JobId+OldStatus+NewStatus
+    /// de uno ya persistido en <see cref="DuplicateEventDetectionWindow"/> — indicio de doble
+    /// procesamiento concurrente. No bloquea el insert, solo observa (G4.1 ya evita la causa raíz).
+    /// </summary>
+    private void DetectDuplicatePrintJobEvents()
+    {
+        foreach (var e in NewPrintJobEventsPendingCheck())
+        {
+            var (lowerBound, upperBound) = DuplicateWindowFor(e);
+            var duplicateExists = PrintJobEvents.Any(x =>
+                x.JobId == e.JobId && x.NewStatus == e.NewStatus && x.OldStatus == e.OldStatus
+                && x.OccurredAtUtc >= lowerBound && x.OccurredAtUtc <= upperBound);
+
+            if (duplicateExists)
+                LogDuplicateEvent(e);
+        }
+    }
+
+    private async Task DetectDuplicatePrintJobEventsAsync(CancellationToken cancellationToken)
+    {
+        foreach (var e in NewPrintJobEventsPendingCheck())
+        {
+            var (lowerBound, upperBound) = DuplicateWindowFor(e);
+            var duplicateExists = await PrintJobEvents.AnyAsync(x =>
+                x.JobId == e.JobId && x.NewStatus == e.NewStatus && x.OldStatus == e.OldStatus
+                && x.OccurredAtUtc >= lowerBound && x.OccurredAtUtc <= upperBound,
+                cancellationToken);
+
+            if (duplicateExists)
+                LogDuplicateEvent(e);
+        }
+    }
+
+    private IEnumerable<PrintJobEvent> NewPrintJobEventsPendingCheck() => ChangeTracker.Entries<PrintJobEvent>()
+        .Where(entry => entry.State == EntityState.Added)
+        .Select(entry => entry.Entity);
+
+    private static (DateTimeOffset lower, DateTimeOffset upper) DuplicateWindowFor(PrintJobEvent e) =>
+        (e.OccurredAtUtc - DuplicateEventDetectionWindow, e.OccurredAtUtc + DuplicateEventDetectionWindow);
+
+    private void LogDuplicateEvent(PrintJobEvent e) => _logger?.LogWarning(
+        "Posible evento duplicado de PrintJobEvent: mismo JobId+OldStatus+NewStatus en menos de {WindowSeconds}s. " +
+        "jobId={JobId} oldStatus={OldStatus} newStatus={NewStatus} occurredAtUtc={OccurredAtUtc}.",
+        DuplicateEventDetectionWindow.TotalSeconds, e.JobId, e.OldStatus, e.NewStatus, e.OccurredAtUtc);
 
     /// <summary>
     /// Asigna un nuevo token de concurrencia en cada alta o modificación de PrintJob para que el UPDATE
@@ -129,6 +186,7 @@ public class ImpresorasDbContext : DbContext
     public DbSet<TelegramConfig> TelegramConfigs => Set<TelegramConfig>();
     public DbSet<TelegramChat> TelegramChats => Set<TelegramChat>();
     public DbSet<StoreAlertState> StoreAlertStates => Set<StoreAlertState>();
+    public DbSet<WorkerLock> WorkerLocks => Set<WorkerLock>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -398,6 +456,15 @@ public class ImpresorasDbContext : DbContext
             entity.Property(x => x.NotifiedHealth).HasColumnName("notified_health").HasMaxLength(20);
             entity.Property(x => x.NotifiedAtUtc).HasColumnName("notified_at_utc");
             entity.Property(x => x.CheckedAtUtc).HasColumnName("checked_at_utc").IsRequired();
+        });
+
+        modelBuilder.Entity<WorkerLock>(entity =>
+        {
+            entity.ToTable("printer_worker_lock");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(x => x.Holder).HasColumnName("holder").HasMaxLength(200);
+            entity.Property(x => x.HeartbeatAtUtc).HasColumnName("heartbeat_utc").IsRequired();
         });
 
         // HANA está persistiendo fechas históricas en formato string no homogéneo (legacy).

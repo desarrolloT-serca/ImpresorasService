@@ -17,17 +17,20 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
     private readonly ILogger<PrinterConnectivityMonitorService> _logger;
     private readonly PrinterConnectivityOptions _options;
     private readonly IIppConfirmationService _ippService;
+    private readonly WorkerLockState _lockState;
 
     public PrinterConnectivityMonitorService(
         IServiceScopeFactory scopeFactory,
         ILogger<PrinterConnectivityMonitorService> logger,
         IConfiguration configuration,
-        IIppConfirmationService ippService)
+        IIppConfirmationService ippService,
+        WorkerLockState lockState)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
         _options = PrinterConnectivityOptions.FromConfiguration(configuration);
         _ippService = ippService;
+        _lockState = lockState;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -42,6 +45,13 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            // G4.1: sin el lock de instancia única, esta réplica no sondea (evita escrituras redundantes).
+            if (!_lockState.IsHolder)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+                continue;
+            }
+
             try
             {
                 await RunOnceAsync(stoppingToken);
