@@ -431,7 +431,7 @@ public class PrintersController : ControllerBase
 
     private async Task<bool> ActiveStoreExistsAsync(int storeId, CancellationToken cancellationToken)
     {
-        if (storeId <= 0)
+        if (storeId < 0)
             return false;
 
         var activeStoreOnly = true;

@@ -201,7 +201,7 @@ public class UsersController : ControllerBase
         if (!RoleCatalog.TryNormalize(role, out var normalizedRole))
             return "El rol no es valido.";
 
-        if (NeedsStore(normalizedRole) && (!storeId.HasValue || storeId <= 0))
+        if (NeedsStore(normalizedRole) && (!storeId.HasValue || storeId < 0))
             return "Debe indicar una tienda para el rol seleccionado.";
 
         if (normalizedRole == RoleCatalog.Admin && storeId.HasValue)
@@ -226,7 +226,7 @@ public class UsersController : ControllerBase
         if (NeedsStore(normalizedRole))
         {
             var storeIdValue = storeId.GetValueOrDefault();
-            if (storeIdValue <= 0)
+            if (storeIdValue < 0)
                 return "La tienda seleccionada no existe o esta inactiva.";
 
             var activeStoreOnly = true;
