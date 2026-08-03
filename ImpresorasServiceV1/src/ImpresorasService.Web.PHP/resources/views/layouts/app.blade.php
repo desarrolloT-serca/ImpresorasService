@@ -462,6 +462,7 @@
         <div class="app-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="app-confirm-title" aria-describedby="app-confirm-message">
             <h2 class="app-confirm-title" id="app-confirm-title"></h2>
             <p class="app-confirm-message" id="app-confirm-message"></p>
+            <p class="app-confirm-type-hint" id="app-confirm-type-hint" hidden></p>
             <input type="text" class="input app-confirm-type" id="app-confirm-type-input" autocomplete="off" hidden>
             <div class="app-confirm-actions">
                 <button type="button" class="btn btn-ghost" id="app-confirm-cancel">Cancelar</button>
@@ -476,6 +477,7 @@
         var titleEl = document.getElementById('app-confirm-title');
         var messageEl = document.getElementById('app-confirm-message');
         var typeInput = document.getElementById('app-confirm-type-input');
+        var typeHint  = document.getElementById('app-confirm-type-hint');
         var cancelBtn = document.getElementById('app-confirm-cancel');
         var acceptBtn = document.getElementById('app-confirm-accept');
         var activeResolve = null;
@@ -534,11 +536,15 @@
                 acceptBtn.classList.toggle('btn-primary', !opts.danger);
 
                 if (opts.typeToConfirm) {
+                    typeHint.textContent = 'Escribe «' + opts.typeToConfirm + '» para confirmar:';
+                    typeHint.hidden = false;
+                    typeInput.placeholder = opts.typeToConfirm;
                     typeInput.hidden = false;
                     typeInput.value = '';
                     typeInput.dataset.expected = opts.typeToConfirm;
                     acceptBtn.disabled = true;
                 } else {
+                    typeHint.hidden = true;
                     typeInput.hidden = true;
                     acceptBtn.disabled = false;
                 }
