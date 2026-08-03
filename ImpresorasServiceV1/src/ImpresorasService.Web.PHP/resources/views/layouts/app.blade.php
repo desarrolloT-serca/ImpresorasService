@@ -341,7 +341,7 @@
             document.getElementById('sidebar-toggle')?.addEventListener('click', toggleSidebar);
             document.getElementById('sidebar-overlay')?.addEventListener('click', closeSidebar);
             window.addEventListener('resize', function() {
-                if (window.innerWidth > 1024) {
+                if (window.innerWidth > 480) {
                     closeSidebar();
                 }
             });

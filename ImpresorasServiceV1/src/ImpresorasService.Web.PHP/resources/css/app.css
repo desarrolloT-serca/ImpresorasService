@@ -760,7 +760,7 @@ textarea::placeholder {
     background: var(--ui-primary);
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 480px) {
     .app-sidebar {
         position: fixed;
         top: 0;
@@ -1115,15 +1115,6 @@ html.dark body {
     padding: 1rem 0.9rem;
 }
 
-@media (min-width: 1025px) {
-    .app-shell .app-content {
-        margin-left: 284px !important;
-    }
-
-    .app-shell .app-sidebar {
-        width: 284px !important;
-    }
-}
 
 .app-brand {
     align-items: stretch;
@@ -1274,7 +1265,7 @@ html.dark .app-nav-link-active {
 
 /* Ancho de contenido: fuente unica en system.css (.app-topbar, .ajustes-wrap, .dbx-wrap, .dbx-dashboard-page). */
 
-@media (max-width: 1024px) {
+@media (max-width: 480px) {
     .sidebar-toggle {
         display: inline-flex !important;
     }

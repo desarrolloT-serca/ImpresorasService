@@ -1,4 +1,4 @@
-﻿@media (min-width: 1025px) {
+﻿@media (min-width: 481px) {
     .app-shell {
         display: block;
     }
@@ -615,7 +615,7 @@ html.dark .dbx-donut::after {
 }
 
 /* --- Sprint 3: modern DBX operational surface --- */
-@media (min-width: 1025px) {
+@media (min-width: 481px) {
     .app-shell .app-sidebar {
         background: linear-gradient(180deg, var(--ui-nav) 0%, var(--ui-nav-strong) 100%) !important;
     }
@@ -1011,7 +1011,7 @@ html.dark .dbx-pill.neutral {
 }
 
 /* --- Sprint 3 visible redesign pass --- */
-@media (min-width: 1025px) {
+@media (min-width: 481px) {
     .app-shell .app-sidebar,
     html.dark .app-shell .app-sidebar {
         background: linear-gradient(180deg, var(--ui-nav) 0%, var(--ui-nav-strong) 100%) !important;

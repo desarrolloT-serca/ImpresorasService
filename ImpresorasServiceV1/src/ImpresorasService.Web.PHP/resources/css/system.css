@@ -92,9 +92,9 @@ html.dark .app-shell .app-sidebar {
     box-shadow: 8px 0 28px rgba(0, 0, 0, 0.45);
 }
 
-@media (min-width: 1025px) {
+@media (min-width: 481px) {
     .app-shell .app-content {
-        margin-left: 248px !important;
+        margin-left: 72px !important;
     }
 }
 
@@ -630,11 +630,7 @@ html.dark input {
     color: var(--ui-text);
 }
 
-@media (max-width: 1024px) {
-    .app-shell .app-sidebar {
-        width: 284px !important;
-    }
-
+@media (max-width: 480px) {
     .app-shell .app-content {
         margin-left: 0 !important;
         padding: 14px;
@@ -3256,34 +3252,37 @@ html.dark .nav-tooltip::before {
     flex-shrink: 0;
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 480px) {
     .sidebar-pin-btn {
         display: none !important;
     }
 }
 
-/* Desktop: width + transition */
-@media (min-width: 1025px) {
+/* Sidebar: sistema unificado ≥481px
+   - Compact (72px): siempre visible, contenido a margin-left: 72px
+   - Hover-expand (248px): overlay sobre contenido (margin no cambia)
+   - Pinned (248px): único caso donde el contenido se desplaza a 248px  */
+@media (min-width: 481px) {
     .app-shell .app-sidebar {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        height: 100vh !important;
+        z-index: 50 !important;
         width: 248px !important;
         overflow: hidden;
         transition: width 0.28s ease-in-out !important;
-    }
-
-    .app-shell .app-content {
-        margin-left: 248px !important;
-        transition: margin-left 0.28s ease-in-out !important;
     }
 
     body.sidebar-compact .app-shell .app-sidebar {
         width: 72px !important;
     }
 
-    body.sidebar-compact .app-shell .app-content {
-        margin-left: 72px !important;
+    .app-shell .app-content {
+        transition: margin-left 0.28s ease-in-out !important;
     }
 
-    /* Pinned: sidebar always at 248px, content offset restores */
+    /* Pinned: sidebar fija a 248px, contenido se desplaza */
     body.sidebar-pinned .app-shell .app-sidebar,
     html.sidebar-pinned .app-shell .app-sidebar {
         width: 248px !important;
@@ -3433,7 +3432,7 @@ html.sidebar-pinned .app-sidebar-footer-actions {
 }
 
 /* ---- Preload: html.sidebar-pinned set by head script for pinned users (no flash) ---- */
-@media (min-width: 1025px) {
+@media (min-width: 481px) {
     html.sidebar-pinned .app-shell .app-sidebar,
     html.sidebar-pinned .app-shell .app-content {
         transition: none !important;
@@ -3446,12 +3445,10 @@ html.sidebar-pinned .app-brand-name {
     transition: none !important;
 }
 
-/* Mobile/tablet: reset all compact overrides */
-@media (max-width: 1024px) {
+/* Móvil: resetear overrides de compact (sidebar oculta, contenido a ancho completo) */
+@media (max-width: 480px) {
     body.sidebar-compact .app-shell .app-sidebar {
-        width: 284px !important;
-        padding-left: 14px !important;
-        padding-right: 14px !important;
+        width: 272px !important;
     }
 
     body.sidebar-compact .app-shell .app-content {
