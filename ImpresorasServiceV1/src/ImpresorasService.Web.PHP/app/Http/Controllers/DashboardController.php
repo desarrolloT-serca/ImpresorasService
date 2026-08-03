@@ -886,6 +886,11 @@ class DashboardController extends Controller
                 ?? $this->loadDynamicThresholdRules()
                 ?? $this->legacyRulesFromThresholds($resolved);
 
+            // threshold-rules es opcional y tiene fallback — si falló (p.ej. endpoint no desplegado
+            // aún en la versión de API en ejecución), suprimir el error de sesión para no mostrar
+            // el banner al usuario cuando el resto de datos cargó correctamente.
+            \Illuminate\Support\Facades\Session::forget(\App\Services\ApiClient::SESSION_API_ERROR_KEY);
+
             return $resolved;
         } catch (\Throwable) {
             return $defaults;
