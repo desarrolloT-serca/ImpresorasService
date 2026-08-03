@@ -5508,14 +5508,14 @@ html.dark .table-alerts tbody tr.dbx-alert-row-healthy:hover td {
         flex-basis: 100%;
     }
 
-    .dbx-form-actions .btn,
-    .form-actions .btn,
-    .local-actions .btn,
-    .dbx-diagnostic-actions .btn,
-    .action-buttons .btn,
-    .dbx-printer-panel-tools .btn,
-    .dbx-rule-form-actions .btn,
-    .dbx-bulk-toolbar .btn {
+    .dbx-form-actions .btn:not(.btn-action-icon),
+    .form-actions .btn:not(.btn-action-icon),
+    .local-actions .btn:not(.btn-action-icon),
+    .dbx-diagnostic-actions .btn:not(.btn-action-icon),
+    .action-buttons .btn:not(.btn-action-icon),
+    .dbx-printer-panel-tools .btn:not(.btn-action-icon),
+    .dbx-rule-form-actions .btn:not(.btn-action-icon),
+    .dbx-bulk-toolbar .btn:not(.btn-action-icon) {
         flex: 1 1 auto;
     }
 

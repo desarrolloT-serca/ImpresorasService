@@ -413,12 +413,16 @@
     .dbx-bulk-toolbar > form,
     .dbx-bulk-toolbar > form > button,
     .dbx-form-actions,
-    .dbx-form-actions .btn {
+    .dbx-form-actions .btn:not(.btn-action-icon) {
         width: 100%;
     }
 
     .dbx-form-actions {
-        justify-content: stretch;
+        justify-content: flex-start;
+    }
+    .dbx-form-actions .btn-action-icon {
+        width: auto;
+        flex-shrink: 0;
     }
 }
 
