@@ -225,7 +225,26 @@
                         || form.classList.contains('filters-row')
                         || form.querySelector('.dbx-filters, .filters-row')
                     );
-                const debounceMs = 250;
+                const debounceMs = 400;
+                const FOCUS_KEY = 'dbx-filter-focus';
+
+                // El debounce dispara una navegacion GET completa (no hay fetch/AJAX),
+                // asi que cada recarga pierde el foco y la posicion del cursor del input.
+                // Guardamos donde estaba el usuario antes de recargar y lo restauramos
+                // al terminar de cargar la pagina.
+                try {
+                    const saved = JSON.parse(sessionStorage.getItem(FOCUS_KEY) || 'null');
+                    sessionStorage.removeItem(FOCUS_KEY);
+                    if (saved && saved.path === location.pathname) {
+                        const el = document.getElementById(saved.id);
+                        if (el) {
+                            el.focus();
+                            if (typeof el.setSelectionRange === 'function' && saved.start != null) {
+                                el.setSelectionRange(saved.start, saved.end);
+                            }
+                        }
+                    }
+                } catch (e) {}
 
                 forms.forEach(form => {
                     let inputTimer = null;
@@ -238,6 +257,18 @@
                         }
                     };
 
+                    const rememberFocus = (el) => {
+                        if (!el.id) return;
+                        try {
+                            sessionStorage.setItem(FOCUS_KEY, JSON.stringify({
+                                path: location.pathname,
+                                id: el.id,
+                                start: el.selectionStart,
+                                end: el.selectionEnd,
+                            }));
+                        } catch (e) {}
+                    };
+
                     form.querySelectorAll('select, input[type="checkbox"], input[type="radio"]').forEach(el => {
                         el.addEventListener('change', submitNow);
                     });
@@ -247,6 +278,7 @@
                             if (inputTimer) {
                                 window.clearTimeout(inputTimer);
                             }
+                            rememberFocus(el);
                             inputTimer = window.setTimeout(submitNow, debounceMs);
                         });
                         el.addEventListener('change', submitNow);
