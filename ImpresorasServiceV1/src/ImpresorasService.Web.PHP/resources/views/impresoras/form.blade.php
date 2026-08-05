@@ -28,23 +28,17 @@
         @csrf
         @if($printer) @method('PUT') @endif
 
-        <div class="dbx-rule-form-header">
-            <div>
-                <span class="dbx-rule-form-kicker">Impresoras</span>
-                <h2 class="dbx-title">{{ $printer ? 'Editar impresora' : 'Nueva impresora' }}</h2>
-                <p class="dbx-subtle">Configura destino, cola y conectividad.</p>
-            </div>
+        <x-ui.form-header
+            kicker="Impresoras"
+            :title="$printer ? 'Editar impresora' : 'Nueva impresora'"
+            subtitle="Configura destino, cola y conectividad."
+        >
             @if($currentStoreLabel)
                 <span class="badge badge-neutral">Tienda: {{ $currentStoreLabel }}</span>
             @endif
-        </div>
+        </x-ui.form-header>
 
-        <section class="dbx-rule-form-section">
-            <div class="dbx-rule-form-section-title">
-                <h3>Identificaci&oacute;n</h3>
-                <span>Nombre operativo y tienda asociada.</span>
-            </div>
-            <div class="dbx-rule-form-grid">
+        <x-ui.form-section title="Identificación" hint="Nombre operativo y tienda asociada.">
                 <div>
                     <label for="printerName" class="form-label">Nombre *</label>
                     <input type="text" name="printerName" id="printerName" value="{{ old('printerName', $printer ? ($printer['printerName'] ?? $printer['PrinterName'] ?? '') : '') }}" required
@@ -70,15 +64,9 @@
                         @error('storeId')<p class="field-error">{{ $message }}</p>@enderror
                     @endif
                 </div>
-            </div>
-        </section>
+        </x-ui.form-section>
 
-        <section class="dbx-rule-form-section">
-            <div class="dbx-rule-form-section-title">
-                <h3>Configuraci&oacute;n de cola</h3>
-                <span>Ruta de spool y host para la comprobaci&oacute;n.</span>
-            </div>
-            <div class="dbx-rule-form-grid">
+        <x-ui.form-section title="Configuración de cola" hint="Ruta de spool y host para la comprobación.">
                 <div>
                     <label for="spoolQueue" class="form-label">SpoolQueue *</label>
                     <input type="text" name="spoolQueue" id="spoolQueue" value="{{ old('spoolQueue', $printer ? ($printer['spoolQueue'] ?? $printer['SpoolQueue'] ?? '') : '') }}" required
@@ -93,25 +81,15 @@
                     <p class="form-hint">Usado para comprobar conectividad SMB cuando SpoolQueue no es UNC.</p>
                     @error('host')<p class="field-error">{{ $message }}</p>@enderror
                 </div>
-            </div>
-        </section>
+        </x-ui.form-section>
 
-        <section class="dbx-rule-form-section">
-            <div class="dbx-rule-form-section-title">
-                <h3>Estado</h3>
-                <span>Disponibilidad de la impresora en la operativa.</span>
-            </div>
-            <div class="dbx-rule-form-grid">
-                <div class="dbx-rule-active-field">
-                    <label class="dbx-toggle">
-                        <input type="hidden" name="isActive" value="0">
-                        <input type="checkbox" name="isActive" value="1" {{ old('isActive', $printer ? ($printer['isActive'] ?? $printer['IsActive'] ?? true) : true) ? 'checked' : '' }}>
-                        Activa
-                    </label>
-                    @error('isActive')<p class="field-error">{{ $message }}</p>@enderror
-                </div>
-            </div>
-        </section>
+        <x-ui.form-section title="Estado" hint="Disponibilidad de la impresora en la operativa.">
+                <x-ui.toggle-field
+                    name="isActive"
+                    label="Activa"
+                    :checked="old('isActive', $printer ? ($printer['isActive'] ?? $printer['IsActive'] ?? true) : true)"
+                />
+        </x-ui.form-section>
 
         <div class="dbx-rule-form-actions">
             <a href="{{ $cancelUrl }}" class="btn btn-ghost">Cancelar</a>

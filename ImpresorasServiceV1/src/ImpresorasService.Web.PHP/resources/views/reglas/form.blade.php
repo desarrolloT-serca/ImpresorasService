@@ -25,23 +25,17 @@
         @csrf
         @if($rule) @method('PUT') @endif
 
-        <div class="dbx-rule-form-header">
-            <div>
-                <span class="dbx-rule-form-kicker">Reglas de enrutado</span>
-                <h2 class="dbx-title">{{ $rule ? 'Editar regla' : 'Nueva regla' }}</h2>
-                <p class="dbx-subtle">Define la prioridad, condiciones y destino de impresi&oacute;n.</p>
-            </div>
+        <x-ui.form-header
+            kicker="Reglas de enrutado"
+            :title="$rule ? 'Editar regla' : 'Nueva regla'"
+            subtitle="Define la prioridad, condiciones y destino de impresión."
+        >
             @if((string) $currentStoreId !== '')
                 <span class="badge badge-neutral">Tienda: {{ $currentStoreLabel }}</span>
             @endif
-        </div>
+        </x-ui.form-header>
 
-        <section class="dbx-rule-form-section">
-            <div class="dbx-rule-form-section-title">
-                <h3>Destino</h3>
-                <span>Donde aplica la regla y a qu&eacute; impresora env&iacute;a.</span>
-            </div>
-            <div class="dbx-rule-form-grid">
+        <x-ui.form-section title="Destino" hint="Dónde aplica la regla y a qué impresora envía.">
                 <div>
                     <label for="storeId" class="form-label">Tienda</label>
                     @if($storeIdLocked ?? false)
@@ -79,55 +73,39 @@
                     </select>
                     @error('printerId')<p class="field-error">{{ $message }}</p>@enderror
                 </div>
-            </div>
-        </section>
+        </x-ui.form-section>
 
-        <section class="dbx-rule-form-section">
-            <div class="dbx-rule-form-section-title">
-                <h3>Condiciones</h3>
-                <span>Filtros que determinan cuando se aplica.</span>
-            </div>
-            <div class="dbx-rule-form-grid">
+        <x-ui.form-section title="Condiciones" hint="Filtros que determinan cuando se aplica.">
                 <div>
                     <label for="documentType" class="form-label">Tipo documento</label>
                     <input type="text" name="documentType" id="documentType" value="{{ old('documentType', $rule ? ($rule['documentType'] ?? $rule['DocumentType'] ?? '') : '') }}"
                         class="input @error('documentType') border-red-500 @enderror" placeholder="Ej. ALBARAN, TICKET, FACTURA">
-                    <p class="form-hint">Vac&iacute;o = aplica a cualquier tipo.</p>
+                    <p class="form-hint">Vacío = aplica a cualquier tipo.</p>
                     @error('documentType')<p class="field-error">{{ $message }}</p>@enderror
                 </div>
                 <div>
                     <label for="channel" class="form-label">Canal</label>
                     <input type="text" name="channel" id="channel" value="{{ old('channel', $rule ? ($rule['channel'] ?? $rule['Channel'] ?? '') : '') }}"
                         class="input @error('channel') border-red-500 @enderror" placeholder="Ej. DEFAULT, MOSTRADOR, WEB">
-                    <p class="form-hint">Vac&iacute;o = aplica a cualquier canal.</p>
+                    <p class="form-hint">Vacío = aplica a cualquier canal.</p>
                     @error('channel')<p class="field-error">{{ $message }}</p>@enderror
                 </div>
-            </div>
-        </section>
+        </x-ui.form-section>
 
-        <section class="dbx-rule-form-section">
-            <div class="dbx-rule-form-section-title">
-                <h3>Ejecuci&oacute;n</h3>
-                <span>Orden de evaluaci&oacute;n y estado operativo.</span>
-            </div>
-            <div class="dbx-rule-form-grid">
+        <x-ui.form-section title="Ejecución" hint="Orden de evaluación y estado operativo.">
                 <div>
                     <label for="priority" class="form-label">Prioridad *</label>
                     <input type="number" name="priority" id="priority" value="{{ old('priority', $rule ? ($rule['priority'] ?? $rule['Priority'] ?? 0) : 0) }}" required min="0"
                         class="input @error('priority') border-red-500 @enderror">
-                    <p class="form-hint">Menor n&uacute;mero = mayor prioridad.</p>
+                    <p class="form-hint">Menor número = mayor prioridad.</p>
                     @error('priority')<p class="field-error">{{ $message }}</p>@enderror
                 </div>
-                <div class="dbx-rule-active-field">
-                    <label class="dbx-toggle">
-                        <input type="hidden" name="isActive" value="0">
-                        <input type="checkbox" name="isActive" value="1" {{ old('isActive', $rule ? ($rule['isActive'] ?? $rule['IsActive'] ?? true) : true) ? 'checked' : '' }}>
-                        Activa
-                    </label>
-                    @error('isActive')<p class="field-error">{{ $message }}</p>@enderror
-                </div>
-            </div>
-        </section>
+                <x-ui.toggle-field
+                    name="isActive"
+                    label="Activa"
+                    :checked="old('isActive', $rule ? ($rule['isActive'] ?? $rule['IsActive'] ?? true) : true)"
+                />
+        </x-ui.form-section>
 
         <div class="dbx-rule-form-actions">
             <a href="{{ $cancelUrl }}" class="btn btn-ghost">Cancelar</a>
