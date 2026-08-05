@@ -12,52 +12,62 @@
 @section('title', $editing ? 'Editar usuario' : 'Nuevo usuario')
 
 @section('content')
-<x-ui.card class="max-w-2xl">
-    <form method="POST" action="{{ $editing ? route('usuarios.update', $userId) : route('usuarios.store') }}" class="dbx-form-grid">
+<div class="dbx-wrap">
+<x-ui.card class="dbx-rule-form-card">
+    <form method="POST" action="{{ $editing ? route('usuarios.update', $userId) : route('usuarios.store') }}" class="dbx-rule-form">
         @csrf
         @if($editing)
             @method('PUT')
         @endif
 
-        <x-ui.field label="Login" name="login" :value="$login" required minlength="3" maxlength="80" autocomplete="username" />
-
-        <x-ui.field label="Nombre visible" name="displayName" :value="$displayName" maxlength="120" autocomplete="off" />
-
-        <x-ui.field label="Rol" name="role" type="select" required>
-            @foreach($roles as $roleValue => $roleLabel)
-                <option value="{{ $roleValue }}" {{ $role === $roleValue ? 'selected' : '' }}>{{ $roleLabel }}</option>
-            @endforeach
-        </x-ui.field>
-
-        <x-ui.field label="Tienda (obligatoria para jefe de tienda y empleado)" name="storeId" type="select">
-            <option value="">Sin tienda</option>
-            @foreach($stores as $store)
-                @php
-                    $sid = $store['storeId'] ?? $store['StoreId'] ?? '';
-                    $sname = $store['name'] ?? $store['Name'] ?? ('Tienda ' . $sid);
-                @endphp
-                <option value="{{ $sid }}" {{ (string)$storeId === (string)$sid ? 'selected' : '' }}>
-                    {{ \App\Helpers\StoreFormat::label($sid, $sname) }}
-                </option>
-            @endforeach
-        </x-ui.field>
-
-        <x-ui.field
-            :label="$editing ? 'Nueva contraseña (opcional)' : 'Contraseña'"
-            name="password"
-            type="password"
-            minlength="6"
-            maxlength="80"
-            autocomplete="new-password"
-            :required="!$editing"
+        <x-ui.form-header
+            kicker="Usuarios"
+            :title="$editing ? 'Editar usuario' : 'Nuevo usuario'"
+            subtitle="Credenciales y acceso del usuario."
         />
 
-        <div class="form-actions">
+        <x-ui.form-section title="Datos" hint="Identificación, rol y tienda asignada.">
+            <x-ui.field label="Login" name="login" :value="$login" required minlength="3" maxlength="80" autocomplete="username" />
+
+            <x-ui.field label="Nombre visible" name="displayName" :value="$displayName" maxlength="120" autocomplete="off" />
+
+            <x-ui.field label="Rol" name="role" type="select" required>
+                @foreach($roles as $roleValue => $roleLabel)
+                    <option value="{{ $roleValue }}" {{ $role === $roleValue ? 'selected' : '' }}>{{ $roleLabel }}</option>
+                @endforeach
+            </x-ui.field>
+
+            <x-ui.field label="Tienda (obligatoria para jefe de tienda y empleado)" name="storeId" type="select">
+                <option value="">Sin tienda</option>
+                @foreach($stores as $store)
+                    @php
+                        $sid = $store['storeId'] ?? $store['StoreId'] ?? '';
+                        $sname = $store['name'] ?? $store['Name'] ?? ('Tienda ' . $sid);
+                    @endphp
+                    <option value="{{ $sid }}" {{ (string)$storeId === (string)$sid ? 'selected' : '' }}>
+                        {{ \App\Helpers\StoreFormat::label($sid, $sname) }}
+                    </option>
+                @endforeach
+            </x-ui.field>
+
+            <x-ui.field
+                :label="$editing ? 'Nueva contraseña (opcional)' : 'Contraseña'"
+                name="password"
+                type="password"
+                minlength="6"
+                maxlength="80"
+                autocomplete="new-password"
+                :required="!$editing"
+            />
+        </x-ui.form-section>
+
+        <div class="dbx-rule-form-actions">
             <a href="{{ route('usuarios.index') }}" class="btn btn-ghost">Cancelar</a>
             <button type="submit" class="btn btn-primary">{{ $editing ? 'Guardar cambios' : 'Crear usuario' }}</button>
         </div>
     </form>
 </x-ui.card>
+</div>
 
 <script>
 (function() {
