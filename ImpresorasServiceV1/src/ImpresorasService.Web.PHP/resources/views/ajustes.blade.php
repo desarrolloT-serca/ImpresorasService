@@ -55,10 +55,7 @@
             <form method="POST" action="{{ route('ajustes.thresholds.update') }}" class="dbx-thresholds-form">
                 @csrf
 
-                <div class="dbx-title-row">
-                    <h3 class="dbx-title dbx-thresholds-title">Reglas de alertas</h3>
-                    <span class="dbx-subtle">Hasta tres umbrales por regla: Info, Warning y Critica</span>
-                </div>
+                <x-ui.form-header kicker="Ajustes" title="Reglas de alertas" subtitle="Hasta tres umbrales por regla: Info, Warning y Critica" />
 
                 <div class="threshold-grid ajustes-grid">
                     @foreach($ruleGroups as $metric => $group)
