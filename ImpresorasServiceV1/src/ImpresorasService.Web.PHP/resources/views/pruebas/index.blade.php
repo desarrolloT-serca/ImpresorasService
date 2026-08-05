@@ -113,6 +113,7 @@
                         <th>Job ID</th>
                         <th>Estado</th>
                         <th>Impresora</th>
+                        <th>Error</th>
                     </tr>
                 </thead>
                 <tbody id="pruebas-jobs-tbody"></tbody>

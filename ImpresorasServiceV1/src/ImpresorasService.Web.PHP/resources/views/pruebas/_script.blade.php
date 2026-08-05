@@ -50,7 +50,7 @@
 
     function buildStoreSelect(name, selectedId) {
         const opts = STORE_OPTIONS.map(s =>
-            `<option value="${s.id}"${s.id == selectedId ? ' selected' : ''}>${s.name}</option>`
+            `<option value="${s.id}"${String(s.id) === String(selectedId) ? ' selected' : ''}>${s.name}</option>`
         ).join('');
         return `<select name="${name}" class="select select-sm" required><option value="">Tienda…</option>${opts}</select>`;
     }
@@ -114,9 +114,10 @@
         if (!form) return;
         const id   = form.dataset.id || '';
         const name = document.getElementById('sc-nombre')?.value?.trim();
-        if (!name) { window.showToast?.('Introduce un nombre para el escenario.', 'error'); return; }
         const batches = buildBatches();
-        if (batches.length === 0) { window.showToast?.('A&ntilde;ade al menos un lote.', 'error'); return; }
+        const totalRows = document.querySelectorAll('#lotes-tbody tr').length;
+        const error = validationError(name, batches, totalRows);
+        if (error) { window.showToast?.(error, 'error'); return; }
 
         const payload = { name, batches };
         if (id) payload.id = id;
@@ -141,6 +142,15 @@
                 pdfId:        g('pdfId') || null,
             };
         }).filter(b => b.storeId >= 0 && b.documentType);
+    }
+
+    // batches viene de buildBatches(), que descarta filas incompletas: si su longitud
+    // es menor que totalRows, hay filas sin tienda o sin tipo de documento.
+    function validationError(name, batches, totalRows) {
+        if (!name) return 'Introduce un nombre para el escenario.';
+        if (totalRows === 0) return 'Añade al menos un lote.';
+        if (batches.length < totalRows) return 'Completa la tienda y el tipo de documento en todos los lotes.';
+        return null;
     }
 
     // ── Eliminar escenario ───────────────────────────────────────────────────
@@ -169,12 +179,14 @@
 
         // Auto-guardar el estado actual del formulario antes de lanzar,
         // para asegurar que la selección de PDF actual se usa en el run.
-        const form    = document.getElementById('form-escenario');
-        const name    = document.getElementById('sc-nombre')?.value?.trim();
-        const batches = buildBatches();
-        if (!name || batches.length === 0) {
+        const form      = document.getElementById('form-escenario');
+        const name      = document.getElementById('sc-nombre')?.value?.trim();
+        const batches   = buildBatches();
+        const totalRows = document.querySelectorAll('#lotes-tbody tr').length;
+        const error     = validationError(name, batches, totalRows);
+        if (error) {
             setRunning(false);
-            window.showToast?.('Completa el nombre y al menos un lote.', 'error');
+            window.showToast?.(error, 'error');
             return;
         }
         const savePayload = { name, batches };
@@ -195,7 +207,7 @@
         const resultados = document.getElementById('pruebas-resultados');
         const tbody      = document.getElementById('pruebas-jobs-tbody');
         resultados.style.display = 'block';
-        tbody.innerHTML = '<tr><td colspan="3" class="dbx-subtle">Inyectando trabajos…</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="4" class="dbx-subtle">Inyectando trabajos…</td></tr>';
         document.getElementById('pruebas-resultado-resumen').textContent = '';
 
         const { ok, data } = await apiFetch('{{ route('pruebas.run') }}', {
@@ -210,7 +222,7 @@
         jobIds.forEach(id => {
             const tr = document.createElement('tr');
             tr.dataset.jobId = id;
-            tr.innerHTML = '<td class="text-col" style="font-size:.8rem;"></td><td><span class="badge badge-warning">Pending</span></td><td>-</td>';
+            tr.innerHTML = '<td class="text-col" style="font-size:.8rem;"></td><td><span class="badge badge-warning">Pending</span></td><td>-</td><td class="dbx-subtle" style="font-size:.8rem;">-</td>';
             tr.cells[0].textContent = id;
             tbody.appendChild(tr);
         });
@@ -268,6 +280,9 @@
                 const css    = CSS_MAP[status] || 'badge-neutral';
                 row.cells[1].innerHTML = `<span class="badge ${css}">${status}</span>`;
                 row.cells[2].textContent = job?.printerId ? `#${job.printerId}` : '-';
+                row.cells[3].textContent = job?.lastErrorCode
+                    ? `${job.lastErrorCode}${job.lastErrorMessage ? ': ' + job.lastErrorMessage : ''}`
+                    : '-';
                 if (TERMINAL.has(status)) resolved++;
             });
 
@@ -309,7 +324,7 @@
         jobIds.forEach(id => {
             const tr = document.createElement('tr');
             tr.dataset.jobId = id;
-            tr.innerHTML = '<td class="text-col" style="font-size:.8rem;"></td><td><span class="badge badge-warning">…</span></td><td>-</td>';
+            tr.innerHTML = '<td class="text-col" style="font-size:.8rem;"></td><td><span class="badge badge-warning">…</span></td><td>-</td><td class="dbx-subtle" style="font-size:.8rem;">-</td>';
             tr.cells[0].textContent = id;
             tbody.appendChild(tr);
         });

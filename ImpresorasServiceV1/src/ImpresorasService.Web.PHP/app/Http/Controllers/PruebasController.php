@@ -278,9 +278,11 @@ class PruebasController extends Controller
                 ? (self::STATUS_NAMES[(int) $raw] ?? "Status{$raw}")
                 : ($raw ?? 'Unknown');
             return [
-                'externalJobId' => $j['externalJobId'] ?? $j['ExternalJobId'] ?? '',
-                'status'        => $status,
-                'printerId'     => $j['printerId'] ?? $j['PrinterId'] ?? null,
+                'externalJobId'    => $j['externalJobId'] ?? $j['ExternalJobId'] ?? '',
+                'status'           => $status,
+                'printerId'        => $j['printerId'] ?? $j['PrinterId'] ?? null,
+                'lastErrorCode'    => $j['lastErrorCode'] ?? $j['LastErrorCode'] ?? null,
+                'lastErrorMessage' => $j['lastErrorMessage'] ?? $j['LastErrorMessage'] ?? null,
             ];
         }, is_array($result) ? $result : []);
 
