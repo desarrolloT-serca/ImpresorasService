@@ -13,8 +13,10 @@ class TiendasController extends Controller
     {
     }
 
-    public function index(): View
+    public function index(Request $request): View
     {
+        $search = trim((string) $request->query('q', ''));
+
         try {
             $stores = $this->api->get('api/stores') ?? [];
         } catch (\Throwable) {
@@ -23,8 +25,21 @@ class TiendasController extends Controller
             ])->with('error', 'No se pudieron cargar las tiendas desde la API.');
         }
 
+        $stores = is_array($stores) ? $stores : [];
+
+        if ($search !== '') {
+            $needle = mb_strtolower($search);
+            $stores = array_values(array_filter($stores, static function ($store) use ($needle) {
+                $id = (string) ($store['storeId'] ?? $store['StoreId'] ?? '');
+                $name = (string) ($store['name'] ?? $store['Name'] ?? '');
+
+                return (mb_stripos($id, $needle) !== false)
+                    || (mb_stripos($name, $needle) !== false);
+            }));
+        }
+
         return view('tiendas.index', [
-            'stores' => is_array($stores) ? $stores : [],
+            'stores' => $stores,
         ]);
     }
 

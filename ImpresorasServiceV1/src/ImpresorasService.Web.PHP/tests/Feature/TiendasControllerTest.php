@@ -51,6 +51,41 @@ class TiendasControllerTest extends TestCase
         $response->assertSee('>Eliminar definitivo<', false);
     }
 
+    public function test_index_filters_stores_by_search_query(): void
+    {
+        $api = new class extends ApiClient
+        {
+            public function __construct()
+            {
+                parent::__construct(new Client(['base_uri' => 'http://api.test/']), 'http://api.test');
+            }
+
+            public function get(string $path): array
+            {
+                return match ($path) {
+                    'api/stores' => [
+                        ['storeId' => 1, 'name' => 'Tienda Norte', 'isActive' => true, 'usersCount' => 0, 'printersCount' => 0],
+                        ['storeId' => 2, 'name' => 'Tienda Sur', 'isActive' => true, 'usersCount' => 0, 'printersCount' => 0],
+                    ],
+                    default => [],
+                };
+            }
+        };
+
+        $this->app->instance(ApiClient::class, $api);
+
+        $response = $this
+            ->withSession([
+                'impresoras_token' => 'token',
+                'impresoras_user' => ['role' => 'Admin', 'login' => 'admin'],
+            ])
+            ->get('/tiendas?q=norte');
+
+        $response->assertOk();
+        $response->assertSee('Tienda Norte');
+        $response->assertDontSee('Tienda Sur');
+    }
+
     public function test_store_allows_store_id_zero(): void
     {
         $api = new class extends ApiClient
