@@ -24,49 +24,82 @@
     @endif
 
     {{-- Bloque configuración --}}
-    <x-ui.card>
-        <div class="dbx-card-body">
-            <div class="dbx-title-row">
-                <h2 class="dbx-title">Notificaciones Telegram</h2>
+    <x-ui.card class="dbx-rule-form-card">
+        <form method="POST" action="{{ route('alertas.config.save') }}" class="dbx-rule-form">
+            @csrf
+
+            <x-ui.form-header kicker="Alertas" title="Notificaciones Telegram">
                 <span class="dbx-subtle">El bot token se gestiona como variable de entorno <code>Telegram__BotToken</code> en el servidor.</span>
+            </x-ui.form-header>
+
+            <x-ui.form-section title="Configuración" hint="Severidad, intervalo de comprobación y notificaciones de recuperación.">
+                <div>
+                    <span class="dbx-filter-label">Estado del servicio</span>
+                    <x-ui.status :level="$enabled ? 'healthy' : 'neutral'">
+                        {{ $enabled ? 'Alertas activas' : 'Alertas desactivadas' }}
+                    </x-ui.status>
+                </div>
+
+                <div>
+                    <label for="minSeverity" class="dbx-filter-label">Severidad mínima para alertar</label>
+                    <select id="minSeverity" name="minSeverity" class="input">
+                        <option value="warning" {{ $minSeverity === 'warning' ? 'selected' : '' }}>Warning (y crítica)</option>
+                        <option value="critical" {{ $minSeverity === 'critical' ? 'selected' : '' }}>Solo Crítica</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label for="checkIntervalMinutes" class="dbx-filter-label">Intervalo de comprobación (min)</label>
+                    <input id="checkIntervalMinutes" type="number" name="checkIntervalMinutes"
+                        class="input" min="1" max="60" value="{{ $interval }}">
+                </div>
+
+                <div class="flex items-center gap-2 pt-5">
+                    <input id="notifyOnRecovery" type="checkbox" name="notifyOnRecovery" value="1"
+                        {{ $notifyOnRecovery ? 'checked' : '' }}>
+                    <label for="notifyOnRecovery" class="dbx-filter-label m-0">Notificar recuperación</label>
+                </div>
+            </x-ui.form-section>
+
+            <div class="dbx-rule-form-actions">
+                <button type="submit" class="btn btn-primary">Guardar configuración</button>
             </div>
+        </form>
+    </x-ui.card>
 
-            <form method="POST" action="{{ route('alertas.config.save') }}" class="dbx-form mt-4">
-                @csrf
-                <div class="dbx-form-grid">
-                    <div class="dbx-form-group">
-                        <span class="dbx-filter-label">Estado del servicio</span>
-                        <x-ui.status :level="$enabled ? 'healthy' : 'neutral'">
-                            {{ $enabled ? 'Alertas activas' : 'Alertas desactivadas' }}
-                        </x-ui.status>
-                    </div>
+    {{-- Añadir chat --}}
+    <x-ui.card class="dbx-rule-form-card mt-4">
+        <form method="POST" action="{{ route('alertas.chats.add') }}" class="dbx-rule-form">
+            @csrf
 
-                    <div class="dbx-form-group">
-                        <label for="minSeverity" class="dbx-filter-label">Severidad mínima para alertar</label>
-                        <select id="minSeverity" name="minSeverity" class="input">
-                            <option value="warning" {{ $minSeverity === 'warning' ? 'selected' : '' }}>Warning (y crítica)</option>
-                            <option value="critical" {{ $minSeverity === 'critical' ? 'selected' : '' }}>Solo Crítica</option>
-                        </select>
-                    </div>
+            <x-ui.form-header kicker="Alertas" title="Añadir chat" subtitle="Usa /start en el bot para obtener el Chat ID." />
 
-                    <div class="dbx-form-group">
-                        <label for="checkIntervalMinutes" class="dbx-filter-label">Intervalo de comprobación (min)</label>
-                        <input id="checkIntervalMinutes" type="number" name="checkIntervalMinutes"
-                            class="input" min="1" max="60" value="{{ $interval }}">
-                    </div>
-
-                    <div class="dbx-form-group flex items-center gap-2 pt-5">
-                        <input id="notifyOnRecovery" type="checkbox" name="notifyOnRecovery" value="1"
-                            {{ $notifyOnRecovery ? 'checked' : '' }}>
-                        <label for="notifyOnRecovery" class="dbx-filter-label m-0">Notificar recuperación</label>
-                    </div>
+            <x-ui.form-section title="Datos del chat" hint="Identificador y ámbito de las notificaciones.">
+                <div>
+                    <label for="chatId" class="dbx-filter-label">Chat ID</label>
+                    <input id="chatId" type="number" name="chatId" class="input" placeholder="-100123456789" required>
                 </div>
-
-                <div class="dbx-form-actions mt-4">
-                    <button type="submit" class="btn btn-primary">Guardar configuración</button>
+                <div>
+                    <label for="description" class="dbx-filter-label">Descripción (opcional)</label>
+                    <input id="description" type="text" name="description" class="input" placeholder="Grupo alertas tienda">
                 </div>
-            </form>
-        </div>
+                <div>
+                    <label for="storeId" class="dbx-filter-label">Tienda (vacío = todas)</label>
+                    <select id="storeId" name="storeId" class="input">
+                        <option value="">Todas las tiendas</option>
+                        @foreach($storeOptions as $store)
+                            <option value="{{ $store['storeId'] ?? '' }}">
+                                {{ $store['name'] ?? '' }} (#{{ $store['storeId'] ?? '' }})
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+            </x-ui.form-section>
+
+            <div class="dbx-rule-form-actions">
+                <button type="submit" class="btn btn-primary">Añadir chat</button>
+            </div>
+        </form>
     </x-ui.card>
 
     {{-- Bloque chats --}}
@@ -125,57 +158,21 @@
                     @endforelse
                 </tbody>
             </x-ui.table>
-
-            {{-- Añadir chat --}}
-            <div class="dbx-title-row mt-6">
-                <h3 class="dbx-title">Añadir chat</h3>
-                <span class="dbx-subtle">Usa <code>/start</code> en el bot para obtener el Chat ID.</span>
-            </div>
-            <form method="POST" action="{{ route('alertas.chats.add') }}" class="dbx-form mt-2">
-                @csrf
-                <div class="dbx-form-grid">
-                    <div class="dbx-form-group">
-                        <label for="chatId" class="dbx-filter-label">Chat ID</label>
-                        <input id="chatId" type="number" name="chatId" class="input" placeholder="-100123456789" required>
-                    </div>
-                    <div class="dbx-form-group">
-                        <label for="description" class="dbx-filter-label">Descripción (opcional)</label>
-                        <input id="description" type="text" name="description" class="input" placeholder="Grupo alertas tienda">
-                    </div>
-                    <div class="dbx-form-group">
-                        <label for="storeId" class="dbx-filter-label">Tienda (vacío = todas)</label>
-                        <select id="storeId" name="storeId" class="input">
-                            <option value="">Todas las tiendas</option>
-                            @foreach($storeOptions as $store)
-                                <option value="{{ $store['storeId'] ?? '' }}">
-                                    {{ $store['name'] ?? '' }} (#{{ $store['storeId'] ?? '' }})
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-                </div>
-                <div class="dbx-form-actions mt-3">
-                    <button type="submit" class="btn btn-primary">Añadir chat</button>
-                </div>
-            </form>
         </div>
     </x-ui.card>
 
     {{-- Enviar prueba --}}
-    <x-ui.card class="mt-4">
-        <div class="dbx-card-body">
-            <div class="dbx-title-row">
-                <h2 class="dbx-title">Prueba de envío</h2>
-                <span class="dbx-subtle">Envía un mensaje de prueba a todos los chats activos.</span>
+    <x-ui.card class="dbx-rule-form-card mt-4">
+        <form method="POST" action="{{ route('alertas.test') }}" class="dbx-rule-form"
+            data-confirm-message="Se enviara un mensaje de prueba a todos los chats activos." data-confirm-title="Enviar prueba" data-confirm-label="Enviar">
+            @csrf
+
+            <x-ui.form-header kicker="Alertas" title="Prueba de envío" subtitle="Envía un mensaje de prueba a todos los chats activos." />
+
+            <div class="dbx-rule-form-actions">
+                <button type="submit" class="btn btn-ghost">Enviar prueba</button>
             </div>
-            <form method="POST" action="{{ route('alertas.test') }}" class="mt-3"
-                data-confirm-message="Se enviara un mensaje de prueba a todos los chats activos." data-confirm-title="Enviar prueba" data-confirm-label="Enviar">
-                @csrf
-                <button type="submit" class="btn btn-ghost">
-                    Enviar prueba
-                </button>
-            </form>
-        </div>
+        </form>
     </x-ui.card>
 
 </div>
