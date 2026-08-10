@@ -5391,6 +5391,29 @@ html.dark .user-avatar-employee {
     }
 }
 
+/* btn-icon siempre cuadrado, independientemente del contexto flex */
+.btn.btn-icon,
+.dbx-form-actions .btn.btn-icon,
+.form-actions .btn.btn-icon,
+.action-buttons .btn.btn-icon,
+.app-topbar-actions .btn.btn-icon {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    min-height: 32px;
+    padding: 0;
+    align-self: center;
+    flex-shrink: 0;
+}
+
+.btn.btn-icon.btn-sm,
+.action-buttons .btn.btn-icon.btn-sm {
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    min-height: 28px;
+}
+
 .table-alerts tbody tr.alert-row-ok:hover td,
 .table-alerts tbody tr.dbx-alert-row-healthy:hover td {
     background: color-mix(in srgb, var(--ui-primary-soft) 35%, var(--ui-surface)) !important;
