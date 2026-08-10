@@ -5000,6 +5000,392 @@ html.dark .dbx-store-view-tab.is-active {
     background: color-mix(in srgb, var(--ui-warning) 16%, var(--ui-surface)) !important;
 }
 
+/* =====================================================================
+   STORE CARDS & USER AVATARS
+   ===================================================================== */
+
+.store-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(265px, 1fr));
+    gap: 12px;
+    padding: 2px;
+}
+
+.store-card {
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(170deg, rgba(255,255,255,0.96) 0%, rgba(247,250,255,0.92) 100%);
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius);
+    box-shadow: 0 1px 4px rgba(27,47,130,0.06);
+    cursor: pointer;
+    transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.12s ease;
+    overflow: hidden;
+}
+
+.store-card:hover {
+    border-color: color-mix(in srgb, var(--ui-primary) 35%, var(--ui-border));
+    box-shadow: 0 4px 18px rgba(27,47,130,0.11);
+    transform: translateY(-1px);
+}
+
+.store-card:focus-visible {
+    outline: 2px solid var(--ui-primary);
+    outline-offset: 2px;
+}
+
+.store-card.is-selected {
+    border-color: var(--ui-primary);
+    box-shadow:
+        0 0 0 3px color-mix(in srgb, var(--ui-primary) 16%, transparent),
+        0 6px 22px rgba(27,47,130,0.18);
+    transform: translateY(-1px);
+}
+
+.store-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px 6px;
+}
+
+.store-card-number {
+    font-family: ui-monospace, 'SF Mono', 'Cascadia Code', monospace;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--ui-text-muted);
+    letter-spacing: 0.07em;
+}
+
+.store-card-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 4px 14px 12px;
+}
+
+.store-card-name {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--ui-text);
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.store-card-stats {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.store-stat-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    background: rgba(247,250,255,0.82);
+    border: 1px solid var(--ui-border);
+    border-radius: 20px;
+    font-size: 0.73rem;
+    font-weight: 600;
+    color: var(--ui-text-muted);
+    text-decoration: none;
+    transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+    white-space: nowrap;
+}
+
+.store-stat-chip:hover {
+    background: var(--ui-primary-soft);
+    border-color: color-mix(in srgb, var(--ui-primary) 45%, var(--ui-border));
+    color: var(--ui-primary-strong);
+}
+
+.store-stat-chip svg {
+    flex-shrink: 0;
+    opacity: 0.75;
+}
+
+.store-card-footer {
+    padding: 8px 14px 10px;
+    border-top: 1px solid var(--ui-border);
+    background: rgba(247,250,255,0.66);
+}
+
+/* ── Store detail panel ──────────────────────────────────────────── */
+
+.store-detail-panel {
+    margin-top: 14px;
+    border: 1px solid color-mix(in srgb, var(--ui-primary) 38%, var(--ui-border));
+    border-radius: var(--ui-radius);
+    background: linear-gradient(160deg, rgba(255,255,255,0.98), rgba(247,250,255,0.96));
+    box-shadow:
+        0 0 0 3px color-mix(in srgb, var(--ui-primary) 10%, transparent),
+        0 8px 28px rgba(27,47,130,0.12);
+    overflow: hidden;
+    animation: store-detail-in 0.18s ease;
+}
+
+@keyframes store-detail-in {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.store-detail-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--ui-border);
+    background: color-mix(in srgb, var(--ui-primary-soft) 32%, transparent);
+}
+
+.store-detail-number {
+    font-family: ui-monospace, 'SF Mono', monospace;
+    font-size: 0.74rem;
+    font-weight: 600;
+    color: var(--ui-primary-strong);
+    letter-spacing: 0.06em;
+    margin-right: 4px;
+}
+
+.store-detail-title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--ui-primary-strong);
+}
+
+.store-detail-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+}
+
+.store-detail-col {
+    padding: 14px 16px;
+}
+
+.store-detail-col + .store-detail-col {
+    border-left: 1px solid var(--ui-border);
+}
+
+.store-detail-col-title {
+    font-size: 0.68rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ui-text-muted);
+    margin: 0 0 10px;
+}
+
+.store-detail-user,
+.store-detail-printer {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 6px 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 46%, transparent);
+}
+
+.store-detail-user:last-child,
+.store-detail-printer:last-child {
+    border-bottom: none;
+}
+
+.store-detail-user-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.store-detail-user-name {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--ui-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.store-detail-user-login {
+    font-size: 0.7rem;
+    color: var(--ui-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.store-detail-printer-dot {
+    width: 8px;
+    height: 8px;
+    min-width: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.store-detail-printer-dot.dot-ok {
+    background: var(--ui-success);
+    box-shadow: 0 0 4px color-mix(in srgb, var(--ui-success) 55%, transparent);
+}
+
+.store-detail-printer-dot.dot-warn   { background: var(--ui-warning); }
+.store-detail-printer-dot.dot-off    { background: var(--ui-text-muted); opacity: 0.5; }
+
+.store-detail-printer-name {
+    font-size: 0.82rem;
+    color: var(--ui-text);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.store-detail-empty {
+    font-size: 0.8rem;
+    color: var(--ui-text-muted);
+    font-style: italic;
+    padding: 6px 0;
+    margin: 0;
+}
+
+/* ── User avatar ─────────────────────────────────────────────────── */
+
+.user-avatar {
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.6rem;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    line-height: 1;
+    user-select: none;
+    flex-shrink: 0;
+}
+
+.user-avatar-admin {
+    background: var(--ui-primary);
+    color: #ffffff;
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.8), 0 0 0 3.5px color-mix(in srgb, var(--ui-primary) 38%, transparent);
+}
+
+.user-avatar-manager {
+    background: color-mix(in srgb, var(--ui-warning) 20%, var(--ui-surface));
+    color: color-mix(in srgb, var(--ui-warning) 85%, #000);
+    border: 1.5px solid color-mix(in srgb, var(--ui-warning) 42%, transparent);
+}
+
+.user-avatar-employee {
+    background: var(--ui-surface-soft);
+    color: var(--ui-text-muted);
+    border: 1.5px solid var(--ui-border);
+}
+
+/* Role badges — override .badge-neutral in usuarios table */
+.badge.badge-role-admin {
+    background: color-mix(in srgb, var(--ui-primary) 11%, var(--ui-surface));
+    border-color: color-mix(in srgb, var(--ui-primary) 32%, var(--ui-border));
+    color: var(--ui-primary-strong);
+}
+
+.badge.badge-role-manager {
+    background: color-mix(in srgb, var(--ui-warning) 12%, var(--ui-surface));
+    border-color: color-mix(in srgb, var(--ui-warning) 38%, var(--ui-border));
+    color: color-mix(in srgb, var(--ui-warning) 88%, #000);
+}
+
+.badge.badge-role-employee {
+    background: var(--ui-surface-soft);
+    border-color: var(--ui-border);
+    color: var(--ui-text-muted);
+}
+
+/* ── Identity cell (usuarios table) ─────────────────────────────── */
+
+.user-identity {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.user-identity-text {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.user-login {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--ui-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.user-displayname {
+    font-size: 0.74rem;
+    color: var(--ui-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ── Dark mode ──────────────────────────────────────────────────── */
+
+html.dark .store-card {
+    background: linear-gradient(170deg,
+        color-mix(in srgb, var(--ui-surface-raised) 96%, var(--ui-primary-soft)) 0%,
+        var(--ui-surface-raised) 100%);
+}
+
+html.dark .store-card-footer {
+    background: color-mix(in srgb, var(--ui-surface) 60%, transparent);
+}
+
+html.dark .store-stat-chip {
+    background: color-mix(in srgb, var(--ui-surface-raised) 72%, transparent);
+}
+
+html.dark .store-detail-panel {
+    background: linear-gradient(160deg, var(--ui-surface-raised) 0%, var(--ui-surface) 100%);
+}
+
+html.dark .user-avatar-admin {
+    box-shadow: 0 0 0 2px rgba(0,0,0,0.3), 0 0 0 3.5px color-mix(in srgb, var(--ui-primary) 40%, transparent);
+}
+
+html.dark .user-avatar-employee {
+    background: var(--ui-surface-raised);
+    border-color: var(--ui-border-strong);
+}
+
+/* ── Responsive ─────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+    .store-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .store-detail-body {
+        grid-template-columns: 1fr;
+    }
+
+    .store-detail-col + .store-detail-col {
+        border-left: none;
+        border-top: 1px solid var(--ui-border);
+    }
+}
+
 .table-alerts tbody tr.alert-row-ok:hover td,
 .table-alerts tbody tr.dbx-alert-row-healthy:hover td {
     background: color-mix(in srgb, var(--ui-primary-soft) 35%, var(--ui-surface)) !important;

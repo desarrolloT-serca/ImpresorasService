@@ -44,7 +44,8 @@ class UsuariosController extends Controller
         }
 
         return view('usuarios.index', [
-            'users' => $users,
+            'users'        => $users,
+            'storeOptions' => $this->loadStores(),
         ]);
     }
 

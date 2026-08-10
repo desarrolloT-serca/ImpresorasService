@@ -21,7 +21,9 @@ class TiendasController extends Controller
             $stores = $this->api->get('api/stores') ?? [];
         } catch (\Throwable) {
             return view('tiendas.index', [
-                'stores' => [],
+                'stores'      => [],
+                'allUsers'    => [],
+                'allPrinters' => [],
             ])->with('error', 'No se pudieron cargar las tiendas desde la API.');
         }
 
@@ -30,16 +32,26 @@ class TiendasController extends Controller
         if ($search !== '') {
             $needle = mb_strtolower($search);
             $stores = array_values(array_filter($stores, static function ($store) use ($needle) {
-                $id = (string) ($store['storeId'] ?? $store['StoreId'] ?? '');
-                $name = (string) ($store['name'] ?? $store['Name'] ?? '');
+                $id   = (string) ($store['storeId'] ?? $store['StoreId'] ?? '');
+                $name = (string) ($store['name']    ?? $store['Name']    ?? '');
 
-                return (mb_stripos($id, $needle) !== false)
-                    || (mb_stripos($name, $needle) !== false);
+                return mb_stripos($id, $needle) !== false
+                    || mb_stripos($name, $needle) !== false;
             }));
         }
 
+        try {
+            $allUsers    = $this->api->get('api/users')    ?? [];
+            $allPrinters = $this->api->get('api/printers') ?? [];
+        } catch (\Throwable) {
+            $allUsers    = [];
+            $allPrinters = [];
+        }
+
         return view('tiendas.index', [
-            'stores' => $stores,
+            'stores'      => $stores,
+            'allUsers'    => is_array($allUsers)    ? $allUsers    : [],
+            'allPrinters' => is_array($allPrinters) ? $allPrinters : [],
         ]);
     }
 
