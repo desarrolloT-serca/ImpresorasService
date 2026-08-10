@@ -4443,15 +4443,20 @@ html.dark .app-context-badge {
 }
 
 .btn-icon {
-    aspect-ratio: 1 / 1;
-    min-height: 32px;
+    width: 32px;
+    height: 32px;
     min-width: 32px;
+    min-height: 32px;
     padding: 0;
+    align-self: center;
+    flex-shrink: 0;
 }
 
 .btn-icon.btn-sm {
-    min-height: 28px;
+    width: 28px;
+    height: 28px;
     min-width: 28px;
+    min-height: 28px;
 }
 
 .btn-action {
