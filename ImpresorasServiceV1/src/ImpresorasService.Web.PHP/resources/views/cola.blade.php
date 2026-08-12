@@ -37,7 +37,7 @@
                         <option value="2" {{ ($status ?? '') == '2' ? 'selected' : '' }}>Imprimiendo</option>
                         <option value="6" {{ ($status ?? '') == '6' ? 'selected' : '' }}>Reintento programado</option>
                         <option value="7" {{ ($status ?? '') == '7' ? 'selected' : '' }}>Cancelado</option>
-                        <option value="8" {{ ($status ?? '') == '8' ? 'selected' : '' }}>Error final</option>
+                        <option value="8" {{ ($status ?? '') == '8' ? 'selected' : '' }}>Error</option>
                         <option value="9" {{ ($status ?? '') == '9' ? 'selected' : '' }}>Bloqueado</option>
                     </select>
                 </div>
@@ -57,6 +57,10 @@
                 </div>
             </div>
             <div class="dbx-form-actions">
+                @php
+                    $errorFilterUrl = url('/cola?' . http_build_query(array_merge(request()->except(['status', 'page']), ['status' => 8])));
+                @endphp
+                <a href="{{ $errorFilterUrl }}" class="btn {{ ($status ?? '') == '8' ? 'btn-danger' : 'btn-ghost' }}">Solo errores</a>
                 <a href="{{ url('/cola') }}" class="btn btn-ghost">Limpiar</a>
             </div>
         </form>
@@ -67,6 +71,10 @@
 <div class="dbx-cola-section-header">
     <div class="dbx-cola-section-header-top">
         <h2 class="dbx-title">Trabajos de cola</h2>
+        <div class="dbx-column-toggles" style="display:flex;gap:12px;align-items:center;">
+            <label class="dbx-subtle"><input type="checkbox" id="col-toggle-error" checked> Error</label>
+            <label class="dbx-subtle"><input type="checkbox" id="col-toggle-intentos" checked> Intentos</label>
+        </div>
     </div>
     <div class="dbx-cola-section-header-bottom">
         <span class="dbx-subtle">
@@ -116,8 +124,9 @@
                 <th class="number-col">Tienda</th>
                 <th>Tipo</th>
                 <th class="status-col">Estado</th>
+                <th class="status-col" data-col="error">Error</th>
                 <th>Impresora</th>
-                <th class="number-col">Intentos</th>
+                <th class="number-col" data-col="intentos">Intentos</th>
                 <th class="date-col">Creado</th>
                 <th class="actions-col">Acciones</th>
             </tr>
@@ -149,15 +158,23 @@
                         7 => 'neutral',
                         default => 'neutral',
                     };
-                    $pillTitle = $stInt === 9 ? ($job['lastErrorMessage'] ?? $job['LastErrorMessage'] ?? null) : null;
+                    $pillTitle = in_array($stInt, [8, 9], true) ? ($job['lastErrorMessage'] ?? $job['LastErrorMessage'] ?? null) : null;
+                    $lastErrorCode = $job['lastErrorCode'] ?? $job['LastErrorCode'] ?? null;
                 @endphp
                 <td class="status-col"><span class="dbx-pill {{ $statusClass }}"{!! $pillTitle ? ' title="'.e($pillTitle).'"' : '' !!}>{{ \App\Helpers\StatusLabels::get($stRaw) }}</span></td>
+                <td class="status-col" data-col="error">
+                    @if($stInt === 8 && filled($lastErrorCode))
+                        <span class="badge badge-danger"{!! $pillTitle ? ' title="'.e($pillTitle).'"' : '' !!}>{{ $lastErrorCode }}</span>
+                    @else
+                        -
+                    @endif
+                </td>
                 @php
                     $printerName = $job['printerName'] ?? $job['PrinterName'] ?? null;
                     $printerId = $job['printerId'] ?? $job['PrinterId'] ?? null;
                 @endphp
                 <td>{{ filled($printerName) ? $printerName : ($printerId ? "Impresora {$printerId}" : 'Sin asignar') }}</td>
-                <td class="number-col">{{ $job['attemptCount'] ?? $job['AttemptCount'] ?? 0 }}</td>
+                <td class="number-col" data-col="intentos">{{ $job['attemptCount'] ?? $job['AttemptCount'] ?? 0 }}</td>
                 <td class="date-col">{{ DateTimeFormat::localDateTime($job['createdAtUtc'] ?? $job['CreatedAtUtc'] ?? $job['created_at_utc'] ?? null) }}</td>
                 <td class="actions-col">
                     @php
@@ -180,7 +197,7 @@
                 </td>
             </tr>
             @empty
-            <x-ui.empty-row colspan="9" message="No hay trabajos en la cola." />
+            <x-ui.empty-row colspan="10" message="No hay trabajos en la cola." />
             @endforelse
         </tbody>
 </x-ui.table>
@@ -311,6 +328,11 @@
 
         pill.className = 'dbx-pill ' + statusPillClass(statusInt);
         pill.textContent = STATUS_LABELS[statusInt] ?? '-';
+
+        const errorCell = row.querySelectorAll('.status-col')[1];
+        if (errorCell && statusInt !== 8) {
+            errorCell.textContent = '-';
+        }
     }
 
     function hideRowIfFiltered(row, statusInt) {
@@ -472,6 +494,36 @@
         if (!form) return;
         event.preventDefault();
         submitColaForm(form);
+    });
+
+    const COLUMN_STORAGE_KEY = 'cola-visible-columns';
+    const columnToggles = {
+        error: document.getElementById('col-toggle-error'),
+        intentos: document.getElementById('col-toggle-intentos'),
+    };
+    let columnPrefs = {};
+    try {
+        columnPrefs = JSON.parse(localStorage.getItem(COLUMN_STORAGE_KEY) || '{}');
+    } catch (error) {
+        columnPrefs = {};
+    }
+
+    function applyColumnVisibility(col, visible) {
+        document.querySelectorAll('[data-col="' + col + '"]').forEach(el => {
+            el.style.display = visible ? '' : 'none';
+        });
+    }
+
+    Object.entries(columnToggles).forEach(([col, checkbox]) => {
+        if (!checkbox) return;
+        const visible = columnPrefs[col] !== false;
+        checkbox.checked = visible;
+        applyColumnVisibility(col, visible);
+        checkbox.addEventListener('change', function() {
+            applyColumnVisibility(col, checkbox.checked);
+            columnPrefs[col] = checkbox.checked;
+            localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(columnPrefs));
+        });
     });
 
     updateSubmitEnabled();

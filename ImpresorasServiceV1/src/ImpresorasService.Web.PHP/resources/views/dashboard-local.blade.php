@@ -47,7 +47,7 @@
         $attentionItems[] = ['level' => $queue >= 10 ? 'warning' : 'info', 'title' => 'Trabajos en cola', 'text' => $queue . ' trabajo(s) pendientes de salida.', 'href' => url('/cola?storeId=' . $storeId . '&status=0')];
     }
     if ($failedNoRetry > 0) {
-        $attentionItems[] = ['level' => 'critical', 'title' => 'Fallos sin reenviar', 'text' => $failedNoRetry . ' trabajo(s) necesitan seguimiento.', 'href' => url('/alertas?storeId=' . $storeId)];
+        $attentionItems[] = ['level' => 'critical', 'title' => 'Fallos sin reenviar', 'text' => $failedNoRetry . ' trabajo(s) necesitan seguimiento.', 'href' => url('/cola?storeId=' . $storeId . '&status=8')];
     }
     if ($unassigned > 0) {
         $attentionItems[] = ['level' => 'warning', 'title' => 'Cola sin impresora', 'text' => $unassigned . ' trabajo(s) no tienen impresora asignada.', 'href' => url('/cola?storeId=' . $storeId)];
@@ -111,7 +111,7 @@
             </div>
             <div class="local-actions">
                 <a class="btn btn-ghost" href="{{ url('/cola?storeId=' . $storeId) }}">Ver cola</a>
-                <a class="btn btn-ghost" href="{{ url('/alertas?storeId=' . $storeId) }}">Ver alertas</a>
+                <a class="btn btn-ghost" href="{{ url('/cola?storeId=' . $storeId . '&status=8') }}">Ver errores</a>
                 @if($canOperate)
                     <a class="btn btn-primary" href="{{ url('/impresoras?storeId=' . $storeId) }}">Revisar impresoras</a>
                 @endif

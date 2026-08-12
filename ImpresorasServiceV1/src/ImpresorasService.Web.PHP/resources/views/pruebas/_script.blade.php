@@ -279,7 +279,9 @@
                 const status = job?.status || 'Unknown';
                 const css    = CSS_MAP[status] || 'badge-neutral';
                 row.cells[1].innerHTML = `<span class="badge ${css}">${status}</span>`;
-                row.cells[2].textContent = job?.printerId ? `#${job.printerId}` : '-';
+                row.cells[2].textContent = job?.printerId
+                    ? (job.printerName ? `${job.printerName} (#${job.printerId})` : `#${job.printerId}`)
+                    : '-';
                 row.cells[3].textContent = job?.lastErrorCode
                     ? `${job.lastErrorCode}${job.lastErrorMessage ? ': ' + job.lastErrorMessage : ''}`
                     : '-';

@@ -45,11 +45,6 @@
                     <span class="nav-label">Cola</span>
                     <span class="nav-tooltip" aria-hidden="true">Cola</span>
                 </a>
-                <a href="{{ route('alertas.index') }}" class="app-nav-link {{ request()->routeIs('alertas.index') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('alertas.index')) aria-current="page" @endif data-label="Alertas">
-                    <svg class="nav-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-                    <span class="nav-label">Alertas</span>
-                    <span class="nav-tooltip" aria-hidden="true">Alertas</span>
-                </a>
                 @if(($isStoreManager ?? false) || ($isAdmin ?? false))
                     <a href="{{ route('impresoras.index') }}" class="app-nav-link {{ request()->routeIs('impresoras.*') ? 'app-nav-link-active' : '' }}" @if(request()->routeIs('impresoras.*')) aria-current="page" @endif data-label="Impresoras">
                         <svg class="nav-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>

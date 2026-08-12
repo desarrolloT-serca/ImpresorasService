@@ -111,7 +111,15 @@ class ApiClient
         try {
             $decoded = $this->request('GET', $normalizedPath);
             return $this->requestGetCache[$cacheKey] = $decoded;
-        } catch (\Throwable) {
+        } catch (\Throwable $e) {
+            // Silencioso para la UI (no marca error de sesión), pero no invisible: sin esta traza,
+            // una caída del overview degradaba el dashboard a los KPIs de respaldo sin que nadie
+            // se enterara — el sintoma visible era un "Impresos: 0" inexplicable.
+            Log::warning('ApiClient GET silencioso falló', [
+                'path' => $normalizedPath,
+                'error' => $e->getMessage(),
+            ]);
+
             return [];
         }
     }

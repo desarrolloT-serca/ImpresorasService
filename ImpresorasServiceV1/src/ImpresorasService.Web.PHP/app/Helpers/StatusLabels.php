@@ -9,11 +9,11 @@ class StatusLabels
         1 => 'Enrutado',
         2 => 'Imprimiendo',
         3 => 'Aceptado',
-        4 => 'Impreso confirmado',
-        5 => 'Impreso sin confirmacion',
+        4 => 'Impreso',
+        5 => 'Sin confirmar',
         6 => 'Reintento programado',
         7 => 'Cancelado',
-        8 => 'Error final',
+        8 => 'Error',
         9 => 'Bloqueado',
     ];
 

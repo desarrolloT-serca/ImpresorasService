@@ -60,7 +60,6 @@ Route::middleware('auth.impresoras')->group(function () {
         Route::put('/usuarios/{usuario}', [UsuariosController::class, 'update'])->name('usuarios.update');
         Route::delete('/usuarios/{usuario}', [UsuariosController::class, 'destroy'])->name('usuarios.destroy');
     });
-    Route::get('/alertas', [AlertasController::class, 'index'])->name('alertas.index');
     Route::middleware('admin.only')->group(function () {
         Route::get('/alertas/configuracion', [AlertasController::class, 'configuracion'])->name('alertas.configuracion');
         Route::post('/alertas/configuracion', [AlertasController::class, 'saveConfig'])->name('alertas.config.save');

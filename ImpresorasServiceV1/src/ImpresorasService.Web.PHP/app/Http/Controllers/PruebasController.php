@@ -281,6 +281,7 @@ class PruebasController extends Controller
                 'externalJobId'    => $j['externalJobId'] ?? $j['ExternalJobId'] ?? '',
                 'status'           => $status,
                 'printerId'        => $j['printerId'] ?? $j['PrinterId'] ?? null,
+                'printerName'      => $j['printerName'] ?? $j['PrinterName'] ?? null,
                 'lastErrorCode'    => $j['lastErrorCode'] ?? $j['LastErrorCode'] ?? null,
                 'lastErrorMessage' => $j['lastErrorMessage'] ?? $j['LastErrorMessage'] ?? null,
             ];

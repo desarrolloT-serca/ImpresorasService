@@ -462,7 +462,7 @@
                                         } elseif (stripos($reason, 'sin reenviar') !== false) {
                                             $alertType = 'failed_no_retry';
                                             $alertTypeLabel = 'Sin reenviar';
-                                            $href = '/alertas?storeId=' . urlencode((string)$storeId);
+                                            $href = '/cola?storeId=' . urlencode((string)$storeId) . '&status=8';
                                         } elseif (stripos($reason, 'conectividad') !== false || stripos($reason, 'fallos de conexion') !== false) {
                                             $alertType = 'connectivity';
                                             $alertTypeLabel = 'Conectividad';
