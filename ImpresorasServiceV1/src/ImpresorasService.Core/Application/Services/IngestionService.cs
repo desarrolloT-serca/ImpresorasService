@@ -38,12 +38,16 @@ public class IngestionService
 
         var insertedCount = 0;
         var duplicatesCount = 0;
+        var failedCount = 0;
         var insertedJobIds = new List<Guid>();
         var sourceJobIdsToMarkProcessed = new List<long>(sourceJobs.Count);
 
         foreach (IncomingPrintJob sourceJob in sourceJobs)
         {
-            sourceJobIdsToMarkProcessed.Add(sourceJob.SourceJobId);
+            // El id se añade a la lista de ack solo cuando el trabajo queda REALMENTE resuelto
+            // (insertado o confirmado como duplicado ya presente). Añadirlo aquí, antes de intentar
+            // nada, hacía que un fallo de persistencia acabara marcando el source row como
+            // procesado: el PDF se perdía sin traza y sin posibilidad de reintento.
             bool alreadyExists = await _printJobRepository.ExistsBySourceExternalIdAsync(
                 sourceJob.SourceSystem,
                 sourceJob.ExternalJobId,
@@ -51,6 +55,8 @@ public class IngestionService
 
             if (alreadyExists)
             {
+                // Duplicado real: el destino ya lo tiene, el origen puede darse por servido.
+                sourceJobIdsToMarkProcessed.Add(sourceJob.SourceJobId);
                 duplicatesCount++;
                 _logger.LogInformation(
                     "Duplicado descartado SourceSystem={SourceSystem} ExternalJobId={ExternalJobId}",
@@ -100,17 +106,54 @@ public class IngestionService
                 // ExistsBySourceExternalIdAsync porque ninguno está aún persistido; con guardado
                 // en lote, la violación del índice único abortaba el lote entero.
                 await _printJobRepository.SaveChangesAsync(cancellationToken);
+                sourceJobIdsToMarkProcessed.Add(sourceJob.SourceJobId);
                 insertedJobIds.Add(jobId);
                 insertedCount++;
             }
             catch (DbUpdateException ex)
             {
                 _printJobRepository.ClearTracking();
-                duplicatesCount++;
-                _logger.LogWarning(ex,
-                    "Duplicado intra-lote descartado tras violar restricción única. SourceSystem={SourceSystem} ExternalJobId={ExternalJobId}",
-                    sourceJob.SourceSystem,
-                    sourceJob.ExternalJobId);
+
+                // DbUpdateException no significa "violación de índice único": también cubre
+                // timeouts, caídas de conexión y otros constraints. Solo el destino puede decir
+                // cuál fue: si el job está ahí, era un duplicado intra-lote y el origen puede
+                // acusarse; si no está, la inserción falló de verdad y el source row debe quedar
+                // sin ack para que el lease expire y otro ciclo lo reintente.
+                bool persistedByAnotherAttempt;
+                try
+                {
+                    persistedByAnotherAttempt = await _printJobRepository.ExistsBySourceExternalIdAsync(
+                        sourceJob.SourceSystem,
+                        sourceJob.ExternalJobId,
+                        cancellationToken);
+                }
+                catch (Exception probeEx)
+                {
+                    // Sin poder comprobarlo, la opción segura es no acusar recibo: reingerir un
+                    // duplicado lo frena el índice único, perder el PDF no lo frena nada.
+                    _logger.LogError(probeEx,
+                        "No se pudo verificar si el trabajo quedó persistido; no se acusa recibo en origen. ExternalJobId={ExternalJobId}",
+                        sourceJob.ExternalJobId);
+                    persistedByAnotherAttempt = false;
+                }
+
+                if (persistedByAnotherAttempt)
+                {
+                    sourceJobIdsToMarkProcessed.Add(sourceJob.SourceJobId);
+                    duplicatesCount++;
+                    _logger.LogWarning(ex,
+                        "Duplicado intra-lote descartado tras violar restricción única. SourceSystem={SourceSystem} ExternalJobId={ExternalJobId}",
+                        sourceJob.SourceSystem,
+                        sourceJob.ExternalJobId);
+                }
+                else
+                {
+                    failedCount++;
+                    _logger.LogError(ex,
+                        "Fallo al persistir trabajo ingerido; el origen NO se marca procesado y se reintentará al expirar el lease. SourceSystem={SourceSystem} ExternalJobId={ExternalJobId}",
+                        sourceJob.SourceSystem,
+                        sourceJob.ExternalJobId);
+                }
             }
         }
 
@@ -122,10 +165,11 @@ public class IngestionService
         await _jobSourceAdapter.MarkJobsProcessedAsync(sourceJobIdsToMarkProcessed, cancellationToken);
 
         _logger.LogInformation(
-            "Ingestión lote completada. fetched={Fetched} inserted={Inserted} duplicates={Duplicates} ackCandidates={AckCandidates}",
+            "Ingestión lote completada. fetched={Fetched} inserted={Inserted} duplicates={Duplicates} failed={Failed} acked={Acked}",
             sourceJobs.Count,
             insertedCount,
             duplicatesCount,
+            failedCount,
             sourceJobIdsToMarkProcessed.Count);
 
         // Enrutado automático: una carga de reglas/impresoras para todo el lote (AUD-17)

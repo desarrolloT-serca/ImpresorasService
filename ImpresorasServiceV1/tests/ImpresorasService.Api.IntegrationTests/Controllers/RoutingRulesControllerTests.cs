@@ -31,9 +31,11 @@ public sealed class RoutingRulesControllerTests : IntegrationTestBase
     [Fact]
     public async Task GetAll_WithFilters_ReturnsFilteredResults()
     {
-        var printer = await CreatePrinterAsync();
-        await CreateRuleAsync(printer.PrinterId, storeId: 1);
-        await CreateRuleAsync(printer.PrinterId, storeId: 2);
+        // Una impresora por tienda: una regla de la tienda 2 no puede apuntar a una impresora de la 1.
+        var printerStore1 = await CreatePrinterAsync(storeId: 1);
+        var printerStore2 = await CreatePrinterAsync(storeId: 2);
+        await CreateRuleAsync(printerStore1.PrinterId, storeId: 1);
+        await CreateRuleAsync(printerStore2.PrinterId, storeId: 2);
 
         var response = await Client.GetAsync("/api/routingrules?storeId=1");
 
@@ -185,9 +187,13 @@ public sealed class RoutingRulesControllerTests : IntegrationTestBase
 
     #region Helpers
 
-    private async Task<PrinterDto> CreatePrinterAsync()
+    /// <summary>
+    /// El controlador exige que la impresora de una regla pertenezca a la tienda de esa regla
+    /// (RoutingRulesController.Create), así que la tienda debe poder elegirse aquí.
+    /// </summary>
+    private async Task<PrinterDto> CreatePrinterAsync(int storeId = 1)
     {
-        var req = new { printerName = "P1", spoolQueue = $"\\\\srv\\q{Guid.NewGuid():N}"[..20], storeId = 1, isActive = true };
+        var req = new { printerName = "P1", spoolQueue = $"\\\\srv\\q{Guid.NewGuid():N}"[..20], storeId, isActive = true };
         var res = await Client.PostAsJsonAsync("/api/printers", req);
         res.EnsureSuccessStatusCode();
         var p = await res.Content.ReadFromJsonAsync<PrinterDto>();

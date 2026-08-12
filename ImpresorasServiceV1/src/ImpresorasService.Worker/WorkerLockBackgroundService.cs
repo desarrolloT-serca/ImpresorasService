@@ -32,8 +32,25 @@ public sealed class WorkerLockBackgroundService : BackgroundService
     {
         _logger.LogInformation("Worker lock: instancia {InstanceId} intentando adquirir el lock.", WorkerLockState.InstanceId);
 
+        var leaseSeconds = Math.Max(1, _options.Value.LeaseSeconds);
+        var heartbeatSeconds = Math.Max(1, _options.Value.HeartbeatIntervalSeconds);
+
+        // WorkerLockState caduca por su cuenta al vencer el lease: si el heartbeat no llega antes,
+        // la instancia se queda sin procesar aunque conserve el lock en BD.
+        if (heartbeatSeconds >= leaseSeconds)
+            _logger.LogWarning(
+                "Worker lock: HeartbeatIntervalSeconds ({Heartbeat}s) >= LeaseSeconds ({Lease}s). El holder quedará inactivo entre renovaciones; use un heartbeat claramente menor que el lease.",
+                heartbeatSeconds, leaseSeconds);
+
         while (!stoppingToken.IsCancellationRequested)
         {
+            if (!_options.Value.Enabled)
+            {
+                _state.SetHolder(true, leaseSeconds);
+                await Task.Delay(TimeSpan.FromSeconds(heartbeatSeconds), stoppingToken);
+                continue;
+            }
+
             bool acquired;
             try
             {
@@ -59,9 +76,9 @@ public sealed class WorkerLockBackgroundService : BackgroundService
                     _logger.LogWarning("Worker lock: instancia {InstanceId} PERDIÓ/NO OBTUVO el lock — deja de procesar.", WorkerLockState.InstanceId);
             }
 
-            _state.SetHolder(acquired);
+            _state.SetHolder(acquired, leaseSeconds);
 
-            await Task.Delay(TimeSpan.FromSeconds(Math.Max(1, _options.Value.HeartbeatIntervalSeconds)), stoppingToken);
+            await Task.Delay(TimeSpan.FromSeconds(heartbeatSeconds), stoppingToken);
         }
     }
 }

@@ -107,6 +107,10 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
         var printerHosts = await LoadPrinterHostsAsync(db, candidates, ct);
         var ippResults = await QueryIppForPrintersAsync(printerHosts, ct);
 
+        // Solo los jobs que ApplyOutcome ha cambiado. Contar sobre `candidates` mezclaba los
+        // ignorados con los procesados: "Recuperados" acababa contando los que seguían esperando.
+        var changed = new List<WatchdogJob>();
+
         foreach (var job in candidates)
         {
             var oldStatus = job.Status;
@@ -134,20 +138,24 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
             db.Entry(entity).Property(x => x.NextRetryAtUtc).IsModified   = true;
 
             await db.PrintJobEvents.AddAsync(BuildEvent(job, oldStatus, now), ct);
+            changed.Add(job);
         }
+
+        if (changed.Count == 0)
+            return;
 
         try
         {
             await db.SaveChangesAsync(ct);
 
-            var confirmed = candidates.Count(j => j.Status == PrintJobStatus.PrintedConfirmed);
-            var blocked   = candidates.Count(j => j.Status == PrintJobStatus.PrinterBlocked);
-            var recovered = candidates.Count(j => j.Status == PrintJobStatus.SpoolAccepted);
-            var unknown   = candidates.Count(j => j.Status == PrintJobStatus.PrintedUnknown);
+            var confirmed = changed.Count(j => j.Status == PrintJobStatus.PrintedConfirmed);
+            var blocked   = changed.Count(j => j.Status == PrintJobStatus.PrinterBlocked);
+            var recovered = changed.Count(j => j.Status == PrintJobStatus.SpoolAccepted);
+            var unknown   = changed.Count(j => j.Status == PrintJobStatus.PrintedUnknown);
 
-            _logger.LogWarning(
-                "Watchdog: {Total} jobs procesados — Confirmados={Confirmed} Bloqueados={Blocked} Recuperados={Recovered} Desconocidos={Unknown} (maxAge={MaxAge}s).",
-                candidates.Count, confirmed, blocked, recovered, unknown, maxAgeSeconds);
+            _logger.LogInformation(
+                "Watchdog: {Changed}/{Total} jobs actualizados — Confirmados={Confirmed} Bloqueados={Blocked} Recuperados={Recovered} Desconocidos={Unknown} (maxAge={MaxAge}s).",
+                changed.Count, candidates.Count, confirmed, blocked, recovered, unknown, maxAgeSeconds);
         }
         catch (DbUpdateConcurrencyException)
         {

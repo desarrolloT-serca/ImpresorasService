@@ -547,5 +547,12 @@ internal sealed class DummyRoutingResolver : IRoutingResolver
         // En estos tests el job ya tiene PrinterId y el resolutor no se usa.
         return Task.FromResult<int?>(null);
     }
+
+    public Task<IReadOnlyList<int?>> ResolveBatchAsync(
+        IReadOnlyList<(int storeId, string documentType, string channel)> requests,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<int?>>(requests.Select(_ => (int?)null).ToArray());
+    }
 }
 

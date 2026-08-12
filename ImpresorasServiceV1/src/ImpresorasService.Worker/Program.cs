@@ -13,7 +13,7 @@ CultureInfo.DefaultThreadCurrentCulture = appCulture;
 CultureInfo.DefaultThreadCurrentUICulture = appCulture;
 
 builder.Services.AddApplication();
-builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddInfrastructure(builder.Configuration, builder.Environment.EnvironmentName);
 builder.Services.AddSingleton<WorkerLockState>();
 builder.Services.AddHostedService<WorkerLockBackgroundService>();
 builder.Services.AddHostedService<IngestionBackgroundService>();
@@ -44,6 +44,11 @@ await using (var scope = host.Services.CreateAsyncScope())
     var activeOnly = true;
     var rulesCount = await dbContext.RoutingRules.CountAsync(r => r.IsActive == activeOnly);
     logger.LogInformation("Reglas de enrutado activas: {Count}", rulesCount);
+
+    // En Production esto es inalcanzable (AddInfrastructure ya habría fallado), pero fuera de
+    // Production la simulación es legítima y debe verse: un "impreso" de esta instancia no es papel.
+    if (!builder.Configuration.GetValue<bool>("PrintExecution:UseRealSpooler"))
+        logger.LogWarning("SPOOLER EN SIMULACION: no se envia nada a impresoras reales. Los trabajos avanzaran a SpoolAccepted sin efecto fisico.");
 }
 
 await host.RunAsync();

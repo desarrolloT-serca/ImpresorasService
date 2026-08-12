@@ -154,6 +154,8 @@ builder.Services.AddAuthorization(options =>
 
 builder.Services.AddControllers();
 builder.Services.AddApplication();
+// Sin environmentName a propósito: el fail-fast del spooler es del Worker, que es quien imprime.
+// La API no resuelve IPrinterSpooler y no debe negarse a arrancar por la config de impresión.
 builder.Services.AddInfrastructure(builder.Configuration);
 
 builder.Services.AddHealthChecks()

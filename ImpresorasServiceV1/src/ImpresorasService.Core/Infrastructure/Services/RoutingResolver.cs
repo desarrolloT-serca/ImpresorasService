@@ -6,16 +6,20 @@ using Microsoft.EntityFrameworkCore;
 namespace ImpresorasService.Infrastructure.Services;
 
 /// <summary>
-/// Resolución por prioridad: StoreId+DocumentType+Channel > StoreId+DocumentType > StoreId > Global.
+/// Resolución por prioridad: StoreId+DocumentType+Channel > StoreId+DocumentType > StoreId+Channel > StoreId > Global.
 /// Dentro de cada nivel, menor Priority = mayor precedencia.
 /// </summary>
 public class RoutingResolver : IRoutingResolver
 {
     private readonly ImpresorasDbContext _db;
+    private readonly TimeProvider _timeProvider;
 
-    public RoutingResolver(ImpresorasDbContext db)
+    // TimeProvider opcional: DI lo inyecta (registrado en AddInfrastructure) y los tests que
+    // construyen el resolver a mano siguen compilando sin pasarlo.
+    public RoutingResolver(ImpresorasDbContext db, TimeProvider? timeProvider = null)
     {
         _db = db;
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     public async Task<int?> ResolvePrinterAsync(
@@ -39,7 +43,7 @@ public class RoutingResolver : IRoutingResolver
 
     private async Task<List<RoutingRule>> LoadActiveRulesAsync(CancellationToken cancellationToken)
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = _timeProvider.GetUtcNow();
         const bool activeOnly = true;
 
         var rules = await _db.RoutingRules
@@ -69,7 +73,8 @@ public class RoutingResolver : IRoutingResolver
         var normChannel = NormalizeNullable(channel);
 
         // Niveles de especificidad (mayor = más específico). Evaluar de mayor a menor.
-        return (rules.FirstOrDefault(r => Matches(r, storeId, normDoc, normChannel, specificity: 4))
+        return (rules.FirstOrDefault(r => Matches(r, storeId, normDoc, normChannel, specificity: 5))
+            ?? rules.FirstOrDefault(r => Matches(r, storeId, normDoc, normChannel, specificity: 4))
             ?? rules.FirstOrDefault(r => Matches(r, storeId, normDoc, normChannel, specificity: 3))
             ?? rules.FirstOrDefault(r => Matches(r, storeId, normDoc, normChannel, specificity: 2))
             ?? rules.FirstOrDefault(r => Matches(r, storeId, normDoc, normChannel, specificity: 1)))
@@ -87,14 +92,18 @@ public class RoutingResolver : IRoutingResolver
         return specificity switch
         {
             // StoreId + DocumentType + Channel (coincidencia total)
-            4 => r.StoreId == storeId
+            5 => r.StoreId == storeId
                 && ruleDocumentType == documentType
                 && ruleChannel == channel,
-            // StoreId + DocumentType
-            3 => r.StoreId == storeId
+            // StoreId + DocumentType (cualquier canal)
+            4 => r.StoreId == storeId
                 && ruleDocumentType == documentType
                 && ruleChannel == null,
-            // StoreId
+            // StoreId + Channel (cualquier tipo de documento)
+            3 => r.StoreId == storeId
+                && ruleDocumentType == null
+                && ruleChannel == channel,
+            // StoreId (cualquier tipo de documento y canal)
             2 => r.StoreId == storeId
                 && ruleDocumentType == null
                 && ruleChannel == null,

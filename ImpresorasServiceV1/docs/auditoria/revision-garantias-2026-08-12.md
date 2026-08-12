@@ -1,0 +1,295 @@
+# Revisión de garantías — ImpresorasService
+
+**Snapshot revisado:** `main` @ `2d3e193e` (verificado: HEAD no ha avanzado respecto al documento de handoff).
+**Entrada:** `Auditoria_Contexto_Revision_ImpresorasService_2026-08-12.md` (mapa de investigación).
+**Método:** lectura estática del código del snapshot. Sin HANA, sin Windows Service, sin impresora, sin bot.
+
+Etiquetas: **DEMOSTRADO** (leído en el código de este SHA) · **HIPÓTESIS** · **STAGING** (solo verificable con HANA/Windows/dispositivo real) · **NEGOCIO** (decisión, no defecto).
+
+---
+
+## 1. Resumen ejecutivo
+
+La garantía real que ofrece hoy el sistema es **at-least-once sobre el spooler, con confirmación por impresora y no por trabajo**. Ninguna de las dos mitades está declarada como tal en el código ni en la UI, y ambas producen afirmaciones más fuertes que su evidencia:
+
+- `PrintedConfirmed` se asigna a **todos** los trabajos pendientes de una impresora con una sola lectura de `printer-state`. No es una confirmación por documento.
+- Un `Printing` stale se reenvía al spooler sin ningún identificador de spool que permita saber si el envío anterior llegó a salir por papel.
+
+A eso se suman tres cosas que no estaban en el mapa de investigación y que considero de la misma gravedad:
+
+- La ingesta puede **acusar recibo de un trabajo que nunca se persistió**, perdiendo el PDF de forma definitiva y silenciosa (H-05).
+- El esquema HANA de las tablas principales **no existe en el repositorio** en ninguna forma versionada — ni DDL ni migraciones EF (H-06).
+- Todas las fechas se persisten como **cadena de texto**, y todos los filtros y ordenaciones temporales del Worker dependen de cómo HANA compare esa columna (H-07).
+
+Lo que el mapa daba por maduro, lo es: el lock de instancia está implementado y es un CAS correcto, la idempotencia por índice único está bien planteada, y el modelo de estados de incertidumbre (`SpoolAccepted` / `PrinterBlocked` / `PrintedUnknown`) es conceptualmente sano. El problema no es que falten piezas, es que **tres de ellas prometen más de lo que demuestran**.
+
+---
+
+## 2. Hallazgos P0
+
+### H-01 · Confirmación IPP colectiva por impresora, no por trabajo — **DEMOSTRADO**
+*(cubre P0-02)*
+
+`SpoolAcceptedWatchdogBackgroundService.cs:183-202` consulta IPP **una vez por host único** y guarda el resultado en un diccionario `host → IppQueryResult`. Después, `ResolveIppResult` (L204-214) devuelve **ese mismo resultado** a cada job del lote que apunte a esa impresora, y `ApplyOutcome` (L230-237) lo convierte en `PrintedConfirmed`.
+
+Consecuencia directa: si hay 8 trabajos `SpoolAccepted` de la tienda 12 y la impresora responde `idle` una vez, los 8 pasan a `PrintedConfirmed` en la misma iteración. El batch es de 50 (`SpoolAcceptedWatchBatchSize`).
+
+Peor caso realista: la cola de Windows está mal configurada y Sumatra devuelve 0 sin que nada llegue al dispositivo. La impresora está `idle` porque no tiene nada que hacer. Todos los trabajos se marcan confirmados. **`PrintedConfirmed` es hoy indistinguible de "la impresora no estaba ocupada cuando miramos".**
+
+Un `idle` es evidencia de ausencia de trabajo en curso, nunca de trabajo completado.
+
+**Mínimo:** renombrar la semántica y dejar de emitir `PrintedConfirmed` desde una señal global. `PrinterIdleAfterSpool` describe exactamente lo que se sabe. El coste es un rename + la UI; el beneficio es que el KPI deja de mentir.
+**Robusto:** correlacionar con `Get-Jobs` / `job-id`. Requiere STAGING para saber qué modelos lo soportan.
+**Aceptación:** con dos trabajos encolados y la impresora imprimiendo solo el primero, el segundo no debe quedar `PrintedConfirmed`.
+
+---
+
+### H-02 · Simulación silenciosa en producción — **DEMOSTRADO**
+*(cubre P0-05)*
+
+`DependencyInjection.cs:63-68`:
+
+```csharp
+var useRealSpooler = configuration.GetValue<bool>("PrintExecution:UseRealSpooler")
+    && RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+if (useRealSpooler) services.AddScoped<IPrinterSpooler, WindowsPrintSpooler>();
+else services.AddSingleton<IPrinterSpooler>(new NoOpPrintSpooler(simulateSuccess: true));
+```
+
+No hay rama de error. Un `UseRealSpooler=false` por descuido, un despliegue en un host no-Windows, o una sección `PrintExecution` que no se cargue, degradan a `NoOpPrintSpooler` que **devuelve éxito siempre** (`NoOpPrintSpooler.cs:23-24`). Los trabajos avanzan a `SpoolAccepted` y de ahí, vía H-01, a `PrintedConfirmed`. El sistema reporta una jornada perfecta sin haber impreso una hoja.
+
+`Worker/Program.cs` no comprueba nada de esto al arrancar: valida `BackoffSeconds` y `MaxAttempts` (`DependencyInjection.cs:29-36`) pero no el spooler.
+
+**Mínimo (ladder rung 7, ~10 líneas):** en `AddInfrastructure`, si el entorno es Production y `useRealSpooler` es false → `throw`. Modo simulación solo con `PrintExecution:Mode=Simulation` explícito.
+**Aceptación:** arrancar el Worker en Production con `UseRealSpooler=false` debe fallar el arranque, no imprimir en el vacío.
+
+---
+
+### H-03 · `RowVersion` no es control de concurrencia — **DEMOSTRADO**
+*(cubre P0-03; confirma la hipótesis del documento)*
+
+Tres capas distintas, ninguna es un compare-and-swap:
+
+1. `ImpresorasDbContext.cs:176-197` genera 8 bytes aleatorios en cada `Added`/`Modified`. No hay `.IsConcurrencyToken()` ni `.IsRowVersion()` en el mapeo (L237, y el comentario L247-249 lo declara explícitamente por la limitación BLOB de HANA). **El `UPDATE` emitido no lleva `WHERE row_version = @old`.**
+2. `PrintExecutionService.RowVersionSnapshotStillMatches` (L433-441) compara el snapshot del lote contra lo leído dentro de la transacción. Es un *read-then-check*: con READ COMMITTED, dos lectores pueden ver el mismo valor y ambos escribir.
+3. `DbUpdateConcurrencyException` se captura en el watchdog (L152-155) para un evento que **este mapeo no puede producir**. Es código muerto que da falsa confianza.
+
+Además, dos rutas escriben con `Attach` + `IsModified` sin pasar siquiera por el chequeo en memoria: `PrintExecutionService.RescuePendingJobAsync` (L356-370) y el watchdog (L123-134).
+
+El lock global mitiga esto **entre réplicas**, no entre el Worker y la API: `PrintJobsController.Cancel` (L185) y `Route` escriben `Status` sin ninguna coordinación con el ciclo de ejecución.
+
+**Mínimo:** convertir los cambios de estado críticos en `ExecuteUpdateAsync` con `Where(status == esperado)` y comprobar `rows == 1` — el mismo patrón que ya usa correctamente `WorkerLockCoordinator.cs:47-53`. La pieza ya está en la casa; solo hay que reusarla.
+**Robusto:** migrar `row_version` a VARBINARY comparable y activar el token EF. Requiere STAGING + DDL.
+**Aceptación:** dos `ExecuteBatchAsync` concurrentes sobre el mismo job deben producir exactamente un envío al spooler.
+
+---
+
+### H-04 · Ventana de crash entre commit y efecto físico — **DEMOSTRADO**
+*(cubre P0-01; confirma la tesis central del documento)*
+
+`PrintExecutionService.cs:256-267`: se persiste `Printing`, se hace `tx.CommitAsync`, y **después** se llama al spooler. Es la ordenación correcta (mejor un `Printing` huérfano que una impresión sin registro), pero deja tres ventanas:
+
+| Ventana | Estado en BD | Realidad física | Qué hace el sistema |
+|---|---|---|---|
+| A · muere tras el commit, antes de Sumatra | `Printing` | nada impreso | reintenta a los 40 s. Correcto. |
+| B · muere durante Sumatra | `Printing` | **indeterminado** | reintenta a los 40 s. **Puede duplicar.** |
+| C · muere tras Sumatra, antes de `SpoolAccepted` | `Printing` | impreso | reintenta a los 40 s. **Duplica.** |
+
+El rescate está en `ExecuteBatchAsync` L52: `Status == Printing && UpdatedAtUtc <= now - (TimeoutSeconds + 10)`. Con `TimeoutSeconds=30`, cualquier `Printing` de más de 40 segundos se reenvía. **No existe ningún identificador de spool persistido** — `PrintSpoolResult` (usado en `WindowsPrintSpooler.cs:146`) devuelve solo `(bool, errorCode, errorMessage, isTransient)`. No hay nada con lo que reconciliar tras un reinicio.
+
+Esto no es un bug: es una garantía que el sistema tiene y no declara. La transacción única BD+impresora no existe y no puede existir.
+
+**Mínimo:** que el rescate de `Printing` stale no sea automático. Enviarlo a un estado `PrintingUnknown` visible en la cola de excepciones, y que el reenvío sea una decisión humana con el riesgo de duplicado escrito en la pantalla. Cambia el reparto de riesgo, no la física.
+**Robusto:** capturar el job-id del spooler de Windows tras el envío y reconciliar contra la cola al arrancar. STAGING.
+**Aceptación:** matar el Worker entre `Process.Start` y el commit de `SpoolAccepted` no debe producir un segundo papel sin intervención humana.
+
+---
+
+### H-05 · La ingesta acusa recibo de trabajos que no persistió — **DEMOSTRADO** · *no estaba en el mapa*
+*(afecta a P0-04)*
+
+`IngestionService.cs:96-114`:
+
+```csharp
+try { await _printJobRepository.SaveChangesAsync(ct); insertedCount++; }
+catch (DbUpdateException ex) { duplicatesCount++; /* log "Duplicado intra-lote" */ }
+```
+
+`DbUpdateException` **no significa "violación de índice único"**. Cubre también timeouts de HANA, pérdida de conexión, desbordes de longitud y cualquier fallo de constraint. El `catch` los clasifica todos como duplicado.
+
+Y a continuación, L117-122, **fuera del try**:
+
+```csharp
+await _jobSourceAdapter.MarkJobsProcessedAsync(sourceJobIdsToMarkProcessed, ct);
+```
+
+`sourceJobIdsToMarkProcessed` se rellena en L46, **antes** de intentar el insert, con todos los ids del fetch. `MarkJobsProcessedAsync` pone `IsProcessed = true` y libera el claim (`SapHanaJobSourceAdapter.cs:145-151`).
+
+Secuencia completa del fallo: HANA tiene un hipo de 2 s durante el insert → el job no se persiste → se cuenta como duplicado → el source row se marca procesado → **el PDF desaparece y nadie lo sabe**. La única traza es un `LogWarning` que dice "Duplicado intra-lote descartado", que es exactamente lo contrario de lo que ocurrió.
+
+**Mínimo:** solo hacer ack de los ids realmente resueltos. Distinguir violación de unicidad (→ ack, es un duplicado real) de cualquier otro `DbUpdateException` (→ no hacer ack, dejar que el lease expire y se reintente).
+**Aceptación:** inyectar un fallo de conexión en el `SaveChanges` de un job y comprobar que su source row sigue con `is_processed = false`.
+
+---
+
+### H-06 · No existe esquema versionado de las tablas principales — **DEMOSTRADO**
+*(cubre P0-06)*
+
+`scripts/sql/` contiene 13 ficheros: `create_worker_lock.sql`, `create_sap_aux_print_queue.sql`, un seed, `migrate_pdf_blob_nullable.sql` y nueve scripts de diagnóstico puntual (`diagnose_g1_*`, `diagnose_g2_*`, `g1_validacion_borrar_evento.sql`, `g2_5_backdatar_timezone.sql`).
+
+**No hay ningún `CREATE TABLE` de:** `printer_print_job`, `printer_print_job_event`, `printer_printer`, `printer_routing_rule`, `printer_store`, `printer_user`, `printer_dashboard_threshold`, `printer_telegram_config`, `printer_telegram_chat`, `printer_alert_state`.
+
+Tampoco existe carpeta `Migrations/` en `ImpresorasService.Core` — el CLAUDE.md del proyecto afirma que "EF Migrations son solo referencia histórica", pero **no quedan migraciones**. Con `Database:ApplyMigrations=false` (`Worker/appsettings.json`), la afirmación operativa es que el esquema vive **solo en la cabeza del DBA y en la instancia de producción**.
+
+Esto convierte varios hallazgos de este informe en no-verificables: no se puede saber si `row_version` es BLOB o VARBINARY (H-03), ni si `updated_at_utc` es NVARCHAR o TIMESTAMP (H-07), leyendo el repositorio.
+
+Nota adicional: `create_worker_lock.sql:10` declara `heartbeat_utc TIMESTAMP`, pero el converter global del `DbContext` (L493-506) escribe esa propiedad como **cadena**. Funciona por conversión implícita de HANA, pero es un ejemplo de la divergencia que nadie está vigilando.
+
+**Mínimo:** extraer el DDL real de producción a `scripts/sql/schema/` y congelarlo como línea base. Un día de trabajo, y desbloquea todo lo demás.
+**Robusto:** *schema compatibility check* al arrancar, que valide columnas y tipos críticos contra el modelo EF y falle rápido.
+**Aceptación:** poder recrear un entorno HANA vacío desde `scripts/sql/` y que el Worker arranque.
+
+---
+
+## 3. Hallazgos P1
+
+### H-07 · Fechas persistidas como cadena: toda comparación temporal es sospechosa — **DEMOSTRADO** / consecuencia **STAGING**
+
+`ImpresorasDbContext.cs:493-506` aplica `DateTimeOffsetToStringConverter` a **toda** propiedad `DateTimeOffset` de **todas** las entidades. El formato de escritura es `"yyyy-MM-dd HH:mm:ss"` (L46).
+
+Toda la lógica temporal del Worker se traduce entonces a una comparación sobre esa columna:
+
+| Ubicación | Predicado |
+|---|---|
+| `PrintExecutionService.cs:51-53` | `NextRetryAtUtc <= now`, `UpdatedAtUtc <= now - stale` |
+| `PrintExecutionService.cs:54` | `OrderBy(NextRetryAtUtc ?? CreatedAtUtc)` |
+| `SpoolAcceptedWatchdog.cs:88,89` | `UpdatedAtUtc <= thresholdUtc`, `OrderBy(UpdatedAtUtc)` |
+| `SapHanaJobSourceAdapter.cs:69,70` | `ClaimedUntilUtc <= now`, `OrderBy(CreatedAtUtc)` |
+| `WorkerLockCoordinator.cs:48` | `HeartbeatAtUtc <= staleThreshold` |
+
+En formato ISO el orden lexicográfico coincide con el cronológico, así que **si todas las filas están en ISO, esto funciona**. El problema es que el propio código documenta que no lo están: el comentario de `SupportedDateFormats` (L18-27) describe filas legacy en formato día-primero (`"17/6/2026 6:58:40"`), y el fallback de parseo existe precisamente para leerlas.
+
+Una fila con `updated_at_utc = "17/6/2026 6:58:40"` comparada lexicográficamente contra `"2026-08-12 09:00:00"`: `'1' < '2'`, luego siempre es "más antigua". El watchdog la reprocesaría en cada ciclo; el rescate de `Printing` la reenviaría al spooler indefinidamente.
+
+Es exactamente la misma clase de bug que ya mordió a este proyecto en el dashboard (el comentario de L86-89 narra el episodio del día ≤ 12), pero esta vez del lado del `WHERE`, no del parseo.
+
+**Verificación pendiente (STAGING, 5 minutos):**
+```sql
+SELECT COUNT(*) FROM printer_print_job WHERE updated_at_utc LIKE '%/%';
+SELECT data_type_name FROM sys.table_columns
+ WHERE table_name = 'PRINTER_PRINT_JOB' AND column_name LIKE '%_UTC';
+```
+Si la primera devuelve > 0, hay que normalizar con un script de un solo uso. Si el tipo es `TIMESTAMP`, HANA convierte y el riesgo cae mucho — pero entonces `H-06` sigue siendo necesario para saberlo sin preguntar.
+
+---
+
+### H-08 · Con `NotifyOnRecovery = false`, una tienda deja de alertar para siempre — **DEMOSTRADO**
+
+`StoreHealthAlertBackgroundService.cs:207-238`. `NotifiedHealth` **solo** se actualiza dentro de `if (message is not null)`.
+
+Con `NotifyOnRecovery = false` (L221 exige `notifyOnRecovery` para construir el mensaje de recuperación), la traza es:
+
+1. Tienda 7 → `critical`. Se envía la alerta. `NotifiedHealth = "critical"`.
+2. Tienda 7 se recupera → `healthy`. `isAlertLevel=false`, `wasAlertLevel=true`, pero `notifyOnRecovery=false` → `message = null` → **`NotifiedHealth` sigue siendo `"critical"`**.
+3. Tienda 7 vuelve a caer → `critical`. `wasAlertLevel = true`, no es escalada → `message = null`. **Silencio.**
+
+La tienda queda permanentemente muda. `NotifyOnRecovery` es una opción de UI (`TelegramConfig`), así que un operador puede desactivar todas las alertas del sistema creyendo que solo apaga los mensajes verdes.
+
+**Corrección (1 línea):** mover `alertState.NotifiedHealth = health;` fuera del `if`, junto a `LastHealth` (L231). El estado notificado debe seguir a la realidad aunque no se emita mensaje.
+**Aceptación:** con `NotifyOnRecovery=false`, un ciclo critical → healthy → critical debe emitir dos alertas.
+
+---
+
+### H-09 · `PrintedUnknown` y `PrinterBlocked` no tienen ninguna salida operativa — **DEMOSTRADO**
+*(cubre P1-12)*
+
+La API expone exactamente dos acciones manuales sobre un job (`PrintJobsController.cs`): `route` (L113) y `cancel` (L152).
+
+- `cancel` admite `Pending, Routed, RetryScheduled, ErrorFinal` (L167-173).
+- `route` admite `Pending` o `ErrorFinal` (docstring L110).
+- El "Reintentar" del frontend es un `POST .../route` (`ColaController.php:231`).
+
+Ni `PrintedUnknown` ni `PrinterBlocked` están en ninguna de las dos listas. Un trabajo que llega ahí **no se puede cancelar, ni reintentar, ni confirmar, ni archivar** desde ninguna interfaz. La única vía es un `UPDATE` manual en HANA — exactamente lo que el documento de handoff pide evitar.
+
+Y son estados a los que el sistema envía trabajos de forma rutinaria: `ApplyOutcome` (L280-291) manda a `PrintedUnknown` **cualquier** job cuya impresora no responda IPP en 120 s. Con `IppConfirmationEnabled=false` o una flota sin IPP, *todos* los trabajos acaban ahí.
+
+**Mínimo:** añadir `PrintedUnknown` y `PrinterBlocked` a `cancellableStates`, y un `POST /{id}/confirm` para Admin que registre `ActorType="user"` y el riesgo asumido. Dos cambios pequeños que devuelven el control a operaciones.
+**Aceptación:** un `PrintedUnknown` debe poder resolverse desde la UI sin tocar la base de datos.
+
+---
+
+### H-10 · El lock global tiene dos ventanas de doble holder — **DEMOSTRADO** / magnitud **STAGING**
+
+El CAS de `WorkerLockCoordinator.cs:47-53` es correcto y bien construido. Las ventanas están alrededor:
+
+**(a) Deriva de reloj.** `now` (L25) es el reloj **local de cada instancia**, y `staleThreshold = now - LeaseSeconds` se compara contra un `heartbeat_utc` escrito por otra máquina. Con `LeaseSeconds = 30`, una instancia con el reloj 40 s adelantado considera expirado un lease vivo y se lo lleva. Dos holders, ambos convencidos.
+Corrección: derivar el umbral del reloj de HANA (`CURRENT_UTCTIMESTAMP`), no del proceso.
+
+**(b) Suspensión del proceso.** `WorkerLockState.IsHolder` solo se actualiza cuando el bucle de `WorkerLockBackgroundService` (L69) completa una vuelta. Una pausa GC larga, una suspensión de VM o un `Task.Delay` retrasado dejan `IsHolder = true` mientras otra instancia ya adquirió el lease. Los consumidores (`PrintExecutionBackgroundService.cs:33`, watchdog L46, alertas L57) leen ese booleano cacheado y **envían al spooler**.
+Corrección: guardar el instante de la última renovación exitosa y que `IsHolder` devuelva false si ha pasado más de `LeaseSeconds` — que la caducidad sea del dato, no del bucle que lo refresca.
+
+**Aceptación:** dos Workers reales contra el mismo HANA, suspendiendo el holder con `Ctrl+Break`, no deben solapar envíos.
+
+---
+
+### H-11 · CI nunca ejercita la ruta de producción — **DEMOSTRADO**
+
+`.github/workflows/impresoras-service-ci.yml:20` → `runs-on: ubuntu-latest`. Con eso, `RuntimeInformation.IsOSPlatform(OSPlatform.Windows)` es false y **todo el CI corre con `NoOpPrintSpooler`** (H-02). `WindowsPrintSpooler` no se ejecuta en ninguna prueba.
+
+Los tests son SQLite (`SqliteTestDbHelper.cs`), un solo proyecto, 8 ficheros de prueba. No cubren el watchdog, ni IPP, ni conectividad, ni las alertas.
+
+Los tres componentes de los que depende la corrección física del producto — provider HANA, spooler de Windows, IPP — tienen **cobertura cero**. "Tests verdes" no dice nada sobre producción; la hipótesis del documento se confirma en su forma más fuerte.
+
+---
+
+### H-12 · `RoutingResolver` se salta `TimeProvider` — **DEMOSTRADO** (menor)
+
+`RoutingResolver.cs:42`: `var now = DateTimeOffset.UtcNow;`. Es el único servicio del flujo que no inyecta `TimeProvider`, y se usa para filtrar `ValidFromUtc` / `ValidToUtc`. Hace no determinista cualquier test de reglas con vigencia. Un parámetro en el constructor.
+
+---
+
+### H-13 · Contadores del watchdog mal calculados — **DEMOSTRADO** (menor, pero contamina la operación)
+
+`SpoolAcceptedWatchdogBackgroundService.cs:143-146` cuenta sobre `candidates` completo, incluyendo los que `ApplyOutcome` devolvió `false` y **no se modificaron**. `recovered` (L145) cuenta todos los que siguen en `SpoolAccepted`, que son mayoritariamente los ignorados, no los recuperados.
+
+Además se emite como `LogWarning` (L148) en cada ciclo con candidatos, es decir, cada 10 segundos en operación normal. El resultado es un log de warnings continuo con números que no significan lo que dicen — el ruido que hace que nadie mire los warnings de verdad.
+
+---
+
+## 4. Hipótesis del documento: veredicto
+
+| Hipótesis (§8 del handoff) | Veredicto |
+|---|---|
+| "Lock único ⇒ no hay duplicados" | **Refutada.** H-04 (crash window) y H-10 (doble holder). |
+| "Exit code 0 ⇒ salió el papel" | **Confirmada como riesgo.** `WindowsPrintSpooler.cs:145` solo sabe que Sumatra terminó bien. |
+| "IPP idle confirma este job" | **Refutada, y es peor de lo descrito:** el resultado se aplica a *todo el lote* de esa impresora (H-01). |
+| "RowVersion da concurrencia optimista" | **Refutada.** H-03, confirmado en el mapeo y en el comentario del propio código. |
+| "Puerto abierto = impresora operativa" | **Confirmada como riesgo.** El guard-rail de `PrintExecutionService.cs:171` usa `LastConnectionOk` de un sondeo TCP. |
+| "Tests verdes = producción cubierta" | **Refutada.** H-11. |
+| "NoOp es inocuo" | **Refutada.** H-02, agravado por H-01. |
+| "Doc del repo = estado actual" | **Confirmada.** El CLAUDE.md dice "rama activa `IU`" y "EF Migrations como referencia histórica" cuando no queda ninguna (H-06). |
+| "`[]` en Laravel = cero resultados" | **Parcialmente refutada.** `ApiClient::get()` **sí** distingue: marca `SESSION_API_ERROR_KEY` (L91) y la UI puede leerlo. `getQuiet()` (L101-125) **no**: solo escribe un log y devuelve `[]` indistinguible. La hipótesis vale solo para `getQuiet`. |
+| "El estado actual basta para KPIs históricos" | No verificado en esta pasada. Queda abierto. |
+
+---
+
+## 5. Orden de trabajo propuesto
+
+Ordenado por (riesgo evitado ÷ tamaño del diff), no por número de prioridad.
+
+| # | Acción | Diff | Hallazgo |
+|---|---|---|---|
+| 1 | `NotifiedHealth` fuera del `if` | 1 línea | H-08 |
+| 2 | Fail-fast si Production + spooler simulado | ~10 líneas | H-02 |
+| 3 | Ack solo de los ids realmente persistidos | ~15 líneas | H-05 |
+| 4 | `PrintedUnknown`/`PrinterBlocked` cancelables + `POST /confirm` | ~40 líneas | H-09 |
+| 5 | Extraer el DDL real de producción a `scripts/sql/schema/` | 1 día, sin código | H-06 |
+| 6 | Consulta de diagnóstico de fechas legacy en HANA | 5 min, STAGING | H-07 |
+| 7 | Caducidad local de `IsHolder` + reloj de HANA en el lease | ~20 líneas | H-10 |
+| 8 | Cambios de estado críticos vía `ExecuteUpdateAsync` condicional | ~60 líneas | H-03 |
+| 9 | Renombrar la semántica de `PrintedConfirmed` | rename + UI | H-01 |
+| 10 | `Printing` stale → estado de excepción, no reenvío automático | ~30 líneas | H-04 |
+
+Los puntos 1-4 son correcciones locales de defectos concretos. Los 5-7 son diagnóstico que desbloquea decisiones. Los 8-10 tocan el contrato del producto y necesitan una decisión de negocio previa sobre qué garantía se quiere ofrecer.
+
+**Ninguno de ellos justifica una reescritura.** El problema de este sistema no es su arquitectura, es que tres de sus etiquetas afirman más de lo que su evidencia sostiene.

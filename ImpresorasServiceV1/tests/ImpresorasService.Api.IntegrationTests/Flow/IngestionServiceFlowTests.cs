@@ -328,6 +328,89 @@ public sealed class IngestionServiceFlowTests
         Assert.True(sourceAfter.IsProcessed);
     }
 
+    [Fact]
+    public async Task IngestBatchAsync_WhenPersistenceFails_DoesNotMarkSourceProcessed()
+    {
+        using var setup = SqliteTestDbHelper.CreateOpenSqliteInMemory();
+        var db = setup.Db;
+
+        var now = DateTimeOffset.UtcNow;
+        const long sourceJobId = 900;
+
+        var sourceRecord = new SourcePrintJobRecord
+        {
+            Id = sourceJobId,
+            SourceSystem = "SAP-HANA",
+            ExternalJobId = "EXT-FALLO-PERSISTENCIA",
+            StoreId = 1,
+            DocumentType = "FACTURA",
+            Channel = "DEFAULT",
+            PdfBlob = MinimalPdf.Bytes,
+            CreatedAtUtc = now,
+            IsProcessed = false
+        };
+        db.SourcePrintJobs.Add(sourceRecord);
+        await db.SaveChangesAsync();
+
+        var adapter = new StaticJobSourceAdapter(db, new[]
+        {
+            new IncomingPrintJob(
+                SourceJobId: sourceJobId,
+                SourceSystem: sourceRecord.SourceSystem,
+                ExternalJobId: sourceRecord.ExternalJobId,
+                StoreId: sourceRecord.StoreId,
+                DocumentType: sourceRecord.DocumentType,
+                Channel: sourceRecord.Channel ?? "DEFAULT",
+                PdfBlob: sourceRecord.PdfBlob,
+                CreatedAtUtc: sourceRecord.CreatedAtUtc)
+        });
+
+        // Fallo de persistencia NO relacionado con unicidad (timeout, caída de conexión...):
+        // el trabajo no llega a existir en destino, así que el origen no puede darse por servido.
+        var failingRepository = new FailingSaveRepository(db);
+        var routingResolver = new RoutingResolver(db);
+        var routingService = new RoutingService(db, routingResolver);
+
+        var ingestion = new IngestionService(
+            jobSourceAdapter: adapter,
+            printJobRepository: failingRepository,
+            routingService: routingService,
+            logger: NullLogger<IngestionService>.Instance,
+            timeProvider: TimeProvider.System);
+
+        var insertedCount = await ingestion.IngestBatchAsync(batchSize: 10, CancellationToken.None);
+
+        Assert.Equal(0, insertedCount);
+        Assert.Empty(await db.PrintJobs.Where(j => j.ExternalJobId == sourceRecord.ExternalJobId).ToListAsync());
+
+        // Lo que protege este test: sin esto, el PDF se perdía para siempre.
+        var sourceAfter = await db.SourcePrintJobs.SingleAsync(s => s.Id == sourceJobId);
+        Assert.False(sourceAfter.IsProcessed);
+    }
+
+    /// <summary>Repositorio que simula un fallo de infraestructura al guardar (no una violación de unicidad).</summary>
+    private sealed class FailingSaveRepository : IPrintJobRepository
+    {
+        private readonly PrintJobRepository _inner;
+
+        public FailingSaveRepository(ImpresorasDbContext db) => _inner = new PrintJobRepository(db);
+
+        public Task<bool> ExistsBySourceExternalIdAsync(string sourceSystem, string externalJobId, CancellationToken ct)
+            => _inner.ExistsBySourceExternalIdAsync(sourceSystem, externalJobId, ct);
+
+        public Task AddAsync(PrintJob printJob, CancellationToken ct) => _inner.AddAsync(printJob, ct);
+
+        public Task AddEventAsync(PrintJobEvent printJobEvent, CancellationToken ct) => _inner.AddEventAsync(printJobEvent, ct);
+
+        public Task MarkSourcePrintJobsProcessedAsync(IReadOnlyList<long> sourceJobIds, CancellationToken ct)
+            => _inner.MarkSourcePrintJobsProcessedAsync(sourceJobIds, ct);
+
+        public Task<int> SaveChangesAsync(CancellationToken ct)
+            => throw new DbUpdateException("Fallo de conexión simulado al persistir el trabajo.");
+
+        public void ClearTracking() => _inner.ClearTracking();
+    }
+
     private static string ComputeSha256Hex(byte[] bytes)
     {
         var hash = SHA256.HashData(bytes);

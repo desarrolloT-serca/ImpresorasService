@@ -48,7 +48,10 @@ class TiendasControllerTest extends TestCase
         $response->assertSee('data-confirm-title="Desactivar tienda"', false);
         $response->assertSee('data-confirm-title="Eliminar tienda definitivamente"', false);
         $response->assertSee('>Desactivar<', false);
-        $response->assertSee('>Eliminar definitivo<', false);
+        // Tras el rediseño a rejilla de tarjetas, el boton visible dice "Eliminar" y
+        // "Eliminar definitivo" es la etiqueta de confirmacion del dialogo (x-ui.confirm-form).
+        $response->assertSee('>Eliminar<', false);
+        $response->assertSee('data-confirm-label="Eliminar definitivo"', false);
     }
 
     public function test_index_filters_stores_by_search_query(): void

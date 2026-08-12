@@ -106,7 +106,9 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
         // G5.3: reglas de severidad de 1-3 niveles — fuente única de verdad, compartida con la Api.
         var rules = await _ruleStore.LoadAsync(ct);
 
-        const bool activeOnly = true;
+        // No usar const: EF plegaría `IsActive == true` a un booleano desnudo y HANA rechaza
+        // `WHERE (col AND ...)`. Como variable se parametriza y genera `col = :param`.
+        var activeOnly = true;
         var now = _timeProvider.GetUtcNow();
 
         var stores = await db.Stores.AsNoTracking()
@@ -228,11 +230,15 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
 
             alertState.LastHealth = health;
             alertState.CheckedAtUtc = now;
+            // NotifiedHealth debe seguir a la salud real aunque no se emita mensaje. Si solo se
+            // actualizara al notificar, con NotifyOnRecovery=false una tienda que se recupera deja
+            // NotifiedHealth="critical" para siempre: la siguiente caída ya no es transición y la
+            // tienda queda permanentemente muda.
+            alertState.NotifiedHealth = health;
 
             if (message is not null)
             {
                 // Fase 1.7: persistir ANTES de enviar — evita reenvío si el proceso cae entre save y send.
-                alertState.NotifiedHealth = health;
                 alertState.NotifiedAtUtc = now;
                 await db.SaveChangesAsync(ct);
 

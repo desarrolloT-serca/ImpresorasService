@@ -109,5 +109,12 @@ public sealed class PrintExecutionServiceTests
         {
             return Task.FromResult<int?>(null);
         }
+
+        public Task<IReadOnlyList<int?>> ResolveBatchAsync(
+            IReadOnlyList<(int storeId, string documentType, string channel)> requests,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<int?>>(requests.Select(_ => (int?)null).ToArray());
+        }
     }
 }

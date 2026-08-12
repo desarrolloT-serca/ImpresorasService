@@ -26,6 +26,9 @@ internal sealed class DummyRoutingService : IRoutingService
 
     public Task<RouteResult> TryRouteJobAsync(Guid jobId, CancellationToken cancellationToken = default)
         => throw new NotImplementedException();
+
+    public Task TryRouteBatchAsync(IReadOnlyList<Guid> jobIds, CancellationToken cancellationToken = default)
+        => throw new NotImplementedException();
 }
 
 public sealed class PrintJobsControllerCancelFlowTests
