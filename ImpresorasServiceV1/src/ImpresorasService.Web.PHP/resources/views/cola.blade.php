@@ -35,6 +35,9 @@
                         <option value="0" {{ ($status ?? '') == '0' ? 'selected' : '' }}>Pendiente</option>
                         <option value="1" {{ ($status ?? '') == '1' ? 'selected' : '' }}>Enrutado</option>
                         <option value="2" {{ ($status ?? '') == '2' ? 'selected' : '' }}>Imprimiendo</option>
+                        {{-- Sin este filtro no habia forma de listar los trabajos que esperan
+                             decision del operador, que son los unicos que requieren su atencion. --}}
+                        <option value="5" {{ ($status ?? '') == '5' ? 'selected' : '' }}>Sin confirmar</option>
                         <option value="6" {{ ($status ?? '') == '6' ? 'selected' : '' }}>Reintento programado</option>
                         <option value="7" {{ ($status ?? '') == '7' ? 'selected' : '' }}>Cancelado</option>
                         <option value="8" {{ ($status ?? '') == '8' ? 'selected' : '' }}>Error</option>
@@ -181,12 +184,38 @@
                         $jobId = $job['jobId'] ?? $job['JobId'] ?? null;
                         $st = \App\Helpers\StatusLabels::normalizeToInt($job['_status'] ?? $job['status'] ?? $job['Status'] ?? null);
                     @endphp
-                    @if(($isAdmin ?? false || $isStoreManager ?? false) && $jobId && in_array($st, [0, 8], true))
+                    @php
+                        // 0 Pendiente y 8 Error: el trabajo no ha salido, reintentar es seguro.
+                        // 5 Sin confirmar y 9 Bloqueado: el sistema no sabe si el documento salio,
+                        // asi que la decision es del operador y reimprimir puede duplicarlo.
+                        $canRetry = in_array($st, [0, 8], true);
+                        $isUncertain = in_array($st, [5, 9], true);
+                        $canManage = ($isAdmin ?? false) || ($isStoreManager ?? false);
+                    @endphp
+                    @if($canManage && $jobId && ($canRetry || $isUncertain))
                     <x-ui.action-buttons>
+                    @if($canRetry)
                     <form action="{{ url("/cola/{$jobId}/reintentar") }}" method="POST" data-cola-action="reintentar">
                         @csrf
                         <button type="submit" class="btn btn-ghost">Reintentar</button>
                     </form>
+                    @endif
+                    @if($isUncertain)
+                    <form action="{{ url("/cola/{$jobId}/confirmar") }}" method="POST" class="inline"
+                        data-cola-action="confirmar" data-confirm="¿Confirmas que este documento sí se imprimió?">
+                        @csrf
+                        <button type="submit" class="btn btn-ghost">Sí se imprimió</button>
+                    </form>
+                    @endif
+                    {{-- Solo desde "Sin confirmar": con la impresora bloqueada la API no admite reimprimir. --}}
+                    @if($st === 5)
+                    <form action="{{ url("/cola/{$jobId}/reintentar") }}" method="POST" class="inline"
+                        data-cola-action="reintentar" data-confirm-danger="1"
+                        data-confirm="Este trabajo puede haberse impreso ya. Si lo reimprimes y sí había salido, el documento saldrá por duplicado. ¿Continuar?">
+                        @csrf
+                        <button type="submit" class="btn btn-warning">Reimprimir</button>
+                    </form>
+                    @endif
                     <form action="{{ url("/cola/{$jobId}/cancelar") }}" method="POST" class="inline"
                         data-cola-action="cancelar" data-confirm="¿Cancelar este trabajo?">
                         @csrf
@@ -230,6 +259,8 @@
 (function() {
     const STATUS_LABELS = @json(\App\Helpers\StatusLabels::all());
     const ACTIONABLE_STATUSES = [0, 8];
+    // Estados en los que el sistema no sabe si el documento salio: la decision es del operador.
+    const UNCERTAIN_STATUSES = [5, 9];
     const canManageQueue = @json(($isAdmin ?? false) || ($isStoreManager ?? false));
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
     const colaReintentarBase = @json(url('/cola'));
@@ -304,22 +335,51 @@
         const td = row.querySelector('.actions-col');
         if (!td || !canManageQueue) return;
 
-        if (!isActionableStatus(statusInt)) {
+        const canRetry = isActionableStatus(statusInt);
+        const isUncertain = UNCERTAIN_STATUSES.includes(statusInt);
+
+        if (!canRetry && !isUncertain) {
             td.innerHTML = '';
             return;
         }
 
-        td.innerHTML =
-            '<div class="action-buttons">' +
-                '<form action="' + colaReintentarBase + '/' + encodeURIComponent(jobId) + '/reintentar" method="POST" data-cola-action="reintentar">' +
-                    '<input type="hidden" name="_token" value="' + csrfToken + '">' +
+        const base = colaReintentarBase + '/' + encodeURIComponent(jobId);
+        const token = '<input type="hidden" name="_token" value="' + csrfToken + '">';
+        let html = '<div class="action-buttons">';
+
+        if (canRetry) {
+            html +=
+                '<form action="' + base + '/reintentar" method="POST" data-cola-action="reintentar">' +
+                    token +
                     '<button type="submit" class="btn btn-ghost">Reintentar</button>' +
-                '</form>' +
-                '<form action="' + colaReintentarBase + '/' + encodeURIComponent(jobId) + '/cancelar" method="POST" class="inline" data-cola-action="cancelar" data-confirm="¿Cancelar este trabajo?">' +
-                    '<input type="hidden" name="_token" value="' + csrfToken + '">' +
-                    '<button type="submit" class="btn btn-danger">Cancelar</button>' +
-                '</form>' +
-            '</div>';
+                '</form>';
+        }
+
+        if (isUncertain) {
+            html +=
+                '<form action="' + base + '/confirmar" method="POST" class="inline" data-cola-action="confirmar" data-confirm="¿Confirmas que este documento sí se imprimió?">' +
+                    token +
+                    '<button type="submit" class="btn btn-ghost">Sí se imprimió</button>' +
+                '</form>';
+        }
+
+        // Solo desde "Sin confirmar": con la impresora bloqueada la API no admite reimprimir.
+        if (statusInt === 5) {
+            html +=
+                '<form action="' + base + '/reintentar" method="POST" class="inline" data-cola-action="reintentar" data-confirm-danger="1" data-confirm="Este trabajo puede haberse impreso ya. Si lo reimprimes y sí había salido, el documento saldrá por duplicado. ¿Continuar?">' +
+                    token +
+                    '<button type="submit" class="btn btn-warning">Reimprimir</button>' +
+                '</form>';
+        }
+
+        html +=
+            '<form action="' + base + '/cancelar" method="POST" class="inline" data-cola-action="cancelar" data-confirm="¿Cancelar este trabajo?">' +
+                token +
+                '<button type="submit" class="btn btn-danger">Cancelar</button>' +
+            '</form>' +
+        '</div>';
+
+        td.innerHTML = html;
     }
 
     function updateStatusPill(row, statusInt) {
@@ -385,7 +445,7 @@
         const confirmMessage = form.dataset.confirm;
         if (confirmMessage) {
             const ok = window.confirmDialog
-                ? await window.confirmDialog(confirmMessage, { title: 'Confirmar accion', danger: form.dataset.colaAction === 'cancelar-masivo' || form.dataset.colaAction === 'cancelar' })
+                ? await window.confirmDialog(confirmMessage, { title: 'Confirmar accion', danger: form.dataset.confirmDanger === '1' || form.dataset.colaAction === 'cancelar-masivo' || form.dataset.colaAction === 'cancelar' })
                 : window.confirm(confirmMessage);
             if (!ok) return;
         }

@@ -164,6 +164,22 @@ class ColaController extends Controller
         );
     }
 
+    /**
+     * Cierra manualmente un trabajo en estado de incertidumbre cuando el operador ha comprobado
+     * fisicamente que el documento salio. Es una afirmacion humana, no una deduccion del sistema:
+     * la API la registra con el actor que la hizo.
+     */
+    public function confirmar(Request $request, string $id): RedirectResponse|JsonResponse
+    {
+        $result = $this->confirmJob($id);
+
+        return $this->respondAction(
+            $request,
+            $result,
+            $result['ok'] ? 'Impresion confirmada.' : ($result['error'] ?? 'No se pudo confirmar el trabajo seleccionado.')
+        );
+    }
+
     public function reintentarMasivo(Request $request): RedirectResponse|JsonResponse
     {
         $jobIds = $this->normalizeJobIds($request->input('jobIds'));
@@ -267,6 +283,33 @@ class ColaController extends Controller
             $error = $statusCode === 404
                 ? 'La API activa no tiene disponible el endpoint de cancelacion. Reinicia la API para cargar la version actual.'
                 : $this->apiErrorMessage($e, 'No se pudo cancelar el trabajo seleccionado.');
+
+            return [
+                'ok' => false,
+                'jobId' => $id,
+                'error' => $error,
+            ];
+        }
+    }
+
+    /**
+     * @return array{ok: bool, jobId: string, newStatus?: int, error?: string}
+     */
+    private function confirmJob(string $id): array
+    {
+        try {
+            $this->api->post("api/printjobs/{$id}/confirm");
+
+            return [
+                'ok' => true,
+                'jobId' => $id,
+                'newStatus' => 4,
+            ];
+        } catch (RequestException $e) {
+            $statusCode = $e->getResponse()?->getStatusCode();
+            $error = $statusCode === 404
+                ? 'La API activa no tiene disponible el endpoint de confirmacion. Reinicia la API para cargar la version actual.'
+                : $this->apiErrorMessage($e, 'No se pudo confirmar el trabajo seleccionado.');
 
             return [
                 'ok' => false,
