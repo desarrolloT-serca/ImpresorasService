@@ -1,0 +1,11 @@
+# Raíz del repositorio. Las reglas del proyecto están en ImpresorasServiceV1/.gitignore;
+# aquí solo lo que se genera en este nivel y no forma parte del producto.
+
+# Artefactos de sesiones del navegador automatizado (Playwright MCP)
+.playwright-mcp/
+
+# Capturas de pantalla sueltas en la raíz. Las imágenes del producto viven bajo
+# src/ImpresorasService.Web.PHP/public/, no aquí.
+/*.png
+/*.jpg
+/*.jpeg
