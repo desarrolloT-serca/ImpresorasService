@@ -111,6 +111,88 @@ public sealed class RoutingServiceFlowTests
     }
 
     [Fact]
+    public async Task TryRetryRouteAsync_WhenRuleHasChannelButNoDocumentType_MatchesAnyDocumentType()
+    {
+        using var setup = SqliteTestDbHelper.CreateOpenSqliteInMemory();
+        var db = setup.Db;
+
+        var now = DateTimeOffset.UtcNow;
+
+        db.Stores.Add(new Store
+        {
+            StoreId = 1,
+            Name = "Store 1",
+            IsActive = true,
+            CreatedAtUtc = now,
+            UpdatedAtUtc = now
+        });
+
+        db.Printers.Add(new Printer
+        {
+            PrinterId = 10,
+            PrinterName = "P1",
+            SpoolQueue = "\\\\srv\\q1",
+            Host = null,
+            StoreId = 1,
+            IsActive = true,
+            CapabilitiesJson = null,
+            CreatedAtUtc = now,
+            UpdatedAtUtc = now
+        });
+
+        // Regla "cualquier tipo de documento" para un canal concreto: DocumentType null, Channel fijo.
+        db.RoutingRules.Add(new RoutingRule
+        {
+            RuleId = 1,
+            Priority = 1,
+            StoreId = 1,
+            DocumentType = null,
+            Channel = "DEFAULT",
+            PrinterId = 10,
+            IsActive = true,
+            ValidFromUtc = now.AddMinutes(-1),
+            ValidToUtc = null,
+            CreatedBy = "test",
+            CreatedAtUtc = now,
+            UpdatedAtUtc = now
+        });
+
+        var jobId = Guid.NewGuid();
+        db.PrintJobs.Add(new PrintJob
+        {
+            JobId = jobId,
+            SourceSystem = "SAP-TEST",
+            ExternalJobId = "EXT-4",
+            StoreId = 1,
+            DocumentType = "TIPO_INVENTADO",
+            Channel = "DEFAULT",
+            PdfBlob = MinimalPdf.Bytes,
+            PdfSha256 = "pdf-sha",
+            Status = PrintJobStatus.ErrorFinal,
+            PrinterId = null,
+            AttemptCount = 3,
+            NextRetryAtUtc = null,
+            LastErrorCode = "ROUTE_NOT_FOUND",
+            LastErrorMessage = "No hay regla",
+            CorrelationId = Guid.NewGuid(),
+            CreatedAtUtc = now,
+            UpdatedAtUtc = now
+        });
+
+        await db.SaveChangesAsync();
+
+        var resolver = new RoutingResolver(db);
+        var service = new RoutingService(db, resolver);
+
+        // Act
+        var result = await service.TryRetryRouteAsync(jobId, CancellationToken.None);
+
+        // Assert
+        Assert.True(result.Success);
+        Assert.Equal(10, result.PrinterId);
+    }
+
+    [Fact]
     public async Task TryRetryRouteAsync_WhenJobInErrorFinalAndNoRuleExists_TransitionsToErrorFinalWithRouteNotFound()
     {
         using var setup = SqliteTestDbHelper.CreateOpenSqliteInMemory();

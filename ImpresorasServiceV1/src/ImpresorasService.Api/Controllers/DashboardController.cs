@@ -57,8 +57,14 @@ public class DashboardController : ControllerBase
         var stores = _dbContext.Stores.AsNoTracking().Where(x => x.IsActive == activeOnly);
         var printers = _dbContext.Printers.AsNoTracking().Where(x => x.IsActive == activeOnly);
         // El dashboard operativo solo muestra tiendas activas; excluye histórico de tiendas dadas de baja.
+        // Los ids se materializan en vez de usar un Any() correlacionado: el provider de HANA traduce
+        // ese EXISTS a SQL inválido ("WHERE ( 1 AS X FROM DUMMY WHERE EXISTS ..."), que tumbaba el
+        // endpoint entero con un 500. Mismo patrón que StoreHealthAlertBackgroundService.
+        var activeStoreIds = await stores
+            .Select(x => x.StoreId)
+            .ToListAsync(cancellationToken);
         var jobs = _dbContext.PrintJobs.AsNoTracking()
-            .Where(x => _dbContext.Stores.Any(s => s.StoreId == x.StoreId && s.IsActive == activeOnly));
+            .Where(x => activeStoreIds.Contains(x.StoreId));
 
         if (effectiveStoreId.HasValue)
         {

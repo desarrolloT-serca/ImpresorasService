@@ -15,6 +15,16 @@ public class ImpresorasDbContext : DbContext
     // ponytail: heurística por tiempo, no una unicidad real — un reintento legítimo muy rápido
     // (backoff corto) podría dar un falso positivo; subir el umbral si eso genera ruido.
     private static readonly TimeSpan DuplicateEventDetectionWindow = TimeSpan.FromSeconds(5);
+    /// <summary>
+    /// Dos familias de formato conviven en estas columnas:
+    /// las ISO son las que escribe el propio converter (toDb), y las de día primero son las que
+    /// devuelve el driver de HANA, que formatea con la cultura del proceso (es-ES, ver Program.cs)
+    /// y sin relleno de ceros: "17/6/2026 6:58:40". "d/M" cubre también la variante con ceros.
+    ///
+    /// Todas son día-primero a propósito: NO añadir aquí ni en el fallback nada que interprete
+    /// mes primero. Un "5/8/2026" leído como MM/dd da el 8 de mayo donde el driver dijo 5 de agosto,
+    /// y como el error solo aparece con día &lt;= 12 pasa desapercibido meses.
+    /// </summary>
     private static readonly string[] SupportedDateFormats =
     {
         "yyyy-MM-dd HH:mm:ss",
@@ -23,10 +33,12 @@ public class ImpresorasDbContext : DbContext
         "yyyy-MM-ddTHH:mm:ss",
         "yyyy-MM-ddTHH:mm:ss.fff",
         "yyyy-MM-ddTHH:mm:ss.fffffff",
-        "dd/MM/yyyy HH:mm:ss",
-        "dd/MM/yyyy HH:mm:ss.fff",
-        "dd/MM/yyyy HH:mm:ss.fffffff",
-        "O"
+        "O",
+        "d/M/yyyy H:mm:ss",
+        "d/M/yyyy H:mm:ss.fff",
+        "d/M/yyyy H:mm:ss.fffffff",
+        "d/M/yyyy H:mm",
+        "d/M/yyyy"
     };
 
     private static readonly ValueConverter<DateTimeOffset, string> DateTimeOffsetToStringConverter =
@@ -71,17 +83,10 @@ public class ImpresorasDbContext : DbContext
                 out var parsedInvariant))
             return parsedInvariant;
 
-        if (DateTimeOffset.TryParseExact(
-                trimmed,
-                SupportedDateFormats,
-                CultureInfo.GetCultureInfo("es-ES"),
-                styles,
-                out var parsedEs))
-            return parsedEs;
-
-        if (DateTimeOffset.TryParse(trimmed, CultureInfo.InvariantCulture, styles, out var fallbackInvariant))
-            return fallbackInvariant;
-
+        // Último recurso en es-ES (día primero), la misma cultura con la que formatea el driver.
+        // Aquí había un TryParse con InvariantCulture que corría ANTES que este: al ser mes-primero
+        // convertía "5/8/2026" en el 8 de mayo, y solo fallaba —cayendo en este es-ES correcto—
+        // cuando el día era > 12. Ese era el origen real del baile de fechas del dashboard.
         if (DateTimeOffset.TryParse(trimmed, CultureInfo.GetCultureInfo("es-ES"), styles, out var fallbackEs))
             return fallbackEs;
 
@@ -112,12 +117,20 @@ public class ImpresorasDbContext : DbContext
         foreach (var e in NewPrintJobEventsPendingCheck())
         {
             var (lowerBound, upperBound) = DuplicateWindowFor(e);
-            var duplicateExists = PrintJobEvents.Any(x =>
-                x.JobId == e.JobId && x.NewStatus == e.NewStatus && x.OldStatus == e.OldStatus
-                && x.OccurredAtUtc >= lowerBound && x.OccurredAtUtc <= upperBound);
+            try
+            {
+                var duplicateExists = PrintJobEvents.Any(x =>
+                    x.JobId == e.JobId && x.NewStatus == e.NewStatus && x.OldStatus == e.OldStatus
+                    && x.OccurredAtUtc >= lowerBound && x.OccurredAtUtc <= upperBound);
 
-            if (duplicateExists)
-                LogDuplicateEvent(e);
+                if (duplicateExists)
+                    LogDuplicateEvent(e);
+            }
+            catch (Exception ex)
+            {
+                // Heurística de observabilidad: un fallo aquí nunca debe bloquear el guardado real.
+                _logger?.LogWarning(ex, "No se pudo comprobar duplicados de PrintJobEvent para jobId={JobId}.", e.JobId);
+            }
         }
     }
 
@@ -126,13 +139,21 @@ public class ImpresorasDbContext : DbContext
         foreach (var e in NewPrintJobEventsPendingCheck())
         {
             var (lowerBound, upperBound) = DuplicateWindowFor(e);
-            var duplicateExists = await PrintJobEvents.AnyAsync(x =>
-                x.JobId == e.JobId && x.NewStatus == e.NewStatus && x.OldStatus == e.OldStatus
-                && x.OccurredAtUtc >= lowerBound && x.OccurredAtUtc <= upperBound,
-                cancellationToken);
+            try
+            {
+                var duplicateExists = await PrintJobEvents.AnyAsync(x =>
+                    x.JobId == e.JobId && x.NewStatus == e.NewStatus && x.OldStatus == e.OldStatus
+                    && x.OccurredAtUtc >= lowerBound && x.OccurredAtUtc <= upperBound,
+                    cancellationToken);
 
-            if (duplicateExists)
-                LogDuplicateEvent(e);
+                if (duplicateExists)
+                    LogDuplicateEvent(e);
+            }
+            catch (Exception ex)
+            {
+                // Heurística de observabilidad: un fallo aquí nunca debe bloquear el guardado real.
+                _logger?.LogWarning(ex, "No se pudo comprobar duplicados de PrintJobEvent para jobId={JobId}.", e.JobId);
+            }
         }
     }
 
