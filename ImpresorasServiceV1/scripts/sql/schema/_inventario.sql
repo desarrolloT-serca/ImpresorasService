@@ -1,0 +1,167 @@
+-- Inventario de columnas, claves e indices de ZTEST_VICENTE_2 el 2026-08-12.
+-- Generado por scripts\extraer-ddl-hana.ps1.
+
+-- === COLUMNAS ===  tabla | columna | tipo | longitud | nullable
+-- printer_alert_state | store_id | INTEGER | 10 | FALSE
+-- printer_alert_state | last_health | NVARCHAR | 20 | FALSE
+-- printer_alert_state | notified_health | NVARCHAR | 20 | TRUE
+-- printer_alert_state | notified_at_utc | NVARCHAR | 26 | TRUE
+-- printer_alert_state | checked_at_utc | NVARCHAR | 26 | FALSE
+-- printer_dashboard_threshold | id | INTEGER | 10 | FALSE
+-- printer_dashboard_threshold | warning_queue_min | INTEGER | 10 | FALSE
+-- printer_dashboard_threshold | critical_queue_min | INTEGER | 10 | FALSE
+-- printer_dashboard_threshold | queue_warning_severity | VARCHAR | 32 | FALSE
+-- printer_dashboard_threshold | queue_critical_severity | VARCHAR | 32 | FALSE
+-- printer_dashboard_threshold | warning_failed_without_retry_min | INTEGER | 10 | FALSE
+-- printer_dashboard_threshold | critical_failed_without_retry_min | INTEGER | 10 | FALSE
+-- printer_dashboard_threshold | failed_warning_severity | VARCHAR | 32 | FALSE
+-- printer_dashboard_threshold | failed_critical_severity | VARCHAR | 32 | FALSE
+-- printer_dashboard_threshold | missing_host_min | INTEGER | 10 | FALSE
+-- printer_dashboard_threshold | missing_host_severity | VARCHAR | 32 | FALSE
+-- printer_dashboard_threshold | conn_warning_failures_min | INTEGER | 10 | FALSE
+-- printer_dashboard_threshold | conn_critical_failures_min | INTEGER | 10 | FALSE
+-- printer_dashboard_threshold | conn_warning_severity | VARCHAR | 32 | FALSE
+-- printer_dashboard_threshold | conn_critical_severity | VARCHAR | 32 | FALSE
+-- printer_dashboard_threshold | updated_at_utc | TIMESTAMP | 27 | FALSE
+-- printer_print_job | job_id | VARBINARY | 16 | FALSE
+-- printer_print_job | source_system | VARCHAR | 50 | FALSE
+-- printer_print_job | external_job_id | VARCHAR | 120 | FALSE
+-- printer_print_job | store_id | INTEGER | 10 | FALSE
+-- printer_print_job | document_type | VARCHAR | 80 | FALSE
+-- printer_print_job | channel | VARCHAR | 40 | FALSE
+-- printer_print_job | pdf_blob | BLOB | 2147483647 | FALSE
+-- printer_print_job | pdf_sha256 | VARCHAR | 64 | FALSE
+-- printer_print_job | status | VARCHAR | 40 | FALSE
+-- printer_print_job | printer_id | INTEGER | 10 | TRUE
+-- printer_print_job | attempt_count | INTEGER | 10 | FALSE
+-- printer_print_job | next_retry_at_utc | TIMESTAMP | 27 | TRUE
+-- printer_print_job | last_error_code | VARCHAR | 60 | TRUE
+-- printer_print_job | last_error_message | VARCHAR | 1000 | TRUE
+-- printer_print_job | correlation_id | VARBINARY | 16 | FALSE
+-- printer_print_job | created_at_utc | TIMESTAMP | 27 | FALSE
+-- printer_print_job | updated_at_utc | TIMESTAMP | 27 | FALSE
+-- printer_print_job | row_version | BLOB | 2147483647 | TRUE
+-- printer_print_job_event | event_id | BIGINT | 19 | FALSE
+-- printer_print_job_event | job_id | VARBINARY | 16 | FALSE
+-- printer_print_job_event | event_type | VARCHAR | 60 | FALSE
+-- printer_print_job_event | old_status | VARCHAR | 40 | TRUE
+-- printer_print_job_event | new_status | VARCHAR | 40 | TRUE
+-- printer_print_job_event | error_code | VARCHAR | 60 | TRUE
+-- printer_print_job_event | message | VARCHAR | 1000 | TRUE
+-- printer_print_job_event | actor_type | VARCHAR | 30 | FALSE
+-- printer_print_job_event | actor_id | VARCHAR | 120 | TRUE
+-- printer_print_job_event | metadata_json | TEXT | 2147483647 | TRUE
+-- printer_print_job_event | occurred_at_utc | TIMESTAMP | 27 | FALSE
+-- printer_printer | printer_id | INTEGER | 10 | FALSE
+-- printer_printer | printer_name | VARCHAR | 120 | FALSE
+-- printer_printer | spool_queue | VARCHAR | 200 | FALSE
+-- printer_printer | host | VARCHAR | 255 | TRUE
+-- printer_printer | store_id | INTEGER | 10 | FALSE
+-- printer_printer | is_active | BOOLEAN | 2 | FALSE
+-- printer_printer | capabilities_json | TEXT | 2147483647 | TRUE
+-- printer_printer | created_at_utc | TIMESTAMP | 27 | FALSE
+-- printer_printer | updated_at_utc | TIMESTAMP | 27 | FALSE
+-- printer_printer | connection_failures_streak | INTEGER | 10 | FALSE
+-- printer_printer | last_connection_ok | BOOLEAN | 2 | TRUE
+-- printer_printer | last_connection_check_at_utc | TIMESTAMP | 27 | TRUE
+-- printer_printer | last_connection_transport | VARCHAR | 40 | TRUE
+-- printer_printer | last_connection_error | VARCHAR | 400 | TRUE
+-- printer_printer | ipp_supported | TINYINT | 3 | TRUE
+-- printer_routing_rule | rule_id | INTEGER | 10 | FALSE
+-- printer_routing_rule | priority | INTEGER | 10 | FALSE
+-- printer_routing_rule | store_id | INTEGER | 10 | TRUE
+-- printer_routing_rule | document_type | VARCHAR | 80 | TRUE
+-- printer_routing_rule | channel | VARCHAR | 40 | TRUE
+-- printer_routing_rule | printer_id | INTEGER | 10 | FALSE
+-- printer_routing_rule | is_active | BOOLEAN | 2 | FALSE
+-- printer_routing_rule | valid_from_utc | TIMESTAMP | 27 | FALSE
+-- printer_routing_rule | valid_to_utc | TIMESTAMP | 27 | TRUE
+-- printer_routing_rule | created_by | VARCHAR | 120 | FALSE
+-- printer_routing_rule | created_at_utc | TIMESTAMP | 27 | FALSE
+-- printer_routing_rule | updated_at_utc | TIMESTAMP | 27 | FALSE
+-- printer_source_print_job | id | BIGINT | 19 | FALSE
+-- printer_source_print_job | source_system | VARCHAR | 50 | FALSE
+-- printer_source_print_job | external_job_id | VARCHAR | 120 | FALSE
+-- printer_source_print_job | store_id | INTEGER | 10 | FALSE
+-- printer_source_print_job | document_type | VARCHAR | 80 | FALSE
+-- printer_source_print_job | channel | VARCHAR | 40 | TRUE
+-- printer_source_print_job | pdf_blob | BLOB | 2147483647 | FALSE
+-- printer_source_print_job | created_at_utc | TIMESTAMP | 27 | FALSE
+-- printer_source_print_job | is_processed | BOOLEAN | 2 | FALSE
+-- printer_source_print_job | claimed_by | VARCHAR | 200 | TRUE
+-- printer_source_print_job | claimed_until_utc | TIMESTAMP | 27 | TRUE
+-- printer_source_print_job | claim_token | VARCHAR | 64 | TRUE
+-- printer_store | store_id | INTEGER | 10 | FALSE
+-- printer_store | name | VARCHAR | 120 | FALSE
+-- printer_store | is_active | BOOLEAN | 2 | FALSE
+-- printer_store | created_at_utc | TIMESTAMP | 27 | FALSE
+-- printer_store | updated_at_utc | TIMESTAMP | 27 | FALSE
+-- printer_telegram_chat | chat_id | BIGINT | 19 | FALSE
+-- printer_telegram_chat | description | NVARCHAR | 120 | TRUE
+-- printer_telegram_chat | is_active | TINYINT | 3 | FALSE
+-- printer_telegram_chat | created_at_utc | NVARCHAR | 26 | FALSE
+-- printer_telegram_chat | store_id | INTEGER | 10 | TRUE
+-- printer_telegram_config | id | INTEGER | 10 | FALSE
+-- printer_telegram_config | min_severity | NVARCHAR | 20 | FALSE
+-- printer_telegram_config | notify_on_recovery | TINYINT | 3 | FALSE
+-- printer_telegram_config | check_interval_minutes | INTEGER | 10 | FALSE
+-- printer_telegram_config | updated_at_utc | NVARCHAR | 26 | FALSE
+-- printer_user | user_id | INTEGER | 10 | FALSE
+-- printer_user | login | VARCHAR | 80 | FALSE
+-- printer_user | password_hash | VARCHAR | 256 | FALSE
+-- printer_user | role | VARCHAR | 40 | FALSE
+-- printer_user | store_id | INTEGER | 10 | TRUE
+-- printer_user | display_name | VARCHAR | 120 | TRUE
+
+-- === CLAVES Y UNICOS ===  tabla | constraint | columna | PK | UNIQUE
+-- printer_alert_state | _SYS_TREE_CS_#2154324_#0_#P0 | store_id | TRUE | TRUE
+-- printer_dashboard_threshold | pk_printer_dashboard_threshold | id | TRUE | TRUE
+-- printer_print_job | ix_printer_print_job_source_external | source_system | FALSE | TRUE
+-- printer_print_job | ix_printer_print_job_source_external | external_job_id | FALSE | TRUE
+-- printer_print_job | pk_printer_print_job | job_id | TRUE | TRUE
+-- printer_print_job_event | pk_printer_print_job_event | event_id | TRUE | TRUE
+-- printer_printer | ix_printer_printer_store_id_spool_queue | store_id | FALSE | TRUE
+-- printer_printer | ix_printer_printer_store_id_spool_queue | spool_queue | FALSE | TRUE
+-- printer_printer | pk_printer_printer | printer_id | TRUE | TRUE
+-- printer_routing_rule | pk_printer_routing_rule | rule_id | TRUE | TRUE
+-- printer_source_print_job | pk_printer_source_print_job | id | TRUE | TRUE
+-- printer_store | pk_printer_store | store_id | TRUE | TRUE
+-- printer_telegram_chat | _SYS_TREE_CS_#2154315_#0_#P0 | chat_id | TRUE | TRUE
+-- printer_telegram_config | _SYS_TREE_CS_#2154305_#0_#P0 | id | TRUE | TRUE
+-- printer_user | ix_printer_user_login | login | FALSE | TRUE
+-- printer_user | pk_printer_user | user_id | TRUE | TRUE
+
+-- === INDICES ===  tabla | indice | tipo | columna
+-- printer_alert_state | _SYS_TREE_CS_#2154324_#0_#P0 | INVERTED VALUE | store_id
+-- printer_dashboard_threshold | pk_printer_dashboard_threshold | INVERTED VALUE | id
+-- printer_print_job | ix_printer_print_job_source_external | INVERTED VALUE | source_system
+-- printer_print_job | ix_printer_print_job_source_external | INVERTED VALUE | external_job_id
+-- printer_print_job | ix_printer_print_job_status_next_retry | INVERTED VALUE | status
+-- printer_print_job | ix_printer_print_job_status_next_retry | INVERTED VALUE | next_retry_at_utc
+-- printer_print_job | pk_printer_print_job | INVERTED VALUE | job_id
+-- printer_print_job_event | _SYS_FULLTEXT_2021707_#0_#metadata_json | FULLTEXT | metadata_json
+-- printer_print_job_event | ix_printer_print_job_event_job_occurred | INVERTED VALUE | job_id
+-- printer_print_job_event | ix_printer_print_job_event_job_occurred | INVERTED VALUE | occurred_at_utc
+-- printer_print_job_event | pk_printer_print_job_event | INVERTED VALUE | event_id
+-- printer_printer | _SYS_FULLTEXT_2021632_#0_#capabilities_json | FULLTEXT | capabilities_json
+-- printer_printer | ix_printer_printer_store_id_spool_queue | INVERTED VALUE | store_id
+-- printer_printer | ix_printer_printer_store_id_spool_queue | INVERTED VALUE | spool_queue
+-- printer_printer | pk_printer_printer | INVERTED VALUE | printer_id
+-- printer_routing_rule | ix_printer_routing_rule_resolve | INVERTED VALUE | is_active
+-- printer_routing_rule | ix_printer_routing_rule_resolve | INVERTED VALUE | priority
+-- printer_routing_rule | ix_printer_routing_rule_resolve | INVERTED VALUE | store_id
+-- printer_routing_rule | ix_printer_routing_rule_resolve | INVERTED VALUE | document_type
+-- printer_routing_rule | ix_printer_routing_rule_resolve | INVERTED VALUE | channel
+-- printer_routing_rule | pk_printer_routing_rule | INVERTED VALUE | rule_id
+-- printer_source_print_job | ix_printer_source_print_job_processed_claimed_id | INVERTED VALUE | is_processed
+-- printer_source_print_job | ix_printer_source_print_job_processed_claimed_id | INVERTED VALUE | claimed_until_utc
+-- printer_source_print_job | ix_printer_source_print_job_processed_claimed_id | INVERTED VALUE | id
+-- printer_source_print_job | ix_printer_source_print_job_processed_created | INVERTED VALUE | is_processed
+-- printer_source_print_job | ix_printer_source_print_job_processed_created | INVERTED VALUE | created_at_utc
+-- printer_source_print_job | pk_printer_source_print_job | INVERTED VALUE | id
+-- printer_store | ix_printer_store_name | INVERTED VALUE | name
+-- printer_store | pk_printer_store | INVERTED VALUE | store_id
+-- printer_telegram_chat | _SYS_TREE_CS_#2154315_#0_#P0 | INVERTED VALUE | chat_id
+-- printer_telegram_config | _SYS_TREE_CS_#2154305_#0_#P0 | INVERTED VALUE | id
+-- printer_user | ix_printer_user_login | INVERTED VALUE | login
+-- printer_user | pk_printer_user | INVERTED VALUE | user_id

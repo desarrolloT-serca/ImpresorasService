@@ -65,8 +65,15 @@ No hay rama de error. Un `UseRealSpooler=false` por descuido, un despliegue en u
 
 ---
 
-### H-03 · `RowVersion` no es control de concurrencia — **DEMOSTRADO**
+### H-03 · `RowVersion` no es control de concurrencia — **DEMOSTRADO Y CONFIRMADO CONTRA HANA**
 *(cubre P0-03; confirma la hipótesis del documento)*
+
+> **Verificado el 12/08/2026 contra `ZTEST_VICENTE_2`:** `printer_print_job.row_version` es **`BLOB`**
+> (`scripts/sql/schema/printer_print_job.sql`). Queda descartada la opción de activar el token de
+> concurrencia de EF: HANA no puede comparar BLOB en un `WHERE`. **La vía es la propuesta mínima de
+> abajo** — claims con `ExecuteUpdateAsync` condicional sobre `status`. La alternativa "robusta"
+> (migrar a VARBINARY) exigiría un `ALTER` sobre una columna en uso y no aporta nada que el claim
+> condicional no dé.
 
 Tres capas distintas, ninguna es un compare-and-swap:
 
@@ -132,8 +139,54 @@ Secuencia completa del fallo: HANA tiene un hipo de 2 s durante el insert → el
 
 ---
 
-### H-06 · No existe esquema versionado de las tablas principales — **DEMOSTRADO**
+### H-06 · No existe esquema versionado de las tablas principales — **DEMOSTRADO · resuelto el 12/08/2026**
 *(cubre P0-06)*
+
+> **Resuelto.** `scripts/extraer-ddl-hana.ps1` reconstruye el DDL desde el catálogo de HANA y lo
+> escribe en `scripts/sql/schema/`, un fichero por tabla, más `_inventario.sql` con columnas, claves
+> e índices. Ejecutado contra `ZTEST_VICENTE_2`: **11 de las 12 tablas del modelo extraídas**.
+>
+> `GET_OBJECT_DEFINITION` no sirve aquí — normaliza los nombres a mayúsculas y estas tablas están
+> creadas en minúsculas —, de ahí la reconstrucción desde `SYS.TABLE_COLUMNS` / `SYS.CONSTRAINTS` /
+> `SYS.INDEXES`. Cubre columnas, tipos, defaults, PK y únicos; no cubre claves ajenas ni triggers
+> (hoy no hay).
+>
+> **Lo que reveló la extracción, y es buena noticia:** todos los índices que el código da por
+> supuestos existen realmente — el único de ingesta `ix_printer_print_job_source_external`, el de
+> `(status, next_retry_at_utc)`, el de `(job_id, occurred_at_utc)`, el de `(store_id, spool_queue)`,
+> el de resolución de routing y los dos de claim de la fuente. La deriva de esquema es mucho menor
+> de lo que este hallazgo temía.
+
+---
+
+### H-14 · `printer_worker_lock` no existe en la base de datos — **DEMOSTRADO** · *no estaba en el mapa*
+
+La extracción de H-06 encontró **once tablas de doce**. La ausente es `printer_worker_lock`, la que
+sostiene el lock de instancia única. `scripts/sql/create_worker_lock.sql` existe en el repositorio
+desde hace tiempo, pero **nunca se ha aplicado** a este esquema (el `CLAUDE.md` del proyecto ya lo
+listaba como pendiente; ahora está demostrado).
+
+La consecuencia no es "el Worker corre sin lock". Es peor, y se sigue del código:
+
+1. `WorkerLockCoordinator.TryAcquireOrRenewAsync` (L27) hace `WorkerLocks.AnyAsync(x => x.Id == 1)`
+   contra una tabla inexistente → excepción del provider.
+2. `WorkerLockBackgroundService` (L55-59) la captura, registra un warning y fija `acquired = false`.
+3. `IsHolder` queda en false, y **los cinco BackgroundService comprueban ese flag antes de
+   trabajar** (`PrintExecutionBackgroundService.cs:33`, watchdog L46, alertas L57, ingesta,
+   conectividad): todos entran en el `Task.Delay(5s); continue;`.
+
+Con `WorkerLock:Enabled=true` (el valor por defecto de `WorkerLockOptions`, y el efectivo porque
+`Worker/appsettings.json` no lo declara), **el Worker arranca correctamente y no procesa
+absolutamente nada**: ni ingiere, ni imprime, ni confirma, ni monitoriza, ni alerta. El único
+síntoma es un warning por heartbeat.
+
+**Corrección:** aplicar `scripts/sql/create_worker_lock.sql` al esquema. Es la creación de una tabla
+singleton, sin impacto sobre datos existentes.
+
+**Comprobación pendiente y más importante:** esta extracción se hizo contra `ZTEST_VICENTE_2`. **Hay
+que repetirla contra el esquema de producción** (`.\scripts\extraer-ddl-hana.ps1 -Schema <prod>`) y
+ver si allí la tabla existe. Si tampoco existe y el Worker de producción tiene el lock habilitado,
+explica por sí solo cualquier síntoma de "el servicio está arrancado pero no imprime".
 
 `scripts/sql/` contiene 13 ficheros: `create_worker_lock.sql`, `create_sap_aux_print_queue.sql`, un seed, `migrate_pdf_blob_nullable.sql` y nueve scripts de diagnóstico puntual (`diagnose_g1_*`, `diagnose_g2_*`, `g1_validacion_borrar_evento.sql`, `g2_5_backdatar_timezone.sql`).
 
@@ -153,7 +206,43 @@ Nota adicional: `create_worker_lock.sql:10` declara `heartbeat_utc TIMESTAMP`, p
 
 ## 3. Hallazgos P1
 
-### H-07 · Fechas persistidas como cadena: toda comparación temporal es sospechosa — **DEMOSTRADO** / consecuencia **STAGING**
+### H-07 · Modelo temporal híbrido y converter global innecesario — **RESUELTO EN STAGING · degradado de P1 a P2**
+
+> **Corrección (verificado contra HANA el 12/08/2026).** La hipótesis original de este hallazgo era
+> que podía haber filas *almacenadas* en formato día-primero, lo que haría lexicográficamente
+> incorrectas las comparaciones de rango. **Es falsa y la retiro.** La inspección del catálogo
+> muestra que las siete tablas operativas (`printer_print_job`, `printer_print_job_event`,
+> `printer_printer`, `printer_routing_rule`, `printer_source_print_job`, `printer_store`,
+> `printer_dashboard_threshold`) usan `TIMESTAMP(7)`. HANA convierte el literal del converter a
+> TIMESTAMP, así que **todas las comparaciones de la tabla de abajo son temporales, no textuales**.
+> El formato `"17/6/2026 6:58:40"` que documenta el `DbContext` es un artefacto de *lectura* — el
+> driver formateando un TIMESTAMP con la cultura del proceso — no de almacenamiento. El riesgo de
+> reproceso en bucle que describía este hallazgo no existe.
+>
+> Quedan cuatro columnas legacy en `NVARCHAR(26)`: `printer_alert_state.notified_at_utc` y
+> `.checked_at_utc`, `printer_telegram_chat.created_at_utc`, `printer_telegram_config.updated_at_utc`.
+> **Ninguna participa en un filtro de rango ni en una ordenación** — verificado sobre el código: solo
+> se escriben y se leen por clave primaria (`StoreHealthAlertBackgroundService.cs:196-242`). Su
+> riesgo funcional es cero, así que las consultas de validación de formato sobre ellas son
+> opcionales.
+>
+> Lo que sí queda, y es real: el converter global escribe `yyyy-MM-dd HH:mm:ss` en columnas
+> `TIMESTAMP(7)`, de modo que **toda escritura de la aplicación pierde la precisión subsegundo**
+> (confirmado: fracciones `.000` sistemáticas en `created_at_utc` y `occurred_at_utc`). El único
+> punto donde eso tiene consecuencia práctica es la **ordenación de `PrintJobEvent` dentro del mismo
+> segundo**, que queda indeterminada por tiempo; el resto de la lógica temporal opera en ventanas de
+> segundos o minutos (backoff, lease de 30 s, stale de 40 s, ventanas de dashboard) y no lo nota.
+>
+> **Acción propuesta (P2, no urgente):** migrar esas cuatro columnas a `TIMESTAMP` y después
+> restringir el converter a las propiedades que aún lo necesiten, o eliminarlo. Mientras tanto,
+> ordenar los eventos por `EventId` y no por `OccurredAtUtc` donde el orden importe.
+
+---
+
+<details>
+<summary>Redacción original del hallazgo (refutada, se conserva como registro)</summary>
+
+#### Fechas persistidas como cadena: toda comparación temporal es sospechosa — ~~DEMOSTRADO~~
 
 `ImpresorasDbContext.cs:493-506` aplica `DateTimeOffsetToStringConverter` a **toda** propiedad `DateTimeOffset` de **todas** las entidades. El formato de escritura es `"yyyy-MM-dd HH:mm:ss"` (L46).
 
@@ -180,6 +269,11 @@ SELECT data_type_name FROM sys.table_columns
  WHERE table_name = 'PRINTER_PRINT_JOB' AND column_name LIKE '%_UTC';
 ```
 Si la primera devuelve > 0, hay que normalizar con un script de un solo uso. Si el tipo es `TIMESTAMP`, HANA convierte y el riesgo cae mucho — pero entonces `H-06` sigue siendo necesario para saberlo sin preguntar.
+
+**Resultado de esa verificación: el tipo es `TIMESTAMP(7)` en las siete tablas operativas.** Ver la
+corrección al principio de esta sección.
+
+</details>
 
 ---
 
@@ -284,7 +378,7 @@ Ordenado por (riesgo evitado ÷ tamaño del diff), no por número de prioridad.
 | 3 | Ack solo de los ids realmente persistidos | ~15 líneas | H-05 |
 | 4 | `PrintedUnknown`/`PrinterBlocked` cancelables + `POST /confirm` | ~40 líneas | H-09 |
 | 5 | Extraer el DDL real de producción a `scripts/sql/schema/` | 1 día, sin código | H-06 |
-| 6 | Consulta de diagnóstico de fechas legacy en HANA | 5 min, STAGING | H-07 |
+| ~~6~~ | ~~Consulta de diagnóstico de fechas legacy en HANA~~ — **hecho 12/08: sin incidencia, H-07 baja a P2** | — | H-07 |
 | 7 | Caducidad local de `IsHolder` + reloj de HANA en el lease | ~20 líneas | H-10 |
 | 8 | Cambios de estado críticos vía `ExecuteUpdateAsync` condicional | ~60 líneas | H-03 |
 | 9 | Renombrar la semántica de `PrintedConfirmed` | rename + UI | H-01 |
