@@ -327,8 +327,13 @@ public sealed class PrintExecutionServiceFlowTests
         Assert.Equal(0, jobAfter.AttemptCount);
     }
 
+    /// <summary>
+    /// Politica de negocio: un envio interrumpido no se reenvia solo. Como la BD y la impresora
+    /// no comparten transaccion, es imposible saber si el papel salio, y reenviar duplicaria el
+    /// pedido cuando el envio anterior si habia prosperado. Se para y decide un operador.
+    /// </summary>
     [Fact]
-    public async Task ExecuteBatchAsync_WhenStalePrintingAndSpoolerSuccess_RecoversToSpoolAccepted()
+    public async Task ExecuteBatchAsync_WhenStalePrinting_DoesNotResendAndMarksPrintedUnknown()
     {
         using var setup = SqliteTestDbHelper.CreateOpenSqliteInMemory();
         var db = setup.Db;
@@ -390,10 +395,20 @@ public sealed class PrintExecutionServiceFlowTests
 
         var processed = await service.ExecuteBatchAsync(batchSize: 1, CancellationToken.None);
         Assert.Equal(1, processed);
-        Assert.Equal(1, spooler.CallCount);
+
+        // Lo esencial: no se vuelve a tocar la impresora.
+        Assert.Equal(0, spooler.CallCount);
 
         var jobAfter = await db.PrintJobs.FirstAsync(j => j.JobId == job.JobId);
-        Assert.Equal(PrintJobStatus.SpoolAccepted, jobAfter.Status);
+        Assert.Equal(PrintJobStatus.PrintedUnknown, jobAfter.Status);
+        Assert.Equal("PRINTING_INTERRUPTED", jobAfter.LastErrorCode);
+
+        var lastEvent = await db.PrintJobEvents
+            .Where(e => e.JobId == job.JobId)
+            .OrderByDescending(e => e.EventId)
+            .FirstAsync();
+        Assert.Equal(PrintJobStatus.Printing, lastEvent.OldStatus);
+        Assert.Equal(PrintJobStatus.PrintedUnknown, lastEvent.NewStatus);
     }
 
     [Fact]
@@ -464,8 +479,13 @@ public sealed class PrintExecutionServiceFlowTests
         Assert.Equal("Error en spooler", jobAfter.LastErrorMessage);
     }
 
+    /// <summary>
+    /// La incertidumbre gana sobre "intentos agotados": aunque no queden reintentos, un envio
+    /// interrumpido pudo imprimirse, y ErrorFinal afirmaria que fallo. PrintedUnknown dice lo unico
+    /// que se sabe, y deja al operador las tres salidas (confirmar, reimprimir, cancelar).
+    /// </summary>
     [Fact]
-    public async Task ExecuteBatchAsync_WhenStalePrintingAndAttemptsExhausted_TransitionsToErrorFinalRetriesExhausted()
+    public async Task ExecuteBatchAsync_WhenStalePrintingAndAttemptsExhausted_StillMarksPrintedUnknown()
     {
         using var setup = SqliteTestDbHelper.CreateOpenSqliteInMemory();
         var db = setup.Db;
@@ -530,9 +550,8 @@ public sealed class PrintExecutionServiceFlowTests
         Assert.Equal(0, spooler.CallCount);
 
         var jobAfter = await db.PrintJobs.FirstAsync(j => j.JobId == job.JobId);
-        Assert.Equal(PrintJobStatus.ErrorFinal, jobAfter.Status);
-        Assert.Equal("RETRIES_EXHAUSTED", jobAfter.LastErrorCode);
-        Assert.Contains("Intentos agotados", jobAfter.LastErrorMessage ?? string.Empty);
+        Assert.Equal(PrintJobStatus.PrintedUnknown, jobAfter.Status);
+        Assert.Equal("PRINTING_INTERRUPTED", jobAfter.LastErrorCode);
     }
 }
 

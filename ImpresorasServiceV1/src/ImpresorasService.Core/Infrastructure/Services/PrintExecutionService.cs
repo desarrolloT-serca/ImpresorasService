@@ -37,8 +37,10 @@ public sealed class PrintExecutionService : IPrintExecutionService
     public async Task<int> ExecuteBatchAsync(int batchSize, CancellationToken cancellationToken = default)
     {
         var now = _timeProvider.GetUtcNow();
-        // Nota de decisión: tratamos "Printing" como recuperable si lleva más que el timeout configurado + buffer.
-        // Buffer evita que jobs válidos se reintenten mientras el spooler todavía está procesando.
+        // "Printing" con más antigüedad que el timeout + buffer es un envío que quedó sin resolver.
+        // Se recoge aquí para cerrarlo como PrintedUnknown (ver TryProcessOneAsync), NO para
+        // reenviarlo: no hay forma de saber si el papel salió y un reenvío duplicaría el pedido.
+        // El buffer evita tocar jobs cuyo spooler todavía está trabajando.
         var stalePrintingAfter = TimeSpan.FromSeconds(_options.TimeoutSeconds + 10);
         // Pending >2 min = IngestionService falló al enrutar; rescatar aquí para evitar huérfanos indefinidos.
         var stalePendingAfter = TimeSpan.FromMinutes(2);
@@ -217,9 +219,28 @@ public sealed class PrintExecutionService : IPrintExecutionService
         var stalePrintingAfter = TimeSpan.FromSeconds(_options.TimeoutSeconds + 10);
         if (job.Status == PrintJobStatus.Printing)
         {
-            // Solo reintenta si el job está "stale". Si está fresco, no hacemos override.
+            // Fresco: el envío al spooler sigue en curso, no tocar.
             if (job.UpdatedAtUtc > _timeProvider.GetUtcNow() - stalePrintingAfter)
                 return false;
+
+            // Stale: el proceso murió entre el COMMIT de Printing y el resultado del spooler.
+            // La BD y la impresora no comparten transacción, así que aquí es imposible saber si
+            // el papel llegó a salir. Reenviarlo automáticamente sacaría un segundo documento
+            // cada vez que el envío anterior sí había prosperado.
+            // Decisión de negocio: parar antes que duplicar. Se marca la incertidumbre y un
+            // operador resuelve desde la cola (confirmar si salió, reimprimir si no, o cancelar).
+            await TransitionToPrintedUnknownAsync(
+                job,
+                PrintJobStatus.Printing,
+                "PRINTING_INTERRUPTED",
+                "El envío a la impresora se interrumpió sin conocerse el resultado. Puede haberse impreso: compruébelo antes de reimprimir.",
+                ct);
+            await _db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+            _logger.LogWarning(
+                "JobId={JobId}: Printing sin resolver tras {Seconds}s. Marcado PrintedUnknown; requiere decisión manual (no se reenvía para no duplicar).",
+                jobId, stalePrintingAfter.TotalSeconds);
+            return true;
         }
         else if (job.Status != PrintJobStatus.Routed && job.Status != PrintJobStatus.RetryScheduled)
         {
@@ -403,6 +424,31 @@ public sealed class PrintExecutionService : IPrintExecutionService
 
         await _db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
+    }
+
+    /// <summary>
+    /// Cierra el trabajo en incertidumbre: el sistema no puede afirmar si el documento salió.
+    /// No es un error (el envío pudo completarse) ni un éxito, y por eso no se reintenta solo.
+    /// </summary>
+    private async Task TransitionToPrintedUnknownAsync(PrintJob job, PrintJobStatus oldStatus, string errorCode, string message, CancellationToken ct)
+    {
+        job.Status = PrintJobStatus.PrintedUnknown;
+        job.LastErrorCode = errorCode;
+        job.LastErrorMessage = message;
+        job.NextRetryAtUtc = null;
+        job.UpdatedAtUtc = _timeProvider.GetUtcNow();
+        _db.PrintJobs.Update(job);
+        await _db.PrintJobEvents.AddAsync(new PrintJobEvent
+        {
+            JobId = job.JobId,
+            EventType = "StatusChanged",
+            OldStatus = oldStatus,
+            NewStatus = PrintJobStatus.PrintedUnknown,
+            ErrorCode = errorCode,
+            Message = message,
+            ActorType = "system",
+            OccurredAtUtc = _timeProvider.GetUtcNow()
+        }, ct);
     }
 
     private async Task TransitionToErrorFinalAsync(PrintJob job, PrintJobStatus oldStatus, string errorCode, string message, CancellationToken ct)

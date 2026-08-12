@@ -25,8 +25,13 @@ public class RoutingService : IRoutingService
         if (job is null)
             throw new InvalidOperationException($"Job {jobId} no encontrado.");
 
-        if (job.Status == PrintJobStatus.ErrorFinal)
+        // PrintedUnknown entra aquí porque es la única salida de "reimprimir asumiendo el riesgo":
+        // el sistema paró en vez de reenviar solo (puede haberse impreso ya), así que la reimpresión
+        // es una decisión humana y queda registrada como tal en el evento.
+        if (job.Status is PrintJobStatus.ErrorFinal or PrintJobStatus.PrintedUnknown)
         {
+            var previousStatus = job.Status;
+
             // Reintento manual: permitir volver a enrutar cualquier ErrorFinal
             // (ROUTE_NOT_FOUND, PRINTER_INVALID, RETRIES_EXHAUSTED, etc.).
             job.Status = PrintJobStatus.Pending;
@@ -40,17 +45,20 @@ public class RoutingService : IRoutingService
             {
                 JobId = jobId,
                 EventType = "RETRY_ROUTE",
-                OldStatus = PrintJobStatus.ErrorFinal,
+                OldStatus = previousStatus,
                 NewStatus = PrintJobStatus.Pending,
                 ActorType = "user",
-                Message = "Reintento manual solicitado desde ErrorFinal.",
+                Message = previousStatus == PrintJobStatus.PrintedUnknown
+                    ? "Reimpresión manual solicitada desde PrintedUnknown: el operador asume el riesgo de duplicado."
+                    : "Reintento manual solicitado desde ErrorFinal.",
                 OccurredAtUtc = DateTimeOffset.UtcNow
             });
             await _db.SaveChangesAsync(cancellationToken);
         }
         else if (job.Status != PrintJobStatus.Pending)
         {
-            throw new InvalidOperationException($"El job {jobId} no está en Pending ni en ErrorFinal (actual: {job.Status}).");
+            throw new InvalidOperationException(
+                $"El job {jobId} no está en Pending, ErrorFinal ni PrintedUnknown (actual: {job.Status}).");
         }
 
         return await TryRouteJobInternalAsync(job, cancellationToken);
