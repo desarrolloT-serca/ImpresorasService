@@ -350,6 +350,73 @@ Además se emite como `LogWarning` (L148) en cada ciclo con candidatos, es decir
 
 ---
 
+### H-15 · Ciclo de vida del PDF: cada documento se guarda dos veces y no se borra nunca — **DEMOSTRADO Y MEDIDO**
+*(cubre P1-06)*
+
+**Medido contra `ZTEST_VICENTE_2` el 12/08/2026** (entorno de pruebas; las cifras absolutas no
+extrapolan a producción, la estructura sí):
+
+| | Filas | Conservan PDF | Tamaño |
+|---|---|---|---|
+| `printer_source_print_job` | 245 | **245 (100 %)**, todas ya procesadas | 0,67 MB |
+| `printer_print_job` | 72 | **72 (100 %)**, todas en estado terminal | 0,27 MB |
+| `printer_print_job_event` | 315 | — | 4,4 eventos por trabajo |
+
+**No existe ninguna política de retención.** `grep` sobre todo `src/`: `PdfBlob` no se asigna a
+`null` en ningún punto del código, y el único borrado de trabajos del sistema es
+`StoresController` cuando se elimina una tienda con `purgeHistory` — una acción administrativa
+puntual, no una política. Un documento entra por la ingesta y se queda en las dos tablas para
+siempre.
+
+**Hay media solución escrita y abandonada.** `scripts/sql/migrate_pdf_blob_nullable.sql` dice
+literalmente: *"M-2: pdf_blob se limpia al pasar a SpoolAccepted para liberar espacio en BD"*. Pero
+(a) el script **no está aplicado** — en el esquema real `pdf_blob` sigue siendo `BLOB NOT NULL`, así
+que ni siquiera se podría poner a null — y (b) **el código que haría esa limpieza no existe**. Queda
+una migración preparada para una funcionalidad que nunca se implementó.
+
+**Y esa política, tal como está descrita, ya no sirve.** Limpiar el blob en `SpoolAccepted` rompería
+la reimpresión manual desde `PrintedUnknown` habilitada en H-04/H-09: el flujo pasa justamente por
+`SpoolAccepted`, y `PrintExecutionService.cs:285` devolvería `PDF_MISSING`. Si se retoma, el corte
+debe ser **estado terminal + ventana de retención**, no `SpoolAccepted`.
+
+**Lo que sí está bien resuelto** (y conviene no romperlo):
+
+- **El PDF no se expone por ninguna API.** Ni `PrintJobsController.GetQueue` ni
+  `SourcePrintJobsController.GetPending` proyectan `PdfBlob`, y no hay un solo `return File(` ni
+  `application/pdf` en toda la API. Los blobs no salen por HTTP.
+- **No comen memoria de HANA.** El catálogo muestra `MEMORY_THRESHOLD = 1000` en las columnas LOB:
+  los blobs por encima de 1 KB se almacenan en disco, no en la memoria de la column store. El coste
+  es de disco y de backup, no de RAM.
+- **Los temporales del spooler se limpian.** `WindowsPrintSpooler.cs:70-77` borra el fichero salvo
+  con `KeepTempFileOnFailure` (hoy `false`). Sin huérfanos `impresoras-*.pdf` en el TEMP revisado.
+  Quedan solo los de un proceso muerto por `kill`, sin barrido posterior que los recoja.
+
+**Dimensionar antes de decidir.** El tamaño medio medido (3,9 KB) corresponde a PDFs de prueba; una
+factura real está en decenas o cientos de KB. La fórmula es:
+
+```
+crecimiento diario ≈ documentos/día × tamaño medio × 2   (source + print_job)
+```
+
+Con 10.000 documentos/día a 100 KB serían ~2 GB/día, unos 730 GB/año que nadie borra. Con 500
+documentos/día a 50 KB son 18 GB/año. El orden de magnitud cambia la urgencia por completo, y hoy
+nadie tiene ese dato.
+
+**Privacidad.** Son facturas y documentos de cliente conservados sin plazo definido. Esto excede lo
+técnico: la limitación del plazo de conservación es una decisión que corresponde a quien lleve
+protección de datos en la organización, no al equipo de desarrollo. Lo que sí es técnico es que hoy
+**no existe la capacidad de borrar**, así que cualquier plazo que se fije no podría cumplirse sin el
+trabajo de abajo.
+
+**Propuesta mínima:** aplicar `migrate_pdf_blob_nullable.sql`, y un barrido periódico que ponga
+`pdf_blob = NULL` en trabajos en estado terminal con más de N días, conservando `pdf_sha256` y todos
+los metadatos — la trazabilidad y los KPI no dependen del blob. Hacer lo propio con
+`printer_source_print_job` para las filas ya procesadas, que es donde más volumen hay. N debe ser
+mayor que la ventana en la que un operador aún puede querer reimprimir.
+**Aceptación:** un trabajo terminal de hace N+1 días conserva su fila y su hash, y no su PDF.
+
+---
+
 ## 4. Hipótesis del documento: veredicto
 
 | Hipótesis (§8 del handoff) | Veredicto |

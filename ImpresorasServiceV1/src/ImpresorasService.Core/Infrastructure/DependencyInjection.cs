@@ -93,6 +93,8 @@ public static class DependencyInjection
         services.Configure<TelegramOptions>(configuration.GetSection(TelegramOptions.SectionName));
         services.AddSingleton<ITelegramNotifier, TelegramNotifierService>();
 
+        services.Configure<PdfRetentionOptions>(configuration.GetSection(PdfRetentionOptions.SectionName));
+
         services.Configure<WorkerLockOptions>(configuration.GetSection(WorkerLockOptions.SectionName));
         services.AddScoped<IWorkerLockCoordinator, WorkerLockCoordinator>();
 

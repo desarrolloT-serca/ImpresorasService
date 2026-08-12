@@ -21,6 +21,7 @@ builder.Services.AddHostedService<PrintExecutionBackgroundService>();
 builder.Services.AddHostedService<SpoolAcceptedWatchdogBackgroundService>();
 builder.Services.AddHostedService<PrinterConnectivityMonitorService>();
 builder.Services.AddHostedService<StoreHealthAlertBackgroundService>();
+builder.Services.AddHostedService<PdfRetentionBackgroundService>();
 
 var host = builder.Build();
 
