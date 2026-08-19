@@ -23,7 +23,6 @@ Route::middleware('auth.impresoras')->group(function () {
     Route::middleware('manager.only')->group(function () {
         Route::post('/cola/{id}/reintentar', [ColaController::class, 'reintentar'])->name('cola.reintentar');
         Route::post('/cola/{id}/cancelar', [ColaController::class, 'cancelar'])->name('cola.cancelar');
-        Route::post('/cola/{id}/confirmar', [ColaController::class, 'confirmar'])->name('cola.confirmar');
         Route::post('/cola/reintentar-masivo', [ColaController::class, 'reintentarMasivo'])->name('cola.reintentar_masivo');
         Route::post('/cola/cancelar-masivo', [ColaController::class, 'cancelarMasivo'])->name('cola.cancelar_masivo');
         Route::get('/impresoras', [ImpresorasController::class, 'index'])->name('impresoras.index');

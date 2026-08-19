@@ -205,13 +205,6 @@
                         <button type="submit" class="btn btn-ghost">Reintentar</button>
                     </form>
                     @endif
-                    @if($isUncertain)
-                    <form action="{{ url("/cola/{$jobId}/confirmar") }}" method="POST" class="inline"
-                        data-cola-action="confirmar" data-confirm="¿Confirmas que este documento sí se imprimió?">
-                        @csrf
-                        <button type="submit" class="btn btn-ghost">Sí se imprimió</button>
-                    </form>
-                    @endif
                     {{-- Solo desde "Sin confirmar": con la impresora bloqueada la API no admite reimprimir. --}}
                     @if($st === 5)
                     <form action="{{ url("/cola/{$jobId}/reintentar") }}" method="POST" class="inline"
@@ -357,14 +350,6 @@
                 '<form action="' + base + '/reintentar" method="POST" data-cola-action="reintentar">' +
                     token +
                     '<button type="submit" class="btn btn-ghost">Reintentar</button>' +
-                '</form>';
-        }
-
-        if (isUncertain) {
-            html +=
-                '<form action="' + base + '/confirmar" method="POST" class="inline" data-cola-action="confirmar" data-confirm="¿Confirmas que este documento sí se imprimió?">' +
-                    token +
-                    '<button type="submit" class="btn btn-ghost">Sí se imprimió</button>' +
                 '</form>';
         }
 
