@@ -18,12 +18,12 @@ public sealed class PrintExecutionOptions
 
     /// <summary>
     /// Espera antes de cada reintento. Solo se consumen <c>MaxAttempts - 1</c> valores: el último
-    /// intento fallido va directo a <c>ErrorFinal</c> sin programar otra espera. Con
-    /// <c>MaxAttempts = 4</c> se usan 15, 30 y 60; el cuarto valor solo entra en juego si se sube
-    /// <c>MaxAttempts</c>. Índices por encima del último se sujetan al último (ver
-    /// <c>PrintExecutionService</c>), así que la lista puede ser más corta que los intentos.
+    /// intento fallido va directo a <c>ErrorFinal</c> sin programar otra espera. Por eso con
+    /// <c>MaxAttempts = 4</c> hay tres esperas, no cuatro — había un 90 aquí que no se usaba nunca.
+    /// Los índices por encima del último se sujetan al último (ver <c>PrintExecutionService</c>), así
+    /// que subir <c>MaxAttempts</c> sin alargar esta lista repite la última espera.
     /// </summary>
-    public int[] BackoffSeconds { get; set; } = [15, 30, 60, 90];
+    public int[] BackoffSeconds { get; set; } = [15, 30, 60];
 
     /// <summary>Ruta al ejecutable para imprimir PDF (ej. SumatraPDF). Si vacío, se intenta ubicación por defecto.</summary>
     public string? PdfPrinterExecutablePath { get; set; }
