@@ -16,6 +16,35 @@ public sealed class WindowsPrintSpooler : IPrinterSpooler
     private readonly ILogger<WindowsPrintSpooler> _logger;
     private readonly PrintExecutionOptions _options;
 
+    /// <summary>
+    /// Marcas de PDF ilegible en la salida de SumatraPDF. Un PDF roto no se arregla reintentando, y
+    /// además cada reintento es un envío más al spooler: clasificarlo mal significa insistir cuatro
+    /// veces con un documento que nunca va a salir.
+    /// </summary>
+    private static readonly string[] CorruptPdfMarkers =
+    [
+        "Couldn't open file",
+        "no objects found",
+        "cannot find startxref"
+    ];
+
+    /// <summary>
+    /// Traduce una salida con código de error del proceso de impresión al resultado del dominio.
+    /// Extraído para poder probarlo: es la decisión que determina si un fallo se reintenta, y hasta
+    /// ahora vivía dentro del método que lanza el proceso, sin ninguna prueba (H-11).
+    /// </summary>
+    internal static PrintSpoolResult ClassifyFailedExit(string? processOutput)
+    {
+        var msg = processOutput ?? string.Empty;
+        var isPdfCorrupt = CorruptPdfMarkers.Any(marker => msg.Contains(marker, StringComparison.OrdinalIgnoreCase));
+
+        return new PrintSpoolResult(
+            Success: false,
+            ErrorCode: isPdfCorrupt ? "PDF_INVALID" : "SPOOLER_DOWN",
+            ErrorMessage: msg.Trim(),
+            IsTransient: !isPdfCorrupt);
+    }
+
     private static readonly string[] DefaultSumatraPaths =
     [
         @"C:\Program Files\SumatraPDF\SumatraPDF.exe",
@@ -135,11 +164,7 @@ public sealed class WindowsPrintSpooler : IPrinterSpooler
             {
                 var msg = string.IsNullOrWhiteSpace(error) ? output : error;
                 _logger.LogWarning("Impresión fallida. ExitCode={ExitCode}, Msg={Msg}", process.ExitCode, msg);
-                // PDF corrupto (no transient): no reintentar indefinidamente
-                var isPdfCorrupt = msg.Contains("Couldn't open file", StringComparison.OrdinalIgnoreCase)
-                    || msg.Contains("no objects found", StringComparison.OrdinalIgnoreCase)
-                    || msg.Contains("cannot find startxref", StringComparison.OrdinalIgnoreCase);
-                return new PrintSpoolResult(false, isPdfCorrupt ? "PDF_INVALID" : "SPOOLER_DOWN", msg.Trim(), !isPdfCorrupt);
+                return ClassifyFailedExit(msg);
             }
 
             _logger.LogInformation("PDF enviado a spooler correctamente. Printer={Printer}", printerName);

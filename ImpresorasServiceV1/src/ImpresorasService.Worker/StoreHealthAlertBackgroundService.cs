@@ -238,21 +238,40 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
 
             if (message is not null)
             {
+                var notifiedAtBeforeSend = alertState.NotifiedAtUtc;
+
                 // Fase 1.7: persistir ANTES de enviar — evita reenvío si el proceso cae entre save y send.
                 alertState.NotifiedAtUtc = now;
                 await db.SaveChangesAsync(ct);
 
                 var delivered = await _telegram.SendAlertAsync(message, ct, store.StoreId);
                 if (delivered)
+                {
                     _logger.LogInformation("Alerta Telegram enviada para tienda {StoreId} ({Name}): {Health}.",
                         store.StoreId, store.Name, health);
+                }
                 else
-                    // El estado notificado YA se persistió arriba, así que esta alerta no se reemite:
-                    // este warning es el único rastro de que la tienda cambió de salud y nadie se enteró.
+                {
+                    // Se deshace el avance del estado notificado para que el próximo ciclo vuelva a
+                    // ver esto como una transición y lo reintente. Sin esto, una caída momentánea de
+                    // Telegram (o un chat mal configurado) perdía la alerta para siempre: el estado
+                    // quedaba marcado como notificado y la siguiente comprobación ya no era cambio.
+                    //
+                    // Solo se revierte cuando SABEMOS que no se entregó. Si el proceso muere entre el
+                    // guardado y el envío, el estado ya avanzó y no se reenvía — que es justo lo que
+                    // buscaba persistir antes de enviar.
+                    //
+                    // ponytail: reintento por ciclo, no un outbox. No hay estado por chat ni backoff,
+                    // así que con Telegram caído se reintenta cada CheckIntervalMinutes hasta que
+                    // entre. Si hiciera falta granularidad por destinatario, eso sí pide tabla (AUD-14).
+                    alertState.NotifiedHealth = previousNotifiedHealth;
+                    alertState.NotifiedAtUtc = notifiedAtBeforeSend;
+
                     _logger.LogWarning(
                         "Alerta Telegram NO entregada para tienda {StoreId} ({Name}): {Health}. Ningún chat la aceptó " +
-                        "(sin chats activos o todos los envíos fallaron); el cambio de salud queda sin notificar.",
+                        "(sin chats activos o todos los envíos fallaron); se reintentará en el próximo ciclo.",
                         store.StoreId, store.Name, health);
+                }
             }
         }
 

@@ -24,4 +24,9 @@
     <Compile Remove="Infrastructure\Legacy\**\*.cs" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Para poder probar la clasificacion de fallos del spooler sin hacerla publica (H-11). -->
+    <InternalsVisibleTo Include="ImpresorasService.Api.IntegrationTests" />
+  </ItemGroup>
+
 </Project>

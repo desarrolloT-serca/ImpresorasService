@@ -95,11 +95,24 @@ de las dos: o se confirma de verdad, o se deja de afirmar.
 > provocarlo exige interponerse en el comando SQL. El caso frecuente (ya reclamado al leer) sí
 > está fijado.
 
-### B5 · Cuando no haya nada mejor
+### B5 · Higiene ✅ HECHO 2026-08-19 (parcial)
 
-- **AUD-14**: outbox de Telegram con estado de entrega y reintentos. El log ya es honesto; falta la persistencia.
-- `TelegramController` inyecta `ITelegramNotifier` y no lo usa nunca — borrar.
-- Cobertura real de `WindowsPrintSpooler` e IPP (lo que de verdad cierra H-11).
+- ~~`TelegramController` inyecta `ITelegramNotifier` y no lo usa~~ ✅ retirado.
+- **AUD-14** ✅ *a medias, sin DDL*: una alerta que no acepta ningún chat ya no se pierde — se
+  deshace el avance de `NotifiedHealth` y el próximo ciclo la reintenta. **No es un outbox**: no
+  hay estado por destinatario ni backoff, así que con Telegram caído se reintenta cada
+  `CheckIntervalMinutes` hasta que entre. La granularidad por chat sí pediría tabla nueva.
+- **H-11** ✅ *el primer trozo*: `WindowsPrintSpooler.ClassifyFailedExit` extraído y cubierto —
+  es la decisión que determina si un fallo se reintenta, y cada reintento es otro envío al
+  spooler. **Sigue sin cubrirse** el lanzamiento del proceso, IPP y HANA.
+
+### Lo que queda sin cobertura (deuda reconocida)
+
+| Qué | Por qué no está |
+|---|---|
+| `StoreHealthAlertBackgroundService` | Ningún test. La lógica de reintento de alerta se añadió sin cubrir: `RunOnceAsync` es privado y hacerlo testeable es un refactor mayor que el cambio |
+| Lanzamiento real del proceso de impresión, IPP, provider HANA | Necesitan spooler, impresora o base de datos reales. Es el fondo de H-11 |
+| Reclamar entre la lectura y el UPDATE (409 de `cancel`) | Exige interponerse en el comando SQL |
 
 ---
 

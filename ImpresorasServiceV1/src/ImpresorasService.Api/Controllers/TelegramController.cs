@@ -17,13 +17,14 @@ namespace ImpresorasService.Api.Controllers;
 public class TelegramController : ControllerBase
 {
     private readonly ImpresorasDbContext _db;
-    private readonly ITelegramNotifier _notifier;
     private readonly IOptions<TelegramOptions> _telegramOptions;
 
-    public TelegramController(ImpresorasDbContext db, ITelegramNotifier notifier, IOptions<TelegramOptions> telegramOptions)
+    // Sin ITelegramNotifier: este controlador solo administra la configuración y los chats. Quien
+    // envía es el Worker (StoreHealthAlertBackgroundService); la dependencia estaba inyectada y sin
+    // usar desde que se retiró el envío de prueba.
+    public TelegramController(ImpresorasDbContext db, IOptions<TelegramOptions> telegramOptions)
     {
         _db = db;
-        _notifier = notifier;
         _telegramOptions = telegramOptions;
     }
 
