@@ -41,6 +41,15 @@ Cinco bloques. **B0 desbloquea a los demás y no es código.** Dentro de cada bl
 | B0.3 | **Gate I-1**: comprobar contra una impresora real del parque si responde `Get-Job-Attributes` por IPP | B3. Sin este dato, la confirmación por trabajo no se puede ni planificar |
 | B0.4 | Aplicar `scripts/sql/migrate_user_revocation.sql` en HANA | La revocación de acceso (B2.2). Sin las columnas, la Api falla al consultar `printer_user`. Ambas llevan `DEFAULT`, así que aplicarlo no cierra ninguna sesión abierta |
 
+> **B0.1 y B0.4 necesitan al DBA.** Intentados el 19/08/2026 con la conexión del servicio:
+> los cuatro `ALTER` fallan con **error 258 (insufficient privilege)**. `IMPRESION` tiene
+> SELECT/INSERT/UPDATE/DELETE/INDEX tabla a tabla sobre `ZTEST_VICENTE_2`, pero ningún `ALTER` —
+> mismo muro que con `printer_worker_lock` en H-14. Nada quedó aplicado a medias (verificado).
+> O los ejecuta el dueño del esquema, o hace falta `GRANT ALTER` sobre las tres tablas.
+>
+> **B0.4 es bloqueante para desplegar.** Sin `is_active` y `token_version`, la Api falla al
+> consultar `printer_user` y el login deja de funcionar: el DDL va antes que el binario.
+
 > B0.3 es una prueba de media hora con una impresora y `curl`. Es la que más decisiones destraba.
 
 ### ~~B1 · Ejecutable ya — sin decisión previa~~ ✅ HECHO 2026-08-19
