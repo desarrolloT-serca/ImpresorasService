@@ -136,10 +136,10 @@ Variables de entorno que sobreescriben appsettings (patrón `Section__Key`):
 
 ---
 
-## Estado actual (rama `develop` — 2026-07-20)
+## Estado actual (rama `main` — 2026-08-19)
 
 ### Implementado y en producción
-- Ingesta SAP HANA con claim/ack
+- Ingesta SAP HANA con claim/ack (solo se acusa recibo de lo realmente persistido)
 - Enrutado por reglas configurables
 - Ejecución con reintentos exponenciales
 - Monitoreo de conectividad de impresoras
@@ -147,24 +147,31 @@ Variables de entorno que sobreescriben appsettings (patrón `Section__Key`):
 - Frontend Laravel cola + dashboard con salud de tiendas
 - Dashboard con umbrales configurables en BD, KPIs por periodo (contrato en `docs/contrato-kpi-dashboard.md`) y timezone de negocio configurable (`Dashboard:BusinessTimeZone`)
 - **IPP**: `IIppConfirmationService`/`IppConfirmationService`, `IppSupported` en `Printer`, sondeo desde `PrinterConnectivityMonitorService`, filtro en el watchdog, badge en UI PHP (`resources/views/impresoras/index.blade.php`)
-- **Telegram**: `TelegramNotifierService`, `StoreHealthAlertBackgroundService`, `TelegramController` (API), UI PHP de configuración/gestión de chats (`AlertasController` + `resources/views/alertas/`). `Telegram:Enabled=false` por defecto en `Worker/appsettings.json`; activar en producción con `BotToken` real.
+- **Telegram**: `TelegramNotifierService`, `StoreHealthAlertBackgroundService`, `TelegramController` (API). `Telegram:Enabled=false` por defecto en `Worker/appsettings.json`; activar en producción con `BotToken` real. **La página PHP de alertas se retiró** (commit `fcd05d7`): la configuración se toca por API.
+- **Lock de instancia única** (`WorkerLockCoordinator` + `WorkerLockBackgroundService`): DDL aplicado y verificado el 19/08/2026 con dos procesos Worker reales contra `ZTEST_VICENTE_2`
+- **Health check `worker`** en la Api (`WorkerActivityHealthCheck`): delata un Worker inerte usando la huella del monitor de conectividad. Reporta `Degraded`, sin tag `ready`.
+- **Retención de PDF** (`PdfRetentionBackgroundService`): implementada y **apagada por defecto** (`PdfRetention:Enabled=false`). Libera el blob de los trabajos en estado terminal pasados `RetentionDays`, conservando fila, `pdf_sha256` y metadatos.
 
 ### Pendiente
-- Confirmación IPP **por trabajo** (hoy solo consulta `printer-state` global, no `job-id`) — Fase 3 de `docs/roadmapimpresoras.md`
-- Claim atómico de `PrintJob` (UPDATE condicional en `PrintExecutionService`) — Fase 2.2 de `docs/roadmapimpresoras.md`, aún no implementado
-- Aplicar `scripts/sql/create_worker_lock.sql` en HANA y verificar en staging con 2 procesos Worker reales (código del lock de instancia única ya implementado, G4.1)
-- Tests e2e de IPP/watchdog/conectividad
+- Confirmación IPP **por trabajo** (hoy una lectura de `printer-state` marca `PrintedConfirmed` a todo el lote de esa impresora) — Fase 3.4 de `docs/roadmapimpresoras.md`, H-01 de `docs/auditoria/revision-garantias-2026-08-12.md`
+- Claim atómico de `PrintJob` (UPDATE condicional en `PrintExecutionService`) — Fase 2.2. Hoy `RowVersion` **no** es token de concurrencia EF (BLOB no comparable en HANA); el único control es un check de snapshot no atómico
+- Operaciones manuales (`cancel`, `route`) por UPDATE condicional de estado — Fase 2.5
+- Invalidación inmediata de acceso: `User.IsActive`, `TokenVersion`, expiración configurable — Fase 5 (hoy el token vive 8 h fijas y borrar un usuario no lo revoca)
+- Deriva de reloj en el lease del lock: el umbral sale del reloj local, no de `CURRENT_UTCTIMESTAMP` — H-10 (a)
+- Retención de PDF en `printer_source_print_job` (hoy solo se limpia `printer_print_job`) — H-15
+- Tests e2e de IPP/watchdog/conectividad; el CI corre en `ubuntu-latest`, así que `WindowsPrintSpooler` no se ejercita nunca — H-11
 - Pruebas con bot Telegram real en producción (operativo, no código)
 
-### DDL pendiente de aplicar en producción
+### DDL
+El esquema real vive extraído en `scripts/sql/schema/` (regenerar con `scripts/extraer-ddl-hana.ps1`, no editar a mano).
+Ya aplicados: `printer_telegram_config`, `printer_telegram_chat`, `printer_alert_state`, `ipp_supported` en `printer_printer`, `printer_worker_lock`.
+
+Pendiente de aplicar:
 ```sql
--- 4 objetos nuevos:
--- tabla printer_telegram_config
--- tabla printer_telegram_chat
--- tabla printer_alert_state
--- columna ipp_supported TINYINT NULLABLE en printer_printer
+-- scripts/sql/migrate_pdf_blob_nullable.sql
+-- pdf_blob sigue siendo BLOB NOT NULL: sin este ALTER, PdfRetention no puede liberar nada.
+ALTER TABLE "<SCHEMA>"."printer_print_job" ALTER ("pdf_blob" BLOB NULL);
 ```
-Ver `ImpresorasServiceV1/TELEGRAM_AND_IPP_ROADMAP.md` para detalle.
 
 ---
 
@@ -184,7 +191,7 @@ Ver `ImpresorasServiceV1/TELEGRAM_AND_IPP_ROADMAP.md` para detalle.
 
 ### Git
 - Rama principal: `main`
-- Rama activa: `IU` (Interface Updates)
+- Rama activa: `main`
 - Commits convencionales: `feat:`, `fix:`, `chore:`, `refactor:`
 
 ---
@@ -206,6 +213,8 @@ src/ImpresorasService.Worker/
   SpoolAcceptedWatchdogBackgroundService.cs → confirmación IPP
   PrinterConnectivityMonitorService.cs    → sondeo de puertos + IPP
   StoreHealthAlertBackgroundService.cs    → alertas Telegram
+  WorkerLockBackgroundService.cs          → lock de instancia única (el resto lee WorkerLockState)
+  PdfRetentionBackgroundService.cs        → libera el PDF de los trabajos cerrados
 
 src/ImpresorasService.Api/
   Controllers/                        → endpoints REST

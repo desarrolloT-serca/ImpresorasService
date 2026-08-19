@@ -16,7 +16,13 @@ public sealed class PrintExecutionOptions
     /// <summary>Máximo número de intentos por job.</summary>
     public int MaxAttempts { get; set; } = 4;
 
-    /// <summary>Backoff en segundos: 15, 30, 60, 90.</summary>
+    /// <summary>
+    /// Espera antes de cada reintento. Solo se consumen <c>MaxAttempts - 1</c> valores: el último
+    /// intento fallido va directo a <c>ErrorFinal</c> sin programar otra espera. Con
+    /// <c>MaxAttempts = 4</c> se usan 15, 30 y 60; el cuarto valor solo entra en juego si se sube
+    /// <c>MaxAttempts</c>. Índices por encima del último se sujetan al último (ver
+    /// <c>PrintExecutionService</c>), así que la lista puede ser más corta que los intentos.
+    /// </summary>
     public int[] BackoffSeconds { get; set; } = [15, 30, 60, 90];
 
     /// <summary>Ruta al ejecutable para imprimir PDF (ej. SumatraPDF). Si vacío, se intenta ubicación por defecto.</summary>
