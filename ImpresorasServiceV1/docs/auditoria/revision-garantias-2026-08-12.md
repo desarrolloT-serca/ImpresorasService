@@ -319,6 +319,13 @@ Y son estados a los que el sistema envía trabajos de forma rutinaria: `ApplyOut
 **Mínimo:** añadir `PrintedUnknown` y `PrinterBlocked` a `cancellableStates`, y un `POST /{id}/confirm` para Admin que registre `ActorType="user"` y el riesgo asumido. Dos cambios pequeños que devuelven el control a operaciones.
 **Aceptación:** un `PrintedUnknown` debe poder resolverse desde la UI sin tocar la base de datos.
 
+> **Revisado el 19/08/2026.** La parte de cancelar/reimprimir sigue en pie y cumple la aceptación.
+> La de confirmar manualmente se revirtió por decisión de producto: cerrar un trabajo como impreso
+> por afirmación del operador dejaba en el historial una impresión confirmada que el sistema nunca
+> comprobó. Retirados el botón, la ruta de la web y el `POST /api/printjobs/{id}/confirm`. Un
+> `PrintedUnknown` se resuelve reimprimiendo o cancelando; no volver a añadir la confirmación manual
+> sin acordarlo antes.
+
 ---
 
 ### H-10 · El lock global tiene dos ventanas de doble holder — **DEMOSTRADO** / magnitud **STAGING**

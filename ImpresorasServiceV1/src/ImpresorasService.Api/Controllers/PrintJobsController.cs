@@ -216,60 +216,6 @@ public class PrintJobsController : ControllerBase
         return Ok(new { status = "Cancelled" });
     }
 
-    /// <summary>
-    /// Cierra manualmente un trabajo cuyo resultado el sistema no puede determinar por sí mismo,
-    /// cuando un operador ha comprobado físicamente que el documento salió.
-    /// Solo desde PrintedUnknown/PrinterBlocked: es una afirmación humana, no una deducción, y
-    /// queda registrada como tal en el evento (ActorType="user").
-    /// </summary>
-    [HttpPost("{id:guid}/confirm")]
-    [Authorize(Policy = "StoreManagerOrAdmin")]
-    public async Task<IActionResult> ConfirmPrinted(Guid id, CancellationToken cancellationToken)
-    {
-        var job = await _dbContext.PrintJobs.FirstOrDefaultAsync(j => j.JobId == id, cancellationToken);
-        if (job is null)
-            return NotFound();
-
-        if (!IsAdmin())
-        {
-            var userStoreId = GetCurrentUserStoreId();
-            if (!userStoreId.HasValue || job.StoreId != userStoreId.Value)
-                return Forbid();
-        }
-
-        if (job.Status is not (PrintJobStatus.PrintedUnknown or PrintJobStatus.PrinterBlocked))
-        {
-            return BadRequest(new
-            {
-                error = $"El job {id} no puede confirmarse manualmente en estado {job.Status}. " +
-                        "Solo se confirman trabajos en estado desconocido o con la impresora bloqueada."
-            });
-        }
-
-        var now = _timeProvider.GetUtcNow();
-        var oldStatus = job.Status;
-        job.Status = PrintJobStatus.PrintedConfirmed;
-        job.LastErrorCode = null;
-        job.LastErrorMessage = null;
-        job.NextRetryAtUtc = null;
-        job.UpdatedAtUtc = now;
-
-        _dbContext.PrintJobEvents.Add(new PrintJobEvent
-        {
-            JobId = job.JobId,
-            EventType = "CONFIRMED_BY_USER",
-            OldStatus = oldStatus,
-            NewStatus = PrintJobStatus.PrintedConfirmed,
-            ActorType = "user",
-            ActorId = User.Identity?.Name ?? User.FindFirstValue("Login") ?? User.FindFirstValue(ClaimTypes.NameIdentifier),
-            Message = "Impresión confirmada manualmente por un operador tras comprobación física.",
-            OccurredAtUtc = now
-        });
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(new { status = "PrintedConfirmed" });
-    }
-
     private bool IsAdmin() => User.IsInRole("Admin");
 
     private int? GetCurrentUserStoreId()
