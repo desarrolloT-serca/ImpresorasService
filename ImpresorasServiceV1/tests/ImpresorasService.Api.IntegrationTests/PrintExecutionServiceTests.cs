@@ -68,6 +68,10 @@ public sealed class PrintExecutionServiceTests
             TimeProvider.System);
 
         var processed = await service.ExecuteBatchAsync(10);
+        // El servicio escribe con ExecuteUpdate, que no refresca las entidades ya seguidas por
+        // este contexto. En produccion cada ciclo abre su propio scope; aqui hay que soltarlas
+        // a mano o las aserciones leerian la copia en memoria de antes del UPDATE.
+        db.ChangeTracker.Clear();
 
         var dueJob = await db.PrintJobs.SingleAsync(j => j.JobId == dueJobId);
         Assert.Equal(1, processed);

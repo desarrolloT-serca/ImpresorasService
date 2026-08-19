@@ -10,6 +10,7 @@ internal static class SqliteTestDbHelper
     public sealed class SqliteTestDbSetup : IDisposable
     {
         public ImpresorasDbContext Db { get; }
+        public SqliteConnection Connection => _connection;
         private readonly SqliteConnection _connection;
 
         public SqliteTestDbSetup(ImpresorasDbContext db, SqliteConnection connection)
@@ -30,14 +31,18 @@ internal static class SqliteTestDbHelper
         var connection = new SqliteConnection("Data Source=:memory:");
         connection.Open();
 
-        var options = new DbContextOptionsBuilder<ImpresorasDbContext>()
-            .UseSqlite(connection)
-            .Options;
-
-        var db = new ImpresorasDbContext(options);
+        var db = NewContext(connection);
         db.Database.EnsureCreated();
 
         return new SqliteTestDbSetup(db, connection);
     }
+
+    /// <summary>
+    /// Otro <see cref="ImpresorasDbContext"/> sobre la MISMA conexión, para simular un segundo
+    /// proceso: contextos distintos con su propio seguimiento de entidades, pero una sola base de
+    /// datos. Es lo que hace falta para ejercitar la exclusión entre Workers.
+    /// </summary>
+    public static ImpresorasDbContext NewContext(SqliteConnection connection)
+        => new(new DbContextOptionsBuilder<ImpresorasDbContext>().UseSqlite(connection).Options);
 }
 

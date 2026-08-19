@@ -83,6 +83,10 @@ public sealed class PrintExecutionServiceFlowTests
             TimeProvider.System);
 
         var processed = await service.ExecuteBatchAsync(batchSize: 1, CancellationToken.None);
+        // El servicio escribe con ExecuteUpdate, que no refresca las entidades ya seguidas por
+        // este contexto. En produccion cada ciclo abre su propio scope; aqui hay que soltarlas
+        // a mano o las aserciones leerian la copia en memoria de antes del UPDATE.
+        db.ChangeTracker.Clear();
         Assert.Equal(1, processed);
         Assert.Equal(1, spooler.CallCount);
 
@@ -171,6 +175,10 @@ public sealed class PrintExecutionServiceFlowTests
 
         var before = DateTimeOffset.UtcNow;
         var processed = await service.ExecuteBatchAsync(batchSize: 1, CancellationToken.None);
+        // El servicio escribe con ExecuteUpdate, que no refresca las entidades ya seguidas por
+        // este contexto. En produccion cada ciclo abre su propio scope; aqui hay que soltarlas
+        // a mano o las aserciones leerian la copia en memoria de antes del UPDATE.
+        db.ChangeTracker.Clear();
         Assert.Equal(1, processed);
 
         var jobAfter = await db.PrintJobs.FirstAsync(j => j.JobId == job.JobId);
@@ -248,6 +256,10 @@ public sealed class PrintExecutionServiceFlowTests
             new DummyRoutingResolver(),
             TimeProvider.System);
         var processed = await service.ExecuteBatchAsync(batchSize: 1, CancellationToken.None);
+        // El servicio escribe con ExecuteUpdate, que no refresca las entidades ya seguidas por
+        // este contexto. En produccion cada ciclo abre su propio scope; aqui hay que soltarlas
+        // a mano o las aserciones leerian la copia en memoria de antes del UPDATE.
+        db.ChangeTracker.Clear();
         Assert.Equal(1, processed);
 
         var jobAfter = await db.PrintJobs.FirstAsync(j => j.JobId == job.JobId);
@@ -326,6 +338,10 @@ public sealed class PrintExecutionServiceFlowTests
             TimeProvider.System);
 
         var processed = await service.ExecuteBatchAsync(batchSize: 1, CancellationToken.None);
+        // El servicio escribe con ExecuteUpdate, que no refresca las entidades ya seguidas por
+        // este contexto. En produccion cada ciclo abre su propio scope; aqui hay que soltarlas
+        // a mano o las aserciones leerian la copia en memoria de antes del UPDATE.
+        db.ChangeTracker.Clear();
         Assert.Equal(1, processed);
 
         var jobAfter = await db.PrintJobs.FirstAsync(j => j.JobId == job.JobId);
@@ -396,6 +412,10 @@ public sealed class PrintExecutionServiceFlowTests
             new DummyRoutingResolver(),
             TimeProvider.System);
         var processed = await service.ExecuteBatchAsync(batchSize: 1, CancellationToken.None);
+        // El servicio escribe con ExecuteUpdate, que no refresca las entidades ya seguidas por
+        // este contexto. En produccion cada ciclo abre su propio scope; aqui hay que soltarlas
+        // a mano o las aserciones leerian la copia en memoria de antes del UPDATE.
+        db.ChangeTracker.Clear();
         Assert.Equal(1, processed);
 
         Assert.Equal(0, spooler.CallCount);
@@ -474,6 +494,10 @@ public sealed class PrintExecutionServiceFlowTests
             TimeProvider.System);
 
         var processed = await service.ExecuteBatchAsync(batchSize: 1, CancellationToken.None);
+        // El servicio escribe con ExecuteUpdate, que no refresca las entidades ya seguidas por
+        // este contexto. En produccion cada ciclo abre su propio scope; aqui hay que soltarlas
+        // a mano o las aserciones leerian la copia en memoria de antes del UPDATE.
+        db.ChangeTracker.Clear();
         Assert.Equal(1, processed);
 
         // Lo esencial: no se vuelve a tocar la impresora.
@@ -551,6 +575,10 @@ public sealed class PrintExecutionServiceFlowTests
             TimeProvider.System);
 
         var processed = await service.ExecuteBatchAsync(batchSize: 1, CancellationToken.None);
+        // El servicio escribe con ExecuteUpdate, que no refresca las entidades ya seguidas por
+        // este contexto. En produccion cada ciclo abre su propio scope; aqui hay que soltarlas
+        // a mano o las aserciones leerian la copia en memoria de antes del UPDATE.
+        db.ChangeTracker.Clear();
         Assert.Equal(1, processed);
 
         var jobAfter = await db.PrintJobs.FirstAsync(j => j.JobId == job.JobId);
@@ -626,6 +654,10 @@ public sealed class PrintExecutionServiceFlowTests
             TimeProvider.System);
 
         var processed = await service.ExecuteBatchAsync(batchSize: 1, CancellationToken.None);
+        // El servicio escribe con ExecuteUpdate, que no refresca las entidades ya seguidas por
+        // este contexto. En produccion cada ciclo abre su propio scope; aqui hay que soltarlas
+        // a mano o las aserciones leerian la copia en memoria de antes del UPDATE.
+        db.ChangeTracker.Clear();
         Assert.Equal(1, processed);
         Assert.Equal(0, spooler.CallCount);
 

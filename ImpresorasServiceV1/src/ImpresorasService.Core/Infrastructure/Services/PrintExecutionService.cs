@@ -9,6 +9,19 @@ using Microsoft.Extensions.Options;
 
 namespace ImpresorasService.Infrastructure.Services;
 
+/// <summary>
+/// Ejecución de la cola contra el spooler.
+///
+/// <para><b>Exclusión entre procesos (Fase 2.2).</b> Todas las transiciones de estado de este
+/// servicio se aplican con un UPDATE condicionado al estado esperado (<see cref="TryTransitionAsync"/>):
+/// leer y escribir son el mismo statement, así que de dos procesos que lleguen a la vez uno afecta a
+/// 1 fila y el otro a 0. La que importa de verdad es el paso a <c>Printing</c>: es lo único que
+/// impide que dos Workers manden el mismo documento al spooler y salga el papel dos veces.</para>
+///
+/// <para>Antes esto era leer-comprobar-escribir con un snapshot de <c>RowVersion</c>, que dejaba
+/// abierta la ventana entre la lectura y el guardado. <c>RowVersion</c> además nunca fue un token de
+/// concurrencia de EF: en HANA es un BLOB y no se puede comparar en un WHERE.</para>
+/// </summary>
 public sealed class PrintExecutionService : IPrintExecutionService
 {
     private readonly ImpresorasDbContext _db;
@@ -46,7 +59,7 @@ public sealed class PrintExecutionService : IPrintExecutionService
         var stalePendingAfter = TimeSpan.FromMinutes(2);
         // Solo traer trabajos realmente elegibles. Si hacemos Take antes de comprobar NextRetryAtUtc,
         // muchos RetryScheduled todavia no vencidos pueden ocupar la ventana y dejar fuera reintentos listos.
-        var candidates = await _db.PrintJobs
+        var eligible = await _db.PrintJobs
             .AsNoTracking()
             .Where(j =>
                 j.Status == PrintJobStatus.Routed
@@ -60,20 +73,12 @@ public sealed class PrintExecutionService : IPrintExecutionService
             {
                 j.JobId,
                 j.PrinterId,
-                j.RowVersion,
                 j.Status,
-                j.NextRetryAtUtc,
                 j.StoreId,
                 j.DocumentType,
-                j.Channel,
-                j.CreatedAtUtc,
-                j.UpdatedAtUtc
+                j.Channel
             })
             .ToListAsync(cancellationToken);
-
-        var eligible = candidates
-            .Select(j => new { j.JobId, j.PrinterId, j.RowVersion, j.StoreId, j.DocumentType, j.Channel, j.Status })
-            .ToList();
 
         var processed = 0;
         foreach (var item in eligible)
@@ -83,8 +88,8 @@ public sealed class PrintExecutionService : IPrintExecutionService
             // Rescate de Pending huérfanos: la ingesta los insertó pero el routing lanzó excepción.
             if (item.Status == PrintJobStatus.Pending)
             {
-                await RescuePendingJobAsync(item.JobId, item.StoreId, item.DocumentType, item.Channel, item.RowVersion, cancellationToken);
-                processed++;
+                if (await RescuePendingJobAsync(item.JobId, item.StoreId, item.DocumentType, item.Channel, cancellationToken))
+                    processed++;
                 continue;
             }
 
@@ -104,67 +109,45 @@ public sealed class PrintExecutionService : IPrintExecutionService
 
                 if (resolved is null)
                 {
-                    await using var tx = await _db.Database.BeginTransactionAsync(cancellationToken);
-                    var job = await _db.PrintJobs.FirstOrDefaultAsync(j => j.JobId == item.JobId, cancellationToken);
-                    if (job is not null)
-                    {
-                        if (!RowVersionSnapshotStillMatches(job.RowVersion, item.RowVersion))
-                        {
-                            // Otro worker modificó el job tras el barrido del lote; no pisar estado.
-                            continue;
-                        }
-
-                        await TransitionToErrorFinalAsync(
-                            job,
-                            item.Status,
+                    if (await TryTransitionAsync(
+                            item.JobId,
+                            [item.Status],
+                            PrintJobStatus.ErrorFinal,
                             "ROUTE_NOT_FOUND",
                             "No existe regla activa aplicable para este trabajo (PrinterId nulo).",
-                            cancellationToken);
-                        await _db.SaveChangesAsync(cancellationToken);
-                    }
+                            nextRetryAtUtc: null,
+                            newAttemptCount: null,
+                            cancellationToken))
+                        processed++;
 
-                    await tx.CommitAsync(cancellationToken);
-                    processed++;
                     continue;
                 }
 
                 printerIdToUse = resolved.Value;
             }
 
-            var ok = await TryProcessOneAsync(item.JobId, printerIdToUse, item.RowVersion, cancellationToken);
+            var ok = await TryProcessOneAsync(item.JobId, printerIdToUse, cancellationToken);
             if (ok) processed++;
         }
 
         return processed;
     }
 
-    private async Task<bool> TryProcessOneAsync(Guid jobId, int printerId, byte[] rowVersion, CancellationToken ct)
+    private async Task<bool> TryProcessOneAsync(Guid jobId, int printerId, CancellationToken ct)
     {
-        await using var tx = await _db.Database.BeginTransactionAsync(ct);
-
-        var job = await _db.PrintJobs.FirstOrDefaultAsync(j => j.JobId == jobId, ct);
+        // AsNoTracking en todo el método: las transiciones van por ExecuteUpdate, que no refresca las
+        // entidades cargadas. Una entidad seguida se quedaría con los valores de antes del UPDATE y
+        // el siguiente `FirstOrDefaultAsync` devolvería esa copia rancia en vez de leer la fila.
+        var job = await _db.PrintJobs.AsNoTracking().FirstOrDefaultAsync(j => j.JobId == jobId, ct);
         if (job == null) return false;
 
-        if (!RowVersionSnapshotStillMatches(job.RowVersion, rowVersion))
-        {
-            _logger.LogDebug(
-                "JobId={JobId}: RowVersion del lote no coincide con BD; probable contienda entre workers.",
-                jobId);
-            return false;
-        }
-
-        // Auto-curación: si el job llegó con PrinterId null, lo fijamos para que el resto del flujo
-        // (selección de candidatos por PrinterId) no se bloquee.
-        if (job.PrinterId == null)
-            job.PrinterId = printerId;
-
-        var printer = await _db.Printers.FindAsync([printerId], ct);
+        var printer = await _db.Printers.AsNoTracking().FirstOrDefaultAsync(p => p.PrinterId == printerId, ct);
         if (printer == null || !printer.IsActive)
         {
-            await TransitionToErrorFinalAsync(job, job.Status, "PRINTER_INVALID", "Impresora inactiva o inexistente", ct);
-            await _db.SaveChangesAsync(ct);
-            await tx.CommitAsync(ct);
-            return true;
+            return await TryTransitionAsync(
+                jobId, [job.Status], PrintJobStatus.ErrorFinal,
+                "PRINTER_INVALID", "Impresora inactiva o inexistente",
+                nextRetryAtUtc: null, newAttemptCount: null, ct);
         }
 
         // Guard-rail: si el monitor de conectividad marca KO reciente, evitamos
@@ -175,44 +158,23 @@ public sealed class PrintExecutionService : IPrintExecutionService
             var lastCheckAge = _timeProvider.GetUtcNow() - printer.LastConnectionCheckAtUtc.Value;
             if (lastCheckAge <= TimeSpan.FromSeconds(90))
             {
+                var unreachableMessage = printer.LastConnectionError ?? "Impresora no alcanzable (monitor de conectividad).";
                 var nextAttempt = job.AttemptCount + 1;
+
                 if (nextAttempt < _options.MaxAttempts)
                 {
                     var delaySec = _options.BackoffSeconds[Math.Min(nextAttempt - 1, _options.BackoffSeconds.Length - 1)];
-                    var old = job.Status;
-                    job.Status = PrintJobStatus.RetryScheduled;
-                    job.AttemptCount = nextAttempt;
-                    job.NextRetryAtUtc = _timeProvider.GetUtcNow().AddSeconds(delaySec);
-                    job.LastErrorCode = "PRINTER_UNREACHABLE";
-                    job.LastErrorMessage = printer.LastConnectionError ?? "Impresora no alcanzable (monitor de conectividad).";
-                    job.UpdatedAtUtc = _timeProvider.GetUtcNow();
-                    _db.PrintJobs.Update(job);
-                    await _db.PrintJobEvents.AddAsync(new PrintJobEvent
-                    {
-                        JobId = job.JobId,
-                        EventType = "StatusChanged",
-                        OldStatus = old,
-                        NewStatus = PrintJobStatus.RetryScheduled,
-                        ErrorCode = "PRINTER_UNREACHABLE",
-                        Message = job.LastErrorMessage,
-                        ActorType = "system",
-                        OccurredAtUtc = _timeProvider.GetUtcNow()
-                    }, ct);
-                    await _db.SaveChangesAsync(ct);
-                    await tx.CommitAsync(ct);
-                    return true;
+                    return await TryTransitionAsync(
+                        jobId, [job.Status], PrintJobStatus.RetryScheduled,
+                        "PRINTER_UNREACHABLE", unreachableMessage,
+                        nextRetryAtUtc: _timeProvider.GetUtcNow().AddSeconds(delaySec),
+                        newAttemptCount: nextAttempt, ct);
                 }
 
-                job.AttemptCount = nextAttempt;
-                await TransitionToErrorFinalAsync(
-                    job,
-                    job.Status,
-                    "PRINTER_UNREACHABLE",
-                    printer.LastConnectionError ?? "Impresora no alcanzable (monitor de conectividad).",
-                    ct);
-                await _db.SaveChangesAsync(ct);
-                await tx.CommitAsync(ct);
-                return true;
+                return await TryTransitionAsync(
+                    jobId, [job.Status], PrintJobStatus.ErrorFinal,
+                    "PRINTER_UNREACHABLE", unreachableMessage,
+                    nextRetryAtUtc: null, newAttemptCount: nextAttempt, ct);
             }
         }
 
@@ -228,56 +190,53 @@ public sealed class PrintExecutionService : IPrintExecutionService
             // el papel llegó a salir. Reenviarlo automáticamente sacaría un segundo documento
             // cada vez que el envío anterior sí había prosperado.
             // Decisión de negocio: parar antes que duplicar. Se marca la incertidumbre y un
-            // operador resuelve desde la cola (confirmar si salió, reimprimir si no, o cancelar).
-            await TransitionToPrintedUnknownAsync(
-                job,
-                PrintJobStatus.Printing,
+            // operador resuelve desde la cola (reimprimir si no salió, o cancelar).
+            var closed = await TryTransitionAsync(
+                jobId, [PrintJobStatus.Printing], PrintJobStatus.PrintedUnknown,
                 "PRINTING_INTERRUPTED",
                 "El envío a la impresora se interrumpió sin conocerse el resultado. Puede haberse impreso: compruébelo antes de reimprimir.",
-                ct);
-            await _db.SaveChangesAsync(ct);
-            await tx.CommitAsync(ct);
-            _logger.LogWarning(
-                "JobId={JobId}: Printing sin resolver tras {Seconds}s. Marcado PrintedUnknown; requiere decisión manual (no se reenvía para no duplicar).",
-                jobId, stalePrintingAfter.TotalSeconds);
-            return true;
+                nextRetryAtUtc: null, newAttemptCount: null, ct);
+
+            if (closed)
+                _logger.LogWarning(
+                    "JobId={JobId}: Printing sin resolver tras {Seconds}s. Marcado PrintedUnknown; requiere decisión manual (no se reenvía para no duplicar).",
+                    jobId, stalePrintingAfter.TotalSeconds);
+
+            return closed;
         }
-        else if (job.Status != PrintJobStatus.Routed && job.Status != PrintJobStatus.RetryScheduled)
-        {
+
+        if (job.Status != PrintJobStatus.Routed && job.Status != PrintJobStatus.RetryScheduled)
             return false;
-        }
 
         if (job.Status == PrintJobStatus.RetryScheduled && job.NextRetryAtUtc > _timeProvider.GetUtcNow())
             return false;
 
         if (job.AttemptCount >= _options.MaxAttempts)
         {
-            await TransitionToErrorFinalAsync(job, job.Status, "RETRIES_EXHAUSTED", "Intentos agotados", ct);
-            await _db.SaveChangesAsync(ct);
-            await tx.CommitAsync(ct);
-            return true;
+            return await TryTransitionAsync(
+                jobId, [job.Status], PrintJobStatus.ErrorFinal,
+                "RETRIES_EXHAUSTED", "Intentos agotados",
+                nextRetryAtUtc: null, newAttemptCount: null, ct);
         }
 
-        var oldStatus = job.Status;
-        job.Status = PrintJobStatus.Printing;
-        job.AttemptCount++;
-        job.UpdatedAtUtc = _timeProvider.GetUtcNow();
-        _db.PrintJobs.Update(job);
+        // CLAIM ATÓMICO. El estado en el WHERE es la exclusión: si otro proceso llegó primero, este
+        // ve 0 filas afectadas y no envía nada. AttemptCount se fija a un valor absoluto y no a
+        // "+1" a propósito: si alguien lo hubiera incrementado entre la lectura y ahora, también
+        // habría cambiado el estado y el WHERE ya no casaría.
+        var claimed = await TryTransitionAsync(
+            jobId,
+            [PrintJobStatus.Routed, PrintJobStatus.RetryScheduled],
+            PrintJobStatus.Printing,
+            errorCode: null, errorMessage: null,
+            nextRetryAtUtc: null,
+            newAttemptCount: job.AttemptCount + 1,
+            ct);
 
-        await _db.PrintJobEvents.AddAsync(new PrintJobEvent
+        if (!claimed)
         {
-            JobId = jobId,
-            EventType = "StatusChanged",
-            OldStatus = oldStatus,
-            NewStatus = PrintJobStatus.Printing,
-            ActorType = "system",
-            OccurredAtUtc = _timeProvider.GetUtcNow()
-        }, ct);
-
-        var rows = await _db.SaveChangesAsync(ct);
-        if (rows == 0) return false;
-
-        await tx.CommitAsync(ct);
+            _logger.LogDebug("JobId={JobId}: otro proceso lo reclamó primero; este ciclo no lo envía.", jobId);
+            return false;
+        }
 
         PrintSpoolResult result;
         try
@@ -301,205 +260,194 @@ public sealed class PrintExecutionService : IPrintExecutionService
             result = new PrintSpoolResult(false, "SPOOLER_EXCEPTION", "Error en spooler", true);
         }
 
-        await using var tx2 = await _db.Database.BeginTransactionAsync(ct);
-        var job2 = await _db.PrintJobs.FirstOrDefaultAsync(j => j.JobId == jobId, ct);
-        if (job2 == null || job2.Status != PrintJobStatus.Printing) return true;
-
+        // Todas las salidas exigen seguir en Printing: si un operador canceló mientras el spooler
+        // trabajaba, su decisión manda y aquí no se pisa.
         if (result.Success)
         {
-            job2.Status = PrintJobStatus.SpoolAccepted;
-            job2.LastErrorCode = null;
-            job2.LastErrorMessage = null;
-            job2.NextRetryAtUtc = null;
-            job2.UpdatedAtUtc = _timeProvider.GetUtcNow();
-            _db.PrintJobs.Update(job2);
-            await _db.PrintJobEvents.AddAsync(new PrintJobEvent
-            {
-                JobId = jobId,
-                EventType = "StatusChanged",
-                OldStatus = PrintJobStatus.Printing,
-                NewStatus = PrintJobStatus.SpoolAccepted,
-                ActorType = "system",
-                Message = "Spooler aceptó el trabajo",
-                OccurredAtUtc = _timeProvider.GetUtcNow()
-            }, ct);
+            await TryTransitionAsync(
+                jobId, [PrintJobStatus.Printing], PrintJobStatus.SpoolAccepted,
+                errorCode: null, errorMessage: null,
+                nextRetryAtUtc: null, newAttemptCount: null, ct,
+                eventMessage: "Spooler aceptó el trabajo");
+
+            return true;
         }
-        else if (result.ErrorCode == "NET_TIMEOUT")
+
+        if (result.ErrorCode == "NET_TIMEOUT")
         {
             // El envío se cortó a medias: pudo haber llegado a la cola de Windows. Ni error (afirmaría
             // que no se imprimió) ni reintento (duplicaría). Mismo tratamiento que el Printing stale:
             // se marca la incertidumbre y decide un operador desde la cola.
-            await TransitionToPrintedUnknownAsync(
-                job2,
-                PrintJobStatus.Printing,
+            await TryTransitionAsync(
+                jobId, [PrintJobStatus.Printing], PrintJobStatus.PrintedUnknown,
                 result.ErrorCode,
                 "El envío a la impresora se agotó de tiempo sin conocerse el resultado. Puede haberse impreso: compruébelo antes de reimprimir.",
-                ct);
+                nextRetryAtUtc: null, newAttemptCount: null, ct);
+
             _logger.LogWarning(
                 "JobId={JobId}: timeout de impresión. Marcado PrintedUnknown; requiere decisión manual (no se reenvía para no duplicar).",
                 jobId);
-        }
-        else if (result.IsTransient && job2.AttemptCount < _options.MaxAttempts)
-        {
-            var delaySec = _options.BackoffSeconds[Math.Min(job2.AttemptCount - 1, _options.BackoffSeconds.Length - 1)];
-            job2.Status = PrintJobStatus.RetryScheduled;
-            job2.NextRetryAtUtc = _timeProvider.GetUtcNow().AddSeconds(delaySec);
-            job2.LastErrorCode = result.ErrorCode;
-            job2.LastErrorMessage = result.ErrorMessage;
-            job2.UpdatedAtUtc = _timeProvider.GetUtcNow();
-            _db.PrintJobs.Update(job2);
-            await _db.PrintJobEvents.AddAsync(new PrintJobEvent
-            {
-                JobId = jobId,
-                EventType = "StatusChanged",
-                OldStatus = PrintJobStatus.Printing,
-                NewStatus = PrintJobStatus.RetryScheduled,
-                ErrorCode = result.ErrorCode,
-                Message = result.ErrorMessage,
-                ActorType = "system",
-                OccurredAtUtc = _timeProvider.GetUtcNow()
-            }, ct);
-        }
-        else
-        {
-            var errCode = result.ErrorCode ?? "UNKNOWN";
-            var errMsg = result.ErrorMessage ?? "Error desconocido";
-            _logger.LogWarning("Impresion fallida JobId={JobId} Printer={Printer} Code={Code} Msg={Msg}",
-                jobId, printer.SpoolQueue, errCode, errMsg);
-            await TransitionToErrorFinalAsync(job2, PrintJobStatus.Printing, errCode, errMsg, ct);
+
+            return true;
         }
 
-        await _db.SaveChangesAsync(ct);
-        await tx2.CommitAsync(ct);
+        var attemptCount = job.AttemptCount + 1;
+        if (result.IsTransient && attemptCount < _options.MaxAttempts)
+        {
+            var delaySec = _options.BackoffSeconds[Math.Min(attemptCount - 1, _options.BackoffSeconds.Length - 1)];
+            await TryTransitionAsync(
+                jobId, [PrintJobStatus.Printing], PrintJobStatus.RetryScheduled,
+                result.ErrorCode, result.ErrorMessage,
+                nextRetryAtUtc: _timeProvider.GetUtcNow().AddSeconds(delaySec),
+                newAttemptCount: null, ct);
+
+            return true;
+        }
+
+        var errCode = result.ErrorCode ?? "UNKNOWN";
+        var errMsg = result.ErrorMessage ?? "Error desconocido";
+        _logger.LogWarning("Impresion fallida JobId={JobId} Printer={Printer} Code={Code} Msg={Msg}",
+            jobId, printer.SpoolQueue, errCode, errMsg);
+
+        await TryTransitionAsync(
+            jobId, [PrintJobStatus.Printing], PrintJobStatus.ErrorFinal,
+            errCode, errMsg, nextRetryAtUtc: null, newAttemptCount: null, ct);
+
         return true;
     }
 
-    private async Task RescuePendingJobAsync(Guid jobId, int storeId, string documentType, string channel, byte[] rowVersion, CancellationToken ct)
+    private async Task<bool> RescuePendingJobAsync(
+        Guid jobId, int storeId, string documentType, string channel, CancellationToken ct)
     {
         var resolved = await _routingResolver.ResolvePrinterAsync(storeId, documentType, channel, ct);
 
-        await using var tx = await _db.Database.BeginTransactionAsync(ct);
-
-        // Solo RowVersion para el check de concurrencia; evitar cargar PdfBlob que no se necesita en el rescate.
-        var versionRow = await _db.PrintJobs.AsNoTracking()
-            .Where(j => j.JobId == jobId)
-            .Select(j => new { j.RowVersion })
-            .FirstOrDefaultAsync(ct);
-
-        if (versionRow is null) { await tx.CommitAsync(ct); return; }
-        if (!RowVersionSnapshotStillMatches(versionRow.RowVersion, rowVersion)) { await tx.CommitAsync(ct); return; }
-
-        var now = _timeProvider.GetUtcNow();
-        // Attach + mark-modified: no carga PdfBlob, no lo sobreescribe.
-        var entity = new PrintJob { JobId = jobId };
-        _db.PrintJobs.Attach(entity);
-
         if (resolved is null)
         {
-            entity.Status = PrintJobStatus.ErrorFinal;
-            entity.LastErrorCode = "ROUTE_NOT_FOUND";
-            entity.LastErrorMessage = "No existe regla activa aplicable para este trabajo.";
-            entity.NextRetryAtUtc = null;
-            entity.UpdatedAtUtc = now;
-            _db.Entry(entity).Property(x => x.Status).IsModified = true;
-            _db.Entry(entity).Property(x => x.LastErrorCode).IsModified = true;
-            _db.Entry(entity).Property(x => x.LastErrorMessage).IsModified = true;
-            _db.Entry(entity).Property(x => x.NextRetryAtUtc).IsModified = true;
-            _db.Entry(entity).Property(x => x.UpdatedAtUtc).IsModified = true;
-            await _db.PrintJobEvents.AddAsync(new PrintJobEvent
-            {
-                JobId = jobId,
-                EventType = "StatusChanged",
-                OldStatus = PrintJobStatus.Pending,
-                NewStatus = PrintJobStatus.ErrorFinal,
-                ErrorCode = "ROUTE_NOT_FOUND",
-                Message = "No existe regla activa aplicable para este trabajo.",
-                ActorType = "system",
-                OccurredAtUtc = now
-            }, ct);
+            return await TryTransitionAsync(
+                jobId, [PrintJobStatus.Pending], PrintJobStatus.ErrorFinal,
+                "ROUTE_NOT_FOUND", "No existe regla activa aplicable para este trabajo.",
+                nextRetryAtUtc: null, newAttemptCount: null, ct);
         }
-        else
-        {
-            entity.Status = PrintJobStatus.Routed;
-            entity.PrinterId = resolved;
-            entity.UpdatedAtUtc = now;
-            _db.Entry(entity).Property(x => x.Status).IsModified = true;
-            _db.Entry(entity).Property(x => x.PrinterId).IsModified = true;
-            _db.Entry(entity).Property(x => x.UpdatedAtUtc).IsModified = true;
-            await _db.PrintJobEvents.AddAsync(new PrintJobEvent
-            {
-                JobId = jobId,
-                EventType = "ROUTED",
-                OldStatus = PrintJobStatus.Pending,
-                NewStatus = PrintJobStatus.Routed,
-                ActorType = "system",
-                Message = $"Re-enrutado (rescate de Pending huérfano) a impresora {resolved}.",
-                OccurredAtUtc = now
-            }, ct);
+
+        var routed = await TryTransitionAsync(
+            jobId, [PrintJobStatus.Pending], PrintJobStatus.Routed,
+            errorCode: null, errorMessage: null,
+            nextRetryAtUtc: null, newAttemptCount: null, ct,
+            eventMessage: $"Re-enrutado (rescate de Pending huérfano) a impresora {resolved}.",
+            eventType: "ROUTED",
+            printerId: resolved);
+
+        if (routed)
             _logger.LogInformation("Rescate Pending: job {JobId} enrutado a impresora {PrinterId}.", jobId, resolved);
+
+        return routed;
+    }
+
+    /// <summary>
+    /// Aplica una transición solo si el trabajo sigue en uno de los estados esperados, y registra el
+    /// evento correspondiente. Devuelve <c>true</c> si la fila se modificó.
+    ///
+    /// <para>El estado en el WHERE es lo que da la exclusión mutua entre procesos: la lectura y la
+    /// escritura ocurren en el mismo statement, así que no hay ventana en la que otro Worker pueda
+    /// colarse. Sustituye al antiguo chequeo de <c>RowVersion</c>, que comparaba en memoria un valor
+    /// leído antes y por tanto no excluía nada.</para>
+    /// </summary>
+    private async Task<bool> TryTransitionAsync(
+        Guid jobId,
+        PrintJobStatus[] expectedStatuses,
+        PrintJobStatus newStatus,
+        string? errorCode,
+        string? errorMessage,
+        DateTimeOffset? nextRetryAtUtc,
+        int? newAttemptCount,
+        CancellationToken ct,
+        string? eventMessage = null,
+        string eventType = "StatusChanged",
+        int? printerId = null)
+    {
+        var now = _timeProvider.GetUtcNow();
+
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+
+        // El estado anterior se lee dentro de la transacción solo para el evento; quién puede
+        // escribir lo decide el WHERE del UPDATE, no esta lectura.
+        var oldStatus = await _db.PrintJobs
+            .AsNoTracking()
+            .Where(j => j.JobId == jobId)
+            .Select(j => (PrintJobStatus?)j.Status)
+            .FirstOrDefaultAsync(ct);
+
+        var rows = await ApplyUpdateAsync();
+        if (rows != 1)
+        {
+            await tx.CommitAsync(ct);
+            return false;
         }
+
+        await _db.PrintJobEvents.AddAsync(new PrintJobEvent
+        {
+            JobId = jobId,
+            EventType = eventType,
+            OldStatus = oldStatus,
+            NewStatus = newStatus,
+            ErrorCode = errorCode,
+            Message = eventMessage ?? errorMessage,
+            ActorType = "system",
+            OccurredAtUtc = now
+        }, ct);
 
         await _db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
-    }
+        return true;
 
-    /// <summary>
-    /// Cierra el trabajo en incertidumbre: el sistema no puede afirmar si el documento salió.
-    /// No es un error (el envío pudo completarse) ni un éxito, y por eso no se reintenta solo.
-    /// </summary>
-    private async Task TransitionToPrintedUnknownAsync(PrintJob job, PrintJobStatus oldStatus, string errorCode, string message, CancellationToken ct)
-    {
-        job.Status = PrintJobStatus.PrintedUnknown;
-        job.LastErrorCode = errorCode;
-        job.LastErrorMessage = message;
-        job.NextRetryAtUtc = null;
-        job.UpdatedAtUtc = _timeProvider.GetUtcNow();
-        _db.PrintJobs.Update(job);
-        await _db.PrintJobEvents.AddAsync(new PrintJobEvent
+        // Dos variantes en vez de un setter condicional: EF traduce cada SetProperty a SQL, y meter
+        // ahí un ?? sobre un valor capturado es pedirle una traducción que no necesita existir.
+        Task<int> ApplyUpdateAsync()
         {
-            JobId = job.JobId,
-            EventType = "StatusChanged",
-            OldStatus = oldStatus,
-            NewStatus = PrintJobStatus.PrintedUnknown,
-            ErrorCode = errorCode,
-            Message = message,
-            ActorType = "system",
-            OccurredAtUtc = _timeProvider.GetUtcNow()
-        }, ct);
-    }
+            // Comparaciones escalares y no expectedStatuses.Contains(...): Status se persiste como
+            // texto (HasConversion<string>), y el IN generado a partir de la lista no aplicaba el
+            // conversor — el UPDATE no casaba con ninguna fila y toda transición se perdía en
+            // silencio. Ningún caso necesita más de dos estados esperados.
+            var expected1 = expectedStatuses[0];
+            var expected2 = expectedStatuses.Length > 1 ? expectedStatuses[1] : expected1;
 
-    private async Task TransitionToErrorFinalAsync(PrintJob job, PrintJobStatus oldStatus, string errorCode, string message, CancellationToken ct)
-    {
-        job.Status = PrintJobStatus.ErrorFinal;
-        job.LastErrorCode = errorCode;
-        job.LastErrorMessage = message;
-        job.NextRetryAtUtc = null;
-        job.UpdatedAtUtc = _timeProvider.GetUtcNow();
-        _db.PrintJobs.Update(job);
-        await _db.PrintJobEvents.AddAsync(new PrintJobEvent
-        {
-            JobId = job.JobId,
-            EventType = "StatusChanged",
-            OldStatus = oldStatus,
-            NewStatus = PrintJobStatus.ErrorFinal,
-            ErrorCode = errorCode,
-            Message = message,
-            ActorType = "system",
-            OccurredAtUtc = _timeProvider.GetUtcNow()
-        }, ct);
-    }
+            var query = _db.PrintJobs
+                .Where(j => j.JobId == jobId && (j.Status == expected1 || j.Status == expected2));
 
-    /// <summary>
-    /// El barrido del lote guardó un RowVersion; si la fila cambió desde entonces, no debemos avanzar.
-    /// Con token vacío en ambos lados se acepta (filas legadas antes del primer guardado con versión).
-    /// </summary>
-    private static bool RowVersionSnapshotStillMatches(byte[] currentInDb, byte[] snapshotFromBatch)
-    {
-        var snap = snapshotFromBatch ?? Array.Empty<byte>();
-        var cur = currentInDb ?? Array.Empty<byte>();
-        if (snap.Length == 0)
-            return cur.Length == 0;
+            if (newAttemptCount.HasValue && printerId.HasValue)
+                return query.ExecuteUpdateAsync(s => s
+                    .SetProperty(x => x.Status, newStatus)
+                    .SetProperty(x => x.LastErrorCode, errorCode)
+                    .SetProperty(x => x.LastErrorMessage, errorMessage)
+                    .SetProperty(x => x.NextRetryAtUtc, nextRetryAtUtc)
+                    .SetProperty(x => x.AttemptCount, newAttemptCount.Value)
+                    .SetProperty(x => x.PrinterId, printerId)
+                    .SetProperty(x => x.UpdatedAtUtc, now), ct);
 
-        return cur.AsSpan().SequenceEqual(snap);
+            if (newAttemptCount.HasValue)
+                return query.ExecuteUpdateAsync(s => s
+                    .SetProperty(x => x.Status, newStatus)
+                    .SetProperty(x => x.LastErrorCode, errorCode)
+                    .SetProperty(x => x.LastErrorMessage, errorMessage)
+                    .SetProperty(x => x.NextRetryAtUtc, nextRetryAtUtc)
+                    .SetProperty(x => x.AttemptCount, newAttemptCount.Value)
+                    .SetProperty(x => x.UpdatedAtUtc, now), ct);
+
+            if (printerId.HasValue)
+                return query.ExecuteUpdateAsync(s => s
+                    .SetProperty(x => x.Status, newStatus)
+                    .SetProperty(x => x.LastErrorCode, errorCode)
+                    .SetProperty(x => x.LastErrorMessage, errorMessage)
+                    .SetProperty(x => x.NextRetryAtUtc, nextRetryAtUtc)
+                    .SetProperty(x => x.PrinterId, printerId)
+                    .SetProperty(x => x.UpdatedAtUtc, now), ct);
+
+            return query.ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.Status, newStatus)
+                .SetProperty(x => x.LastErrorCode, errorCode)
+                .SetProperty(x => x.LastErrorMessage, errorMessage)
+                .SetProperty(x => x.NextRetryAtUtc, nextRetryAtUtc)
+                .SetProperty(x => x.UpdatedAtUtc, now), ct);
+        }
     }
 }
