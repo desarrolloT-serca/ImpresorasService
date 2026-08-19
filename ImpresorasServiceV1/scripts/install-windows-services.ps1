@@ -169,17 +169,21 @@ function Ensure-Service([string]$Name, [string]$DisplayName, [string]$ExePath) {
 
     # Reinicio automatico ante caida del proceso.
     #
-    # El 19/08/2026 el Worker murio con AccessViolationException dentro de
-    # Sap.Data.Hana.PInvokeMethods64.HanaCommand_Cancel, al cancelar un comando en vuelo contra
-    # HANA. Una AccessViolation viene del driver nativo y NO se puede capturar con try/catch: se
-    # lleva el proceso entero por delante. Sin acciones de recuperacion configuradas, el servicio
-    # se quedaba caido hasta que alguien lo arrancara a mano -y mientras tanto no se imprime nada-.
+    # El Worker puede morir con AccessViolationException dentro de
+    # Sap.Data.Hana.PInvokeMethods64.HanaCommand_Cancel. Viene del driver nativo de SAP y NO se
+    # puede capturar con try/catch: se lleva el proceso entero. Sin acciones de recuperacion, un
+    # proceso caido se queda caido hasta que alguien lo arranque a mano.
     #
     # Se aplica siempre, no solo al crear: los servicios ya instalados no las tenian.
     # reset=86400 -> el contador de fallos vuelve a cero pasado un dia sin caidas.
     & sc.exe failure $Name reset= 86400 actions= restart/5000/restart/15000/restart/60000 | Out-Null
-    # Que cuente tambien las salidas con codigo de error, no solo los cuelgues del proceso.
-    & sc.exe failureflag $Name 1 | Out-Null
+
+    # SIN failureflag a proposito. Las dos veces observadas (09:15 y 13:38 del 19/08/2026) la
+    # AccessViolation salto dentro de BackgroundService.StopAsync, es decir PARANDO el servicio:
+    # el stoppingToken cancela el comando en vuelo y el driver revienta. Con failureflag=1, esa
+    # muerte sucia durante una parada solicitada se contaria como fallo y el SCM rearrancaria el
+    # servicio a los 5 s — justo despues de que alguien lo pare a proposito. Las acciones por
+    # defecto ya cubren el caso que importa: el proceso que muere sin que nadie se lo pidiera.
 }
 
 Ensure-Service $ApiSvc    "ImpresorasService API"    (Join-Path $ApiDir "ImpresorasService.Api.exe")
