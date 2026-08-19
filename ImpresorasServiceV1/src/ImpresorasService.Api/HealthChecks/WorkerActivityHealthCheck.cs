@@ -26,6 +26,7 @@ public sealed class WorkerActivityHealthCheck : IHealthCheck
     private readonly ImpresorasDbContext _dbContext;
     private readonly TimeProvider _timeProvider;
     private readonly TimeSpan _staleAfter;
+    private readonly bool _connectivityMonitorEnabled;
 
     public WorkerActivityHealthCheck(
         ImpresorasDbContext dbContext, TimeProvider timeProvider, IConfiguration configuration)
@@ -34,11 +35,19 @@ public sealed class WorkerActivityHealthCheck : IHealthCheck
         _timeProvider = timeProvider;
         var minutes = configuration.GetValue<int?>("Worker:ActivityStaleMinutes") ?? 5;
         _staleAfter = TimeSpan.FromMinutes(Math.Max(1, minutes));
+        _connectivityMonitorEnabled = configuration.GetValue<bool?>("PrinterConnectivity:Enabled") ?? true;
     }
 
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context, CancellationToken cancellationToken = default)
     {
+        // Toda la senal de este check es la huella del monitor de conectividad. Si el monitor esta
+        // apagado la huella no se refresca nunca, y sin esta salida el check acusaria al lock de un
+        // Worker perfectamente sano - para siempre y con el mensaje equivocado.
+        if (!_connectivityMonitorEnabled)
+            return HealthCheckResult.Healthy(
+                "PrinterConnectivity:Enabled=false: sin sondeo periodico no hay huella con la que vigilar al Worker.");
+
         var activeOnly = true;
 
         // MIN ignora los NULL en SQL: una impresora recién dada de alta y aún no sondeada no

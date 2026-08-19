@@ -58,7 +58,28 @@ public sealed class WorkerActivityHealthCheckTests
         Assert.Equal(HealthStatus.Healthy, result.Status);
     }
 
+    /// <summary>
+    /// El check no tiene mas señal que la huella del monitor de conectividad: con el monitor
+    /// apagado esa huella no se refresca nunca y, sin esta salida, acusaba al lock de un Worker
+    /// sano para siempre.
+    /// </summary>
+    [Fact]
+    public async Task Healthy_WhenConnectivityMonitorIsDisabled()
+    {
+        var result = await RunCheckAsync(
+            connectivityMonitorEnabled: false,
+            printers: (isActive: true, ageFromNow: TimeSpan.FromHours(-3)));
+
+        Assert.Equal(HealthStatus.Healthy, result.Status);
+        Assert.Contains("PrinterConnectivity:Enabled=false", result.Description);
+    }
+
     private static async Task<HealthCheckResult> RunCheckAsync(
+        params (bool isActive, TimeSpan? ageFromNow)[] printers)
+        => await RunCheckAsync(true, printers);
+
+    private static async Task<HealthCheckResult> RunCheckAsync(
+        bool connectivityMonitorEnabled,
         params (bool isActive, TimeSpan? ageFromNow)[] printers)
     {
         using var setup = SqliteTestDbHelper.CreateOpenSqliteInMemory();
@@ -85,8 +106,14 @@ public sealed class WorkerActivityHealthCheckTests
 
         await db.SaveChangesAsync();
 
-        var check = new WorkerActivityHealthCheck(
-            db, TimeProvider.System, new ConfigurationBuilder().Build());
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["PrinterConnectivity:Enabled"] = connectivityMonitorEnabled ? "true" : "false"
+            })
+            .Build();
+
+        var check = new WorkerActivityHealthCheck(db, TimeProvider.System, configuration);
 
         return await check.CheckHealthAsync(new HealthCheckContext(), CancellationToken.None);
     }
