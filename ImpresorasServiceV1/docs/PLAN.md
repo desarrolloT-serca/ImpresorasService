@@ -36,19 +36,15 @@ Cinco bloques. **B0 desbloquea a los demás y no es código.** Dentro de cada bl
 
 | # | Acción | Desbloquea |
 |---|---|---|
-| B0.1 | Aplicar `scripts/sql/migrate_pdf_blob_nullable.sql` en HANA (**dos** `ALTER`: `printer_print_job` y `printer_source_print_job`) | La retención entera. El código está listo desde el 19/08; sin este DDL no libera nada, `pdf_blob` es `BLOB NOT NULL` y el barrido solo deja un warning |
+| ~~B0.1~~ | ~~`migrate_pdf_blob_nullable.sql`~~ | ✅ **Aplicado el 19/08/2026.** `pdf_blob` es nullable en las dos tablas; la retención de 90 días ya puede liberar |
 | B0.2 | Ejecutar `scripts/extraer-ddl-hana.ps1` contra HANA y commitear el resultado | Confirma las `PRIMARY KEY` (hoy reconstruidas desde `_inventario.sql`, no desde una ejecución real) y añade `printer_worker_lock`, creado después de la extracción del 12/08 |
 | B0.3 | **Gate I-1**: comprobar contra una impresora real del parque si responde `Get-Job-Attributes` por IPP | B3. Sin este dato, la confirmación por trabajo no se puede ni planificar |
-| B0.4 | Aplicar `scripts/sql/migrate_user_revocation.sql` en HANA | La revocación de acceso (B2.2). Sin las columnas, la Api falla al consultar `printer_user`. Ambas llevan `DEFAULT`, así que aplicarlo no cierra ninguna sesión abierta |
+| ~~B0.4~~ | ~~`migrate_user_revocation.sql`~~ | ✅ **Aplicado el 19/08/2026.** `is_active` y `token_version` existen; los 3 usuarios quedaron activos y en versión 0, sin cerrar ninguna sesión. **`main` vuelve a ser desplegable** |
 
-> **B0.1 y B0.4 necesitan al DBA.** Intentados el 19/08/2026 con la conexión del servicio:
-> los cuatro `ALTER` fallan con **error 258 (insufficient privilege)**. `IMPRESION` tiene
-> SELECT/INSERT/UPDATE/DELETE/INDEX tabla a tabla sobre `ZTEST_VICENTE_2`, pero ningún `ALTER` —
-> mismo muro que con `printer_worker_lock` en H-14. Nada quedó aplicado a medias (verificado).
-> O los ejecuta el dueño del esquema, o hace falta `GRANT ALTER` sobre las tres tablas.
->
-> **B0.4 es bloqueante para desplegar.** Sin `is_active` y `token_version`, la Api falla al
-> consultar `printer_user` y el login deja de funcionar: el DDL va antes que el binario.
+> **Los cuatro `ALTER` quedaron aplicados el 19/08/2026** y verificados contra HANA. Nota para la
+> próxima vez: `IMPRESION` no puede hacer `ALTER` (error 258, mismo muro que en H-14), así que
+> todo DDL lo ejecuta el dueño del esquema. Y el `DEFAULT` de un `BOOLEAN` se declara `TRUE`,
+> no `1` — el catálogo devuelve luego `default=[1]`, que despista al leerlo.
 
 > B0.3 es una prueba de media hora con una impresora y `curl`. Es la que más decisiones destraba.
 
