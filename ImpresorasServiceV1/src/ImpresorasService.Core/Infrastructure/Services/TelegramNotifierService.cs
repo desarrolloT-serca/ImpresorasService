@@ -28,12 +28,12 @@ internal sealed class TelegramNotifierService : ITelegramNotifier, IDisposable
         _http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
     }
 
-    public async Task SendAlertAsync(string message, CancellationToken ct, int? storeId = null)
+    public async Task<bool> SendAlertAsync(string message, CancellationToken ct, int? storeId = null)
     {
         if (!_options.Value.Enabled || string.IsNullOrWhiteSpace(_options.Value.BotToken))
         {
             _logger.LogDebug("Telegram desactivado o sin token. Mensaje omitido.");
-            return;
+            return false;
         }
 
         await using var scope = _scopeFactory.CreateAsyncScope();
@@ -48,10 +48,12 @@ internal sealed class TelegramNotifierService : ITelegramNotifier, IDisposable
         if (chatIds.Count == 0)
         {
             _logger.LogDebug("No hay chats de Telegram activos registrados.");
-            return;
+            return false;
         }
 
         var url = $"https://api.telegram.org/bot{_options.Value.BotToken}/sendMessage";
+
+        var delivered = 0;
 
         foreach (var chatId in chatIds)
         {
@@ -67,7 +69,11 @@ internal sealed class TelegramNotifierService : ITelegramNotifier, IDisposable
                 var response = await _http.PostAsync(url,
                     new StringContent(payload, Encoding.UTF8, "application/json"), ct);
 
-                if (!response.IsSuccessStatusCode)
+                if (response.IsSuccessStatusCode)
+                {
+                    delivered++;
+                }
+                else
                 {
                     var body = await response.Content.ReadAsStringAsync(ct);
                     _logger.LogWarning("Telegram rechazó mensaje a chat {ChatId}: {Status} — {Body}",
@@ -79,6 +85,8 @@ internal sealed class TelegramNotifierService : ITelegramNotifier, IDisposable
                 _logger.LogWarning(ex, "Error enviando alerta Telegram a chat {ChatId}.", chatId);
             }
         }
+
+        return delivered > 0;
     }
 
     public void Dispose() => _http.Dispose();

@@ -242,9 +242,17 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
                 alertState.NotifiedAtUtc = now;
                 await db.SaveChangesAsync(ct);
 
-                await _telegram.SendAlertAsync(message, ct, store.StoreId);
-                _logger.LogInformation("Alerta Telegram enviada para tienda {StoreId} ({Name}): {Health}.",
-                    store.StoreId, store.Name, health);
+                var delivered = await _telegram.SendAlertAsync(message, ct, store.StoreId);
+                if (delivered)
+                    _logger.LogInformation("Alerta Telegram enviada para tienda {StoreId} ({Name}): {Health}.",
+                        store.StoreId, store.Name, health);
+                else
+                    // El estado notificado YA se persistió arriba, así que esta alerta no se reemite:
+                    // este warning es el único rastro de que la tienda cambió de salud y nadie se enteró.
+                    _logger.LogWarning(
+                        "Alerta Telegram NO entregada para tienda {StoreId} ({Name}): {Health}. Ningún chat la aceptó " +
+                        "(sin chats activos o todos los envíos fallaron); el cambio de salud queda sin notificar.",
+                        store.StoreId, store.Name, health);
             }
         }
 
