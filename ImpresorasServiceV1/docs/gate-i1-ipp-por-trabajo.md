@@ -45,6 +45,30 @@ terminados.
 
 ---
 
+### 4. Y la puntilla: **ninguna acepta PDF**
+
+| Impresora | `document-format-supported` |
+|---|---|
+| Brother MFC-L2730DW | `application/octet-stream`, `image/urf`, `image/pwg-raster` |
+| HP LaserJet Pro M26nw | `image/urf`, `application/PCLm`, `application/octet-stream`, `image/jpeg` |
+
+`image/urf`, `image/pwg-raster` y `application/PCLm` son formatos **raster** (AirPrint / IPP
+Everywhere): la impresora espera recibir el documento ya convertido a píxeles. Ninguna declara
+`application/pdf`.
+
+**Esto reencuadra el problema.** SumatraPDF no está en el sistema por el transporte, sino por el
+**renderizado**: convierte el PDF a lo que el driver de Windows sabe mandarle a cada impresora.
+Cambiar el transporte a IPP no elimina esa necesidad — la deja al descubierto.
+
+Si se enviara por IPP habría que mandar en un formato aceptado:
+
+- **Raster** (`urf`/`pwg-raster`/`PCLm`): habría que rasterizar nosotros. Eso no quita la
+  dependencia de SumatraPDF, la sustituye por una pieza propia menos madura que hace lo mismo.
+- **`application/octet-stream`**: es la puerta trasera — mandar el PDF crudo y confiar en que la
+  impresora lo autodetecte. Funciona en muchos modelos actuales, pero **no está declarado**, así
+  que es una apuesta por impresora, no una garantía. **Sin verificar**: comprobarlo exige
+  imprimir un documento real.
+
 ## Qué significa para la Fase 3.4
 
 **La confirmación por trabajo, tal como estaba planteada, no es viable con la arquitectura de envío
@@ -62,15 +86,18 @@ impresora estaba libre cuando se miró, no que este documento salió. Barato, ho
 ### B. Imprimir por IPP en vez de por SumatraPDF
 
 Ambas impresoras con IPP soportan `Print-Job` (0x02), que **devuelve el `job-id` en la respuesta**.
-Con él, `Get-Job-Attributes` da confirmación real por documento.
+Con él, `Get-Job-Attributes` da confirmación real por documento. Pero:
 
-- Elimina de paso la dependencia de SumatraPDF y del spooler de Windows.
-- Pero solo aplica al **25 %** del parque: el resto seguiría igual, con lo cual habría que hacer
-  igualmente lo de (A) para las demás.
-- Es un cambio grande en el camino crítico de impresión, el que hoy funciona.
+- **No quita SumatraPDF** (ver §4): ninguna acepta PDF, así que seguiría haciendo falta
+  rasterizar. Solo funcionaría apostando por `application/octet-stream`, sin garantía declarada.
+- Solo aplica al **25 %** del parque. El resto seguiría igual, así que habría que hacer (A) de
+  todos modos.
+- Añade un **segundo camino crítico** de impresión: dos formas de enviar, dos formas de fallar,
+  sobre lo único del sistema que hoy funciona de punta a punta.
 
-**Recomendación: hacer (A) ya, y considerar (B) solo si aparece un requisito de negocio que exija
-prueba por documento.** Hacer (B) sin (A) deja el 75 % del parque mintiendo igual.
+**Recomendación: hacer (A) ya. (B) solo con un requisito de negocio que exija prueba por**
+**documento, y aun así acotado a una impresora y midiendo.** Hacer (B) sin (A) deja al 75 % del
+parque afirmando lo mismo que hoy, y añade complejidad al camino que sostiene el producto.
 
 ---
 
