@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Text;
 using System.Threading.RateLimiting;
+using ImpresorasService.Api.HealthChecks;
 using ImpresorasService.Api.Security;
 using ImpresorasService.Application;
 using ImpresorasService.Infrastructure;
@@ -159,7 +160,9 @@ builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
 builder.Services.AddHealthChecks()
-    .AddDbContextCheck<ImpresorasDbContext>("database", tags: ["ready"]);
+    .AddDbContextCheck<ImpresorasDbContext>("database", tags: ["ready"])
+    // Sin tag "ready" a propósito: un Worker parado no debe sacar a la Api del balanceador.
+    .AddCheck<WorkerActivityHealthCheck>(WorkerActivityHealthCheck.Name);
 
 if (!builder.Environment.IsEnvironment("Testing"))
 {

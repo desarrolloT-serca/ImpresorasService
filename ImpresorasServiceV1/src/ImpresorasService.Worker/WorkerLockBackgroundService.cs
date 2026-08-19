@@ -11,6 +11,24 @@ namespace ImpresorasService.Worker;
 /// </summary>
 public sealed class WorkerLockBackgroundService : BackgroundService
 {
+    /// <summary>Ciclos consecutivos sin lock tras los que el fallo pasa de Warning a Error.</summary>
+    private const int CyclesBeforeEscalating = 6;
+
+    /// <summary>Cada cuántos ciclos se repite el Error mientras siga sin lock (evita inundar el log).</summary>
+    private const int EscalatedRepeatEveryCycles = 60;
+
+    /// <summary>
+    /// Un Warning por ciclo se pierde: el 17/08/2026 el Worker estuvo horas sin procesar nada
+    /// (ingesta, impresión, conectividad y alertas paradas) mientras el servicio figuraba en
+    /// Running y /health respondía ok, porque el fallo del lock solo dejaba un Warning cada 10s.
+    /// A partir de <see cref="CyclesBeforeEscalating"/> ciclos se escala a Error —nivel que la
+    /// monitorización sí recoge— y luego se repite espaciado.
+    /// </summary>
+    internal static bool ShouldEscalate(int consecutiveFailures)
+        => consecutiveFailures == CyclesBeforeEscalating
+           || (consecutiveFailures > CyclesBeforeEscalating
+               && consecutiveFailures % EscalatedRepeatEveryCycles == 0);
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly WorkerLockState _state;
     private readonly IOptions<WorkerLockOptions> _options;
@@ -41,6 +59,8 @@ public sealed class WorkerLockBackgroundService : BackgroundService
             _logger.LogWarning(
                 "Worker lock: HeartbeatIntervalSeconds ({Heartbeat}s) >= LeaseSeconds ({Lease}s). El holder quedará inactivo entre renovaciones; use un heartbeat claramente menor que el lease.",
                 heartbeatSeconds, leaseSeconds);
+
+        var consecutiveFailures = 0;
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -74,6 +94,22 @@ public sealed class WorkerLockBackgroundService : BackgroundService
                     _logger.LogWarning("Worker lock: instancia {InstanceId} ADQUIRIÓ el lock — pasa a procesar.", WorkerLockState.InstanceId);
                 else
                     _logger.LogWarning("Worker lock: instancia {InstanceId} PERDIÓ/NO OBTUVO el lock — deja de procesar.", WorkerLockState.InstanceId);
+            }
+
+            if (acquired)
+            {
+                consecutiveFailures = 0;
+            }
+            else
+            {
+                consecutiveFailures++;
+                if (ShouldEscalate(consecutiveFailures))
+                    _logger.LogError(
+                        "Worker lock: {Seconds}s sin lock ({Cycles} ciclos seguidos). El Worker NO esta procesando NADA " +
+                        "(ingesta, impresion, conectividad y alertas parados) aunque el servicio figure en ejecucion. " +
+                        "Revisa los privilegios de la conexion sobre printer_worker_lock, o pon WorkerLock:Enabled=false " +
+                        "si esta instalacion es de instancia unica.",
+                        consecutiveFailures * heartbeatSeconds, consecutiveFailures);
             }
 
             _state.SetHolder(acquired, leaseSeconds);
