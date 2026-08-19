@@ -289,7 +289,9 @@ public sealed class PrintExecutionService : IPrintExecutionService
         }
         catch (OperationCanceledException)
         {
-            result = new PrintSpoolResult(false, "NET_TIMEOUT", "Timeout de impresión", true);
+            // NO transitorio: ver la nota de WindowsPrintSpooler. El envío estaba en curso cuando
+            // venció el plazo, así que no sabemos si salió el papel.
+            result = new PrintSpoolResult(false, "NET_TIMEOUT", "Timeout de impresión", false);
         }
         catch (Exception ex)
         {
@@ -321,6 +323,21 @@ public sealed class PrintExecutionService : IPrintExecutionService
                 Message = "Spooler aceptó el trabajo",
                 OccurredAtUtc = _timeProvider.GetUtcNow()
             }, ct);
+        }
+        else if (result.ErrorCode == "NET_TIMEOUT")
+        {
+            // El envío se cortó a medias: pudo haber llegado a la cola de Windows. Ni error (afirmaría
+            // que no se imprimió) ni reintento (duplicaría). Mismo tratamiento que el Printing stale:
+            // se marca la incertidumbre y decide un operador desde la cola.
+            await TransitionToPrintedUnknownAsync(
+                job2,
+                PrintJobStatus.Printing,
+                result.ErrorCode,
+                "El envío a la impresora se agotó de tiempo sin conocerse el resultado. Puede haberse impreso: compruébelo antes de reimprimir.",
+                ct);
+            _logger.LogWarning(
+                "JobId={JobId}: timeout de impresión. Marcado PrintedUnknown; requiere decisión manual (no se reenvía para no duplicar).",
+                jobId);
         }
         else if (result.IsTransient && job2.AttemptCount < _options.MaxAttempts)
         {

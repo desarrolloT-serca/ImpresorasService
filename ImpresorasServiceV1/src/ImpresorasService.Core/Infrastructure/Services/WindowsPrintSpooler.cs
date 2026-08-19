@@ -147,7 +147,12 @@ public sealed class WindowsPrintSpooler : IPrinterSpooler
         }
         catch (OperationCanceledException)
         {
-            return new PrintSpoolResult(false, "NET_TIMEOUT", "Timeout de impresión", true);
+            // NO transitorio a propósito. Aquí el proceso de impresión YA estaba arrancado (venimos
+            // de después de Process.Start), así que el documento pudo entrar en la cola de Windows
+            // antes de que lo matáramos. Reintentar sacaría un segundo papel cada vez que el envío
+            // anterior sí había prosperado — el mismo motivo por el que un Printing stale tampoco se
+            // reenvía. El caller lo cierra como PrintedUnknown y lo resuelve un operador.
+            return new PrintSpoolResult(false, "NET_TIMEOUT", "Timeout de impresión", false);
         }
         catch (Exception ex)
         {

@@ -257,6 +257,86 @@ public sealed class PrintExecutionServiceFlowTests
         Assert.Equal("permanent", jobAfter.LastErrorMessage);
     }
 
+    /// <summary>
+    /// Un timeout llega con el proceso de impresión ya arrancado: el documento pudo entrar en la
+    /// cola de Windows. Ni reintento (duplicaría el papel) ni ErrorFinal (afirmaría que no salió);
+    /// se cierra en incertidumbre y lo resuelve un operador, igual que un Printing stale.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteBatchAsync_WhenSpoolerTimesOut_TransitionsToPrintedUnknownWithoutRetry()
+    {
+        using var setup = SqliteTestDbHelper.CreateOpenSqliteInMemory();
+        var db = setup.Db;
+
+        var printer = new Printer
+        {
+            PrinterId = 10,
+            PrinterName = "P1",
+            SpoolQueue = @"\\srv\q1",
+            StoreId = 1,
+            IsActive = true,
+            CreatedAtUtc = DateTimeOffset.UtcNow,
+            UpdatedAtUtc = DateTimeOffset.UtcNow
+        };
+        db.Printers.Add(printer);
+
+        var now = DateTimeOffset.UtcNow;
+        var job = new PrintJob
+        {
+            JobId = Guid.NewGuid(),
+            SourceSystem = "TEST",
+            ExternalJobId = "EXT-TIMEOUT",
+            StoreId = 1,
+            DocumentType = "FACTURA",
+            Channel = "DEFAULT",
+            PdfBlob = MinimalPdf.Bytes,
+            PdfSha256 = "pdf-sha",
+            Status = PrintJobStatus.Routed,
+            PrinterId = printer.PrinterId,
+            AttemptCount = 0,
+            CorrelationId = Guid.NewGuid(),
+            CreatedAtUtc = now,
+            UpdatedAtUtc = now,
+            RowVersion = Array.Empty<byte>()
+        };
+        db.PrintJobs.Add(job);
+        await db.SaveChangesAsync();
+
+        var spooler = new FakeSpooler((_, __, ___) =>
+            Task.FromResult(new PrintSpoolResult(
+                Success: false,
+                ErrorCode: "NET_TIMEOUT",
+                ErrorMessage: "Timeout de impresión",
+                IsTransient: false)));
+
+        var options = Options.Create(new PrintExecutionOptions
+        {
+            TimeoutSeconds = 1,
+            MaxAttempts = 4,
+            BackoffSeconds = [1, 2, 3, 4],
+            PrintSettings = "fit"
+        });
+
+        var service = new PrintExecutionService(
+            db,
+            spooler,
+            NullLogger<PrintExecutionService>.Instance,
+            options,
+            new DummyRoutingResolver(),
+            TimeProvider.System);
+
+        var processed = await service.ExecuteBatchAsync(batchSize: 1, CancellationToken.None);
+        Assert.Equal(1, processed);
+
+        var jobAfter = await db.PrintJobs.FirstAsync(j => j.JobId == job.JobId);
+        Assert.Equal(PrintJobStatus.PrintedUnknown, jobAfter.Status);
+        Assert.Null(jobAfter.NextRetryAtUtc);
+        Assert.Equal("NET_TIMEOUT", jobAfter.LastErrorCode);
+
+        // Un solo envío al spooler: la clave es que NO se reintentó.
+        Assert.Equal(1, spooler.CallCount);
+    }
+
     [Fact]
     public async Task ExecuteBatchAsync_WhenPrinterIsInactive_TransitionsToErrorFinalWithPrinterInvalid()
     {
