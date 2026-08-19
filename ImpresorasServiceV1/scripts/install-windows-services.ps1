@@ -70,7 +70,18 @@ function Get-ServiceEnvVar([string]$ServiceName, [string]$VarName) {
 
 function Set-ServiceEnv([string]$ServiceName, [hashtable]$Vars) {
     $regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName"
-    $lines = $Vars.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }
+
+    # Merge, no reemplazo. Antes se reescribia el valor entero desde $Vars, asi que cualquier
+    # variable puesta a mano fuera de este script desaparecia en el siguiente despliegue y el
+    # servicio volvia en silencio al estado anterior (17/08/2026: se perdieron WorkerLock__Enabled
+    # y Telegram__Enabled al republicar, y el Worker quedo otra vez inerte).
+    $existing = @()
+    $prop = Get-ItemProperty -Path $regPath -Name Environment -ErrorAction SilentlyContinue
+    if ($prop) { $existing = @($prop.Environment) }
+
+    $kept = @($existing | Where-Object { -not $Vars.ContainsKey((($_ -split '=', 2)[0])) })
+    $lines = $kept + @($Vars.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" })
+
     New-ItemProperty -Path $regPath -Name Environment -PropertyType MultiString -Value $lines -Force | Out-Null
 }
 
