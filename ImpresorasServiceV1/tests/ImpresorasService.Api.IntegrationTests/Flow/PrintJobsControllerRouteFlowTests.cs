@@ -106,6 +106,9 @@ public sealed class PrintJobsControllerRouteFlowTests
         Assert.Equal("Routed", GetAnonProp<string>(ok.Value!, "status"));
         Assert.Equal(printer.PrinterId, GetAnonProp<int>(ok.Value!, "printerId"));
 
+        // Las escrituras van por ExecuteUpdate, que no refresca lo ya seguido por este contexto:
+        // sin soltarlo, la relectura devolveria la copia en memoria de antes del UPDATE.
+        db.ChangeTracker.Clear();
         var jobAfter = await db.PrintJobs.FirstAsync(j => j.JobId == jobId);
         Assert.Equal(PrintJobStatus.Routed, jobAfter.Status);
         Assert.Equal(printer.PrinterId, jobAfter.PrinterId);
@@ -183,6 +186,9 @@ public sealed class PrintJobsControllerRouteFlowTests
         Assert.Equal(RoutingService.RouteNotFoundCode, GetAnonProp<string?>(ok.Value!, "errorCode"));
 
         // Assert persistence
+        // Las escrituras van por ExecuteUpdate, que no refresca lo ya seguido por este contexto:
+        // sin soltarlo, la relectura devolveria la copia en memoria de antes del UPDATE.
+        db.ChangeTracker.Clear();
         var jobAfter = await db.PrintJobs.FirstAsync(j => j.JobId == jobId);
         Assert.Equal(PrintJobStatus.ErrorFinal, jobAfter.Status);
         Assert.Null(jobAfter.PrinterId);

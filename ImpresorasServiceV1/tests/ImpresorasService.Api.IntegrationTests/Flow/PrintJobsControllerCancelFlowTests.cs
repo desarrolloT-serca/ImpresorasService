@@ -79,6 +79,9 @@ public sealed class PrintJobsControllerCancelFlowTests
 
         // Assert
         var ok = Assert.IsType<OkObjectResult>(result);
+        // Las escrituras van por ExecuteUpdate, que no refresca lo ya seguido por este contexto:
+        // sin soltarlo, la relectura devolveria la copia en memoria de antes del UPDATE.
+        db.ChangeTracker.Clear();
         var jobAfter = await db.PrintJobs.FirstAsync(j => j.JobId == jobId);
         Assert.Equal(PrintJobStatus.Cancelled, jobAfter.Status);
         Assert.Null(jobAfter.NextRetryAtUtc);
@@ -140,6 +143,9 @@ public sealed class PrintJobsControllerCancelFlowTests
         var bad = Assert.IsType<BadRequestObjectResult>(result);
         Assert.NotNull(bad.Value);
 
+        // Las escrituras van por ExecuteUpdate, que no refresca lo ya seguido por este contexto:
+        // sin soltarlo, la relectura devolveria la copia en memoria de antes del UPDATE.
+        db.ChangeTracker.Clear();
         var jobAfter = await db.PrintJobs.FirstAsync(j => j.JobId == jobId);
         Assert.Equal(PrintJobStatus.Printing, jobAfter.Status);
     }
@@ -188,6 +194,9 @@ public sealed class PrintJobsControllerCancelFlowTests
         var result = await controller.Cancel(jobId, CancellationToken.None);
         Assert.IsType<OkObjectResult>(result);
 
+        // Las escrituras van por ExecuteUpdate, que no refresca lo ya seguido por este contexto:
+        // sin soltarlo, la relectura devolveria la copia en memoria de antes del UPDATE.
+        db.ChangeTracker.Clear();
         var jobAfter = await db.PrintJobs.FirstAsync(j => j.JobId == jobId);
         Assert.Equal(PrintJobStatus.Cancelled, jobAfter.Status);
 
@@ -290,6 +299,9 @@ public sealed class PrintJobsControllerCancelFlowTests
 
         // Assert
         Assert.IsType<OkObjectResult>(result);
+        // Las escrituras van por ExecuteUpdate, que no refresca lo ya seguido por este contexto:
+        // sin soltarlo, la relectura devolveria la copia en memoria de antes del UPDATE.
+        db.ChangeTracker.Clear();
         var jobAfter = await db.PrintJobs.FirstAsync(j => j.JobId == jobId);
         Assert.Equal(PrintJobStatus.Cancelled, jobAfter.Status);
 
@@ -348,6 +360,9 @@ public sealed class PrintJobsControllerCancelFlowTests
         var result = await controller.Cancel(jobId, CancellationToken.None);
         Assert.IsType<BadRequestObjectResult>(result);
 
+        // Las escrituras van por ExecuteUpdate, que no refresca lo ya seguido por este contexto:
+        // sin soltarlo, la relectura devolveria la copia en memoria de antes del UPDATE.
+        db.ChangeTracker.Clear();
         var jobAfter = await db.PrintJobs.FirstAsync(j => j.JobId == jobId);
         Assert.Equal(PrintJobStatus.SpoolAccepted, jobAfter.Status);
     }

@@ -93,6 +93,9 @@ public sealed class RoutingServiceFlowTests
         Assert.True(result.Success);
         Assert.Equal(10, result.PrinterId);
 
+        // Las escrituras van por ExecuteUpdate, que no refresca lo ya seguido por este contexto:
+        // sin soltarlo, la relectura devolveria la copia en memoria de antes del UPDATE.
+        db.ChangeTracker.Clear();
         var jobAfter = await db.PrintJobs.FirstAsync(j => j.JobId == jobId);
         Assert.Equal(PrintJobStatus.Routed, jobAfter.Status);
         Assert.Equal(10, jobAfter.PrinterId);
@@ -257,6 +260,9 @@ public sealed class RoutingServiceFlowTests
         Assert.Null(result.PrinterId);
         Assert.Equal(RoutingService.RouteNotFoundCode, result.ErrorCode);
 
+        // Las escrituras van por ExecuteUpdate, que no refresca lo ya seguido por este contexto:
+        // sin soltarlo, la relectura devolveria la copia en memoria de antes del UPDATE.
+        db.ChangeTracker.Clear();
         var jobAfter = await db.PrintJobs.FirstAsync(j => j.JobId == jobId);
         Assert.Equal(PrintJobStatus.ErrorFinal, jobAfter.Status);
         Assert.Null(jobAfter.PrinterId);
@@ -309,6 +315,9 @@ public sealed class RoutingServiceFlowTests
         var service = new RoutingService(db, resolver);
 
         // Pending is allowed by contract; use a disallowed status instead.
+        // Las escrituras van por ExecuteUpdate, que no refresca lo ya seguido por este contexto:
+        // sin soltarlo, la relectura devolveria la copia en memoria de antes del UPDATE.
+        db.ChangeTracker.Clear();
         var job = await db.PrintJobs.FirstAsync(j => j.JobId == jobId);
         job.Status = PrintJobStatus.SpoolAccepted;
         await db.SaveChangesAsync();

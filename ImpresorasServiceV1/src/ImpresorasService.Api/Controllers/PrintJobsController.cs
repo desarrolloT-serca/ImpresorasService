@@ -148,6 +148,12 @@ public class PrintJobsController : ControllerBase
                 return Ok(new { status = "Routed", printerId = result.PrinterId });
             return Ok(new { status = "ErrorFinal", errorCode = result.ErrorCode });
         }
+        catch (PrintJobStateConflictException ex)
+        {
+            // El Worker lo reclamo mientras se preparaba el reintento. No es una peticion mal
+            // formada: releyendo el estado puede volver a intentarse, y por eso es 409 y no 400.
+            return Conflict(new { error = ex.Message });
+        }
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { error = ex.Message });
@@ -162,7 +168,14 @@ public class PrintJobsController : ControllerBase
     [Authorize(Policy = "StoreManagerOrAdmin")]
     public async Task<IActionResult> Cancel(Guid id, CancellationToken cancellationToken)
     {
-        var job = await _dbContext.PrintJobs.FirstOrDefaultAsync(j => j.JobId == id, cancellationToken);
+        // Proyeccion sin seguimiento: no hace falta cargar el PdfBlob para cancelar, y la
+        // escritura va por UPDATE condicional, no por el ChangeTracker.
+        var job = await _dbContext.PrintJobs
+            .AsNoTracking()
+            .Where(j => j.JobId == id)
+            .Select(j => new { j.StoreId, j.Status })
+            .FirstOrDefaultAsync(cancellationToken);
+
         if (job is null)
             return NotFound();
 
@@ -196,13 +209,28 @@ public class PrintJobsController : ControllerBase
 
         var now = _timeProvider.GetUtcNow();
         var oldStatus = job.Status;
-        job.Status = PrintJobStatus.Cancelled;
-        job.NextRetryAtUtc = null;
-        job.UpdatedAtUtc = now;
+
+        // Fase 2.5: el estado leido va en el WHERE. Si el Worker reclamo el trabajo entre la
+        // lectura y esta escritura, esto afecta a 0 filas y respondemos conflicto — antes se
+        // devolvia "Cancelled" mientras el papel salia igual por la impresora.
+        var cancelled = await _dbContext.PrintJobs
+            .Where(j => j.JobId == id && j.Status == oldStatus)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.Status, PrintJobStatus.Cancelled)
+                .SetProperty(x => x.NextRetryAtUtc, (DateTimeOffset?)null)
+                .SetProperty(x => x.UpdatedAtUtc, now), cancellationToken);
+
+        if (cancelled != 1)
+        {
+            return Conflict(new
+            {
+                error = $"El job {id} cambio de estado mientras se cancelaba; vuelva a consultarlo antes de reintentar."
+            });
+        }
 
         _dbContext.PrintJobEvents.Add(new PrintJobEvent
         {
-            JobId = job.JobId,
+            JobId = id,
             EventType = "CANCELLED_BY_USER",
             OldStatus = oldStatus,
             NewStatus = PrintJobStatus.Cancelled,

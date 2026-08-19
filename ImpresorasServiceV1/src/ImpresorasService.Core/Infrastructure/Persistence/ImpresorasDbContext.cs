@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Globalization;
 using ImpresorasService.Domain;
 using ImpresorasService.Domain.Entities;
@@ -95,14 +94,12 @@ public class ImpresorasDbContext : DbContext
 
     public override int SaveChanges()
     {
-        BumpPrintJobRowVersionsForConcurrency();
         DetectDuplicatePrintJobEvents();
         return base.SaveChanges();
     }
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        BumpPrintJobRowVersionsForConcurrency();
         await DetectDuplicatePrintJobEventsAsync(cancellationToken);
         return await base.SaveChangesAsync(cancellationToken);
     }
@@ -169,33 +166,6 @@ public class ImpresorasDbContext : DbContext
         "jobId={JobId} oldStatus={OldStatus} newStatus={NewStatus} occurredAtUtc={OccurredAtUtc}.",
         DuplicateEventDetectionWindow.TotalSeconds, e.JobId, e.OldStatus, e.NewStatus, e.OccurredAtUtc);
 
-    /// <summary>
-    /// Asigna un nuevo token de concurrencia en cada alta o modificación de PrintJob para que el UPDATE
-    /// incluya WHERE RowVersion = @anterior (optimistic locking real frente a múltiples workers).
-    /// </summary>
-    private void BumpPrintJobRowVersionsForConcurrency()
-    {
-        foreach (var entry in ChangeTracker.Entries<PrintJob>())
-        {
-            if (entry.State == EntityState.Added)
-            {
-                if (entry.Entity.RowVersion is null || entry.Entity.RowVersion.Length == 0)
-                    entry.Entity.RowVersion = CreateRowVersionBytes();
-            }
-            else if (entry.State == EntityState.Modified)
-            {
-                entry.Entity.RowVersion = CreateRowVersionBytes();
-            }
-        }
-    }
-
-    private static byte[] CreateRowVersionBytes()
-    {
-        var bytes = new byte[8];
-        RandomNumberGenerator.Fill(bytes);
-        return bytes;
-    }
-
     public DbSet<PrintJob> PrintJobs => Set<PrintJob>();
     public DbSet<PrintJobEvent> PrintJobEvents => Set<PrintJobEvent>();
     public DbSet<SourcePrintJobRecord> SourcePrintJobs => Set<SourcePrintJobRecord>();
@@ -234,6 +204,11 @@ public class ImpresorasDbContext : DbContext
             entity.Property(x => x.CorrelationId).HasConversion(GuidToBytesConverter);
             entity.Property(x => x.CreatedAtUtc).HasColumnName("created_at_utc");
             entity.Property(x => x.UpdatedAtUtc).HasColumnName("updated_at_utc");
+            // row_version se conserva porque la columna existe en HANA, pero NO participa en la
+            // concurrencia: es un BLOB y no se puede comparar en un WHERE. Hasta el 19/08/2026 se le
+            // escribían 8 bytes aleatorios en cada guardado con la idea de usarlo como token, y no lo
+            // leía nadie. La exclusión entre procesos la da el estado en el WHERE del UPDATE
+            // (PrintExecutionService.TryTransitionAsync). No reintroducir aquí IsConcurrencyToken.
             entity.Property(x => x.RowVersion).HasColumnName("row_version");
             entity.Property(x => x.SourceSystem).HasMaxLength(50).IsRequired();
             entity.Property(x => x.ExternalJobId).HasMaxLength(120).IsRequired();
@@ -244,10 +219,6 @@ public class ImpresorasDbContext : DbContext
             entity.Property(x => x.PrinterId);
             entity.Property(x => x.LastErrorCode).HasMaxLength(60);
             entity.Property(x => x.LastErrorMessage).HasMaxLength(1000);
-            // En HANA esta columna está en BLOB y comparar en WHERE (optimistic concurrency)
-            // puede fallar con "Cannot compare BLocator and BLocator".
-            // Mantenemos el valor, pero sin token de concurrencia a nivel EF.
-
             entity.HasIndex(x => new { x.SourceSystem, x.ExternalJobId }).IsUnique();
             entity.HasIndex(x => new { x.Status, x.NextRetryAtUtc });
         });

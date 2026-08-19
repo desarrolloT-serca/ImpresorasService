@@ -19,9 +19,15 @@ public class RoutingService : IRoutingService
         _resolver = resolver;
     }
 
+    /// <summary>
+    /// Reintento/reimpresion manual. Fase 2.5: las transiciones van por UPDATE condicionado al
+    /// estado esperado, asi que si el Worker reclamo el trabajo entre la lectura y la escritura
+    /// la operacion afecta a 0 filas y se responde con la verdad, en vez de confirmar un cambio
+    /// que nunca llego a aplicarse.
+    /// </summary>
     public async Task<RouteResult> TryRetryRouteAsync(Guid jobId, CancellationToken cancellationToken = default)
     {
-        var job = await _db.PrintJobs.FirstOrDefaultAsync(x => x.JobId == jobId, cancellationToken);
+        var job = await _db.PrintJobs.AsNoTracking().FirstOrDefaultAsync(x => x.JobId == jobId, cancellationToken);
         if (job is null)
             throw new InvalidOperationException($"Job {jobId} no encontrado.");
 
@@ -31,16 +37,25 @@ public class RoutingService : IRoutingService
         if (job.Status is PrintJobStatus.ErrorFinal or PrintJobStatus.PrintedUnknown)
         {
             var previousStatus = job.Status;
+            var resetAt = DateTimeOffset.UtcNow;
 
             // Reintento manual: permitir volver a enrutar cualquier ErrorFinal
             // (ROUTE_NOT_FOUND, PRINTER_INVALID, RETRIES_EXHAUSTED, etc.).
-            job.Status = PrintJobStatus.Pending;
-            job.PrinterId = null;
-            job.AttemptCount = 0;
-            job.NextRetryAtUtc = null;
-            job.LastErrorCode = null;
-            job.LastErrorMessage = null;
-            job.UpdatedAtUtc = DateTimeOffset.UtcNow;
+            var reset = await _db.PrintJobs
+                .Where(x => x.JobId == jobId && x.Status == previousStatus)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(x => x.Status, PrintJobStatus.Pending)
+                    .SetProperty(x => x.PrinterId, (int?)null)
+                    .SetProperty(x => x.AttemptCount, 0)
+                    .SetProperty(x => x.NextRetryAtUtc, (DateTimeOffset?)null)
+                    .SetProperty(x => x.LastErrorCode, (string?)null)
+                    .SetProperty(x => x.LastErrorMessage, (string?)null)
+                    .SetProperty(x => x.UpdatedAtUtc, resetAt), cancellationToken);
+
+            if (reset != 1)
+                throw new PrintJobStateConflictException(
+                    $"El job {jobId} cambio de estado mientras se preparaba el reintento; vuelva a consultarlo.");
+
             _db.PrintJobEvents.Add(new PrintJobEvent
             {
                 JobId = jobId,
@@ -51,9 +66,13 @@ public class RoutingService : IRoutingService
                 Message = previousStatus == PrintJobStatus.PrintedUnknown
                     ? "Reimpresión manual solicitada desde PrintedUnknown: el operador asume el riesgo de duplicado."
                     : "Reintento manual solicitado desde ErrorFinal.",
-                OccurredAtUtc = DateTimeOffset.UtcNow
+                OccurredAtUtc = resetAt
             });
             await _db.SaveChangesAsync(cancellationToken);
+
+            // ExecuteUpdate no refresca lo ya leido: sin esto el enrutado seguiria viendo el
+            // estado anterior y trataria de transicionar desde el.
+            job = await _db.PrintJobs.AsNoTracking().FirstAsync(x => x.JobId == jobId, cancellationToken);
         }
         else if (job.Status != PrintJobStatus.Pending)
         {
@@ -66,7 +85,7 @@ public class RoutingService : IRoutingService
 
     public async Task<RouteResult> TryRouteJobAsync(Guid jobId, CancellationToken cancellationToken = default)
     {
-        var job = await _db.PrintJobs.FirstOrDefaultAsync(x => x.JobId == jobId, cancellationToken);
+        var job = await _db.PrintJobs.AsNoTracking().FirstOrDefaultAsync(x => x.JobId == jobId, cancellationToken);
         if (job is null)
             throw new InvalidOperationException($"Job {jobId} no encontrado.");
 
@@ -92,9 +111,17 @@ public class RoutingService : IRoutingService
 
         var now = DateTimeOffset.UtcNow;
         var oldStatus = job.Status;
-        job.Status = PrintJobStatus.Routed;
-        job.PrinterId = printerId;
-        job.UpdatedAtUtc = now;
+
+        var routed = await _db.PrintJobs
+            .Where(x => x.JobId == job.JobId && x.Status == oldStatus)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.Status, PrintJobStatus.Routed)
+                .SetProperty(x => x.PrinterId, printerId)
+                .SetProperty(x => x.UpdatedAtUtc, now), cancellationToken);
+
+        if (routed != 1)
+            throw new PrintJobStateConflictException(
+                $"El job {job.JobId} cambio de estado mientras se enrutaba; vuelva a consultarlo.");
 
         var routedEvent = new PrintJobEvent
         {
@@ -176,10 +203,17 @@ public class RoutingService : IRoutingService
         var now = DateTimeOffset.UtcNow;
         var oldStatus = job.Status;
 
-        job.Status = PrintJobStatus.ErrorFinal;
-        job.LastErrorCode = RouteNotFoundCode;
-        job.LastErrorMessage = "No existe regla activa aplicable para este trabajo.";
-        job.UpdatedAtUtc = now;
+        var failed = await _db.PrintJobs
+            .Where(x => x.JobId == job.JobId && x.Status == oldStatus)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.Status, PrintJobStatus.ErrorFinal)
+                .SetProperty(x => x.LastErrorCode, RouteNotFoundCode)
+                .SetProperty(x => x.LastErrorMessage, "No existe regla activa aplicable para este trabajo.")
+                .SetProperty(x => x.UpdatedAtUtc, now), cancellationToken);
+
+        // Sin ruta y ademas ya no esta donde lo dejamos: no hay nada que marcar ni que registrar.
+        if (failed != 1)
+            return;
 
         var errorEvent = new PrintJobEvent
         {

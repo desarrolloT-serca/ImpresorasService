@@ -78,16 +78,22 @@ Hoy una lectura de `printer-state` marca `PrintedConfirmed` a **todo el lote** d
 lo etiqueta «Impreso» y el KPI `printed` incluye además `SpoolAccepted` y `PrintedUnknown`. Sale una
 de las dos: o se confirma de verdad, o se deja de afirmar.
 
-### B4 · El núcleo — el bloque grande
+### ~~B4 · El núcleo — el bloque grande~~ ✅ HECHO 2026-08-19
 
-| # | Trabajo | Hallazgo |
-|---|---|---|
-| B4.1 | Claim atómico: `UPDATE … WHERE job_id = @id AND status IN ('Routed','RetryScheduled')`, seguir solo si rowcount = 1 | H-03, Fase 2.2 |
-| B4.2 | `cancel` y `route` por UPDATE condicional de estado; si afecta 0 filas, responder conflicto | Fase 2.5 |
-| B4.3 | Retirar `RowVersion` como defensa y su docstring, que afirma un control de concurrencia que no existe | H-03 |
+| # | Trabajo | Hallazgo | Estado |
+|---|---|---|---|
+| ~~B4.1~~ | Claim atómico del trabajo antes de enviarlo al spooler | H-03, Fase 2.2 | ✅ Todas las transiciones del Worker por `TryTransitionAsync` (UPDATE con el estado en el WHERE). Test con dos contextos: dos Workers, un solo envío |
+| ~~B4.2~~ | `cancel` y `route` condicionados al estado | Fase 2.5 | ✅ 0 filas → 409 `PrintJobStateConflictException`. Ya no se responde `Cancelled` mientras sale el papel |
+| ~~B4.3~~ | Retirar `RowVersion` como defensa | H-03 | ✅ Fuera `BumpPrintJobRowVersionsForConcurrency`. La columna se queda (sin DDL) con un comentario de por qué no vuelve |
 
-Van juntos: los tres son el mismo patrón. Hoy cancelar un trabajo que el Worker acaba de reclamar
-responde `Cancelled` y el papel sale igual.
+> **Cambio de contrato que conviene recordar.** Las escrituras van por `ExecuteUpdate`, que no
+> refresca las entidades ya seguidas por el contexto. En producción da igual —cada ciclo abre su
+> propio scope—, pero cualquier test que reutilice el contexto tiene que soltar el seguimiento
+> antes de comprobar, o leerá la copia de antes del UPDATE.
+>
+> Queda una ventana sin cubrir por tests: reclamar entre la lectura y el UPDATE devuelve 409, y
+> provocarlo exige interponerse en el comando SQL. El caso frecuente (ya reclamado al leer) sí
+> está fijado.
 
 ### B5 · Cuando no haya nada mejor
 
