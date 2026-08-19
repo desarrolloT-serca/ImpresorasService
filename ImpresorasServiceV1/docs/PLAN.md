@@ -39,6 +39,7 @@ Cinco bloques. **B0 desbloquea a los demás y no es código.** Dentro de cada bl
 | B0.1 | Aplicar `scripts/sql/migrate_pdf_blob_nullable.sql` en HANA (**dos** `ALTER`: `printer_print_job` y `printer_source_print_job`) | La retención entera. El código está listo desde el 19/08; sin este DDL no libera nada, `pdf_blob` es `BLOB NOT NULL` y el barrido solo deja un warning |
 | B0.2 | Ejecutar `scripts/extraer-ddl-hana.ps1` contra HANA y commitear el resultado | Confirma las `PRIMARY KEY` (hoy reconstruidas desde `_inventario.sql`, no desde una ejecución real) y añade `printer_worker_lock`, creado después de la extracción del 12/08 |
 | B0.3 | **Gate I-1**: comprobar contra una impresora real del parque si responde `Get-Job-Attributes` por IPP | B3. Sin este dato, la confirmación por trabajo no se puede ni planificar |
+| B0.4 | Aplicar `scripts/sql/migrate_user_revocation.sql` en HANA | La revocación de acceso (B2.2). Sin las columnas, la Api falla al consultar `printer_user`. Ambas llevan `DEFAULT`, así que aplicarlo no cierra ninguna sesión abierta |
 
 > B0.3 es una prueba de media hora con una impresora y `curl`. Es la que más decisiones destraba.
 
@@ -50,13 +51,17 @@ Cinco bloques. **B0 desbloquea a los demás y no es código.** Dentro de cada bl
 | ~~B1.2~~ | Umbral del lease desde el reloj de la base de datos | H-10 (a) | ✅ `CURRENT_UTCTIMESTAMP` cuando el proveedor es HANA, con fallback al reloj local y traza. En SQLite sigue el `TimeProvider`, que es lo que hace deterministas los tests del relevo. **Sin verificar contra HANA** |
 | ~~B1.3~~ | Job .NET del CI en `windows-latest` | H-11 (parcial) | ✅ El CI deja de correr todo con `NoOpPrintSpooler`. **No cierra H-11**: sigue sin haber pruebas del spooler en sí (ver B5) |
 
-### B2 · Necesitan una decisión tuya antes de tocar código
+### ~~B2 · Necesitan una decisión tuya antes de tocar código~~ ✅ HECHO 2026-08-19
 
-| # | Trabajo | Decisión que falta |
-|---|---|---|
-| B2.1 | Plazo de retención del PDF | Cuántos días. Es de protección de datos, no técnica. Hoy `RetentionDays = 30` y `Enabled = false` |
-| B2.2 | Invalidación de acceso (Fase 5) | Alcance: ¿solo `User.IsActive`? ¿además `TokenVersion` para invalidar al cambiar contraseña? ¿expiración < 8 h? Hoy borrar un usuario no le quita el acceso hasta 8 horas después |
-| B2.3 | Reintentos de impresión | Si `MaxAttempts` sube a 5 para consumir los cuatro backoffs, o el cuarto valor sobra. Hoy con `MaxAttempts = 4` se usan 15/30/60 y el 90 nunca |
+| # | Trabajo | Decisión tomada | Estado |
+|---|---|---|---|
+| ~~B2.1~~ | Plazo de retención del PDF | **90 días** | ✅ `PdfRetention:Enabled=true`, `RetentionDays=90`. **No libera nada hasta B0.1** |
+| ~~B2.2~~ | Invalidación de acceso (Fase 5) | **`IsActive` + `TokenVersion`** | ✅ Comprobados en cada petición (`UserRevocationValidator`). Requiere el DDL de B0.4. Expiración fija en 8 h: descartada por ahora |
+| ~~B2.3~~ | Reintentos de impresión | **Quitar el 90 sobrante** | ✅ `BackoffSeconds=[15,30,60]`. Sin cambio de comportamiento |
+
+> **Pendiente de UI (B5):** la Api ya acepta y devuelve `IsActive`, pero la pantalla de usuarios del
+> frontend no tiene todavía un control para activar/desactivar. Hasta que lo tenga, desactivar es una
+> llamada a `PUT api/users/{id}`. Borrar el usuario sí funciona desde la UI y también corta el acceso.
 
 ### B3 · Bloqueado por el gate I-1
 
@@ -92,8 +97,8 @@ responde `Cancelled` y el papel sale igual.
 
 | Decisión | Quién | Bloquea |
 |---|---|---|
-| Plazo de conservación del PDF | Protección de datos | B2.1 |
-| Alcance de la revocación de acceso | Producto / seguridad | B2.2 |
+| ~~Plazo de conservación del PDF~~ | Protección de datos | ✅ 90 días (19/08/2026) |
+| ~~Alcance de la revocación de acceso~~ | Producto / seguridad | ✅ `IsActive` + `TokenVersion` (19/08/2026) |
 | ¿El parque soporta IPP por trabajo? | Operaciones (medición) | B3 completo |
 | ¿Se revocó el token de Telegram con BotFather? | Operaciones | Nada de código. El literal se queda en `auditoriaimpresoras.md` por decisión tomada el 19/08/2026 |
 

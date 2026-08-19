@@ -65,7 +65,7 @@ Pending → Routed → SpoolAccepted → PrintedConfirmed
 3. EJECUCIÓN (PrintExecutionBackgroundService, poll 5s, lote 10)
    Routed | RetryScheduled vencidos → IPrinterSpooler.SendAsync()
    → éxito: SpoolAccepted
-   → error < 4 intentos: RetryScheduled (backoff 15/30/60/90s)
+   → error < 4 intentos: RetryScheduled (backoff 15/30/60s)
    → error >= 4 intentos: ErrorFinal
 
 4. CONFIRMACIÓN IPP (SpoolAcceptedWatchdogBackgroundService, poll 10s)
@@ -111,7 +111,7 @@ Pending → Routed → SpoolAccepted → PrintedConfirmed
 {
   "UseRealSpooler": true,        // false en Linux/test → NoOpPrintSpooler
   "MaxAttempts": 4,
-  "BackoffSeconds": [15,30,60,90],
+  "BackoffSeconds": [15,30,60],   // solo se consumen MaxAttempts-1 esperas
   "IppConfirmationEnabled": true,
   "IppTimeoutMs": 3000
 }
@@ -150,7 +150,8 @@ Variables de entorno que sobreescriben appsettings (patrón `Section__Key`):
 - **Telegram**: `TelegramNotifierService`, `StoreHealthAlertBackgroundService`, `TelegramController` (API). `Telegram:Enabled=false` por defecto en `Worker/appsettings.json`; activar en producción con `BotToken` real. **La página PHP de alertas se retiró** (commit `fcd05d7`): la configuración se toca por API.
 - **Lock de instancia única** (`WorkerLockCoordinator` + `WorkerLockBackgroundService`): DDL aplicado y verificado el 19/08/2026 con dos procesos Worker reales contra `ZTEST_VICENTE_2`
 - **Health check `worker`** en la Api (`WorkerActivityHealthCheck`): delata un Worker inerte usando la huella del monitor de conectividad. Reporta `Degraded`, sin tag `ready`.
-- **Retención de PDF** (`PdfRetentionBackgroundService`): implementada y **apagada por defecto** (`PdfRetention:Enabled=false`). Libera el blob de los trabajos en estado terminal pasados `RetentionDays`, conservando fila, `pdf_sha256` y metadatos.
+- **Retención de PDF** (`PdfRetentionBackgroundService`): **activa, 90 días** (decisión del 19/08/2026). Libera el blob de los trabajos en estado terminal y de las filas de origen ya procesadas, conservando fila, `pdf_sha256` y metadatos. **No libera nada hasta que se aplique su DDL.**
+- **Revocación de acceso**: `User.IsActive` y `User.TokenVersion` comprobados en cada petición (`UserRevocationValidator`, enganchado a `OnTokenValidated`). Desactivar, borrar o cambiar la contraseña corta el acceso en la siguiente petición; el frontend ya redirige al login ante un 401. Requiere su DDL.
 
 ### Pendiente
 **Ver `docs/PLAN.md`** — fuente de verdad única del trabajo pendiente, en bloques por dependencia.
@@ -161,12 +162,11 @@ evidencia o historia; `PLAN.md` dice cuál manda para qué.
 El esquema real vive extraído en `scripts/sql/schema/` (regenerar con `scripts/extraer-ddl-hana.ps1`, no editar a mano).
 Ya aplicados: `printer_telegram_config`, `printer_telegram_chat`, `printer_alert_state`, `ipp_supported` en `printer_printer`, `printer_worker_lock`.
 
-Pendiente de aplicar:
-```sql
--- scripts/sql/migrate_pdf_blob_nullable.sql
--- pdf_blob sigue siendo BLOB NOT NULL: sin este ALTER, PdfRetention no puede liberar nada.
-ALTER TABLE "<SCHEMA>"."printer_print_job" ALTER ("pdf_blob" BLOB NULL);
-```
+Pendiente de aplicar (ver `docs/PLAN.md`, bloque B0):
+- `scripts/sql/migrate_pdf_blob_nullable.sql` — dos `ALTER`. `pdf_blob` sigue siendo `BLOB NOT NULL`
+  en `printer_print_job` y `printer_source_print_job`; sin ellos `PdfRetention` no libera nada.
+- `scripts/sql/migrate_user_revocation.sql` — `is_active` y `token_version` en `printer_user`.
+  Sin estas columnas la Api falla al consultar usuarios.
 
 ---
 
