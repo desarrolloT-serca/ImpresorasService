@@ -183,6 +183,15 @@ síntoma es un warning por heartbeat.
 **Corrección:** aplicar `scripts/sql/create_worker_lock.sql` al esquema. Es la creación de una tabla
 singleton, sin impacto sobre datos existentes.
 
+> **Resuelto el 19/08/2026.** La tabla ya existe en `ZTEST_VICENTE_2` y `IMPRESION` tiene
+> SELECT/INSERT/UPDATE/DELETE sobre ella. El síntoma se dio tal cual describe el hallazgo (el 17/08
+> el Worker estuvo horas en Running sin procesar nada), aunque por privilegios y no por ausencia de
+> tabla: entre el 12 y el 17 se creó, pero sin GRANT, así que el provider seguía lanzando —error 258
+> en vez de 259— y el efecto era idéntico. Se sorteó temporalmente con `WorkerLock__Enabled=false`
+> en el entorno del servicio; ese apaño ya está retirado y el lock real está activo y renovando.
+> De aquel episodio quedan dos defensas: el fallo del lock escala a `Error` en
+> `WorkerLockBackgroundService`, y el health check `worker` de la Api delata al Worker inerte.
+
 **Comprobación pendiente y más importante:** esta extracción se hizo contra `ZTEST_VICENTE_2`. **Hay
 que repetirla contra el esquema de producción** (`.\scripts\extraer-ddl-hana.ps1 -Schema <prod>`) y
 ver si allí la tabla existe. Si tampoco existe y el Worker de producción tiene el lock habilitado,
