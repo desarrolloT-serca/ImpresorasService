@@ -8,7 +8,12 @@ public class SourcePrintJobRecord
     public int StoreId { get; set; }
     public string DocumentType { get; set; } = string.Empty;
     public string? Channel { get; set; }
-    public byte[] PdfBlob { get; set; } = Array.Empty<byte>();
+    /// <summary>
+    /// Nullable desde que existe la retencion: una vez procesada la fila, el barrido libera el
+    /// blob y conserva el resto. Las filas sin procesar SIEMPRE lo tienen — la ingesta no las
+    /// toca antes de acusarlas.
+    /// </summary>
+    public byte[]? PdfBlob { get; set; } = Array.Empty<byte>();
     public DateTimeOffset CreatedAtUtc { get; set; }
     public bool IsProcessed { get; set; }
 

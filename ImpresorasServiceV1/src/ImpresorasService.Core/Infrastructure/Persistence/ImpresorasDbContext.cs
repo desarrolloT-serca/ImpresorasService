@@ -299,7 +299,8 @@ public class ImpresorasDbContext : DbContext
             entity.Property(x => x.ExternalJobId).HasMaxLength(120).IsRequired();
             entity.Property(x => x.DocumentType).HasMaxLength(80).IsRequired();
             entity.Property(x => x.Channel).HasMaxLength(40);
-            entity.Property(x => x.PdfBlob).IsRequired();
+            // Sin IsRequired: la retencion pone el blob a NULL en las filas ya procesadas
+            // (PdfRetention.ReleaseExpiredSourcePdfsAsync).
             entity.Property(x => x.CreatedAtUtc).IsRequired();
             entity.Property(x => x.IsProcessed).HasDefaultValue(false);
             entity.Property(x => x.ClaimedBy).HasMaxLength(200);

@@ -53,4 +53,36 @@ public static class PdfRetention
             .Where(j => ids.Contains(j.JobId))
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.PdfBlob, (byte[]?)null), ct);
     }
+
+    /// <summary>
+    /// Lo mismo sobre <c>printer_source_print_job</c>, donde esta el grueso del volumen: la medicion
+    /// del 12/08/2026 encontro el 100 % de las filas conservando su PDF, todas ya procesadas. El
+    /// corte es <c>IsProcessed</c> + antiguedad de <c>CreatedAtUtc</c> (la tabla no tiene columna de
+    /// actualizacion, y una fila se procesa a los segundos de crearse).
+    /// Una fila sin procesar NUNCA se toca: su PDF es el unico ejemplar que existe todavia.
+    /// </summary>
+    public static async Task<int> ReleaseExpiredSourcePdfsAsync(
+        ImpresorasDbContext db,
+        DateTimeOffset cutoff,
+        int batchSize,
+        CancellationToken ct = default)
+    {
+        var processed = true;
+        var ids = await db.SourcePrintJobs
+            .AsNoTracking()
+            .Where(r => r.IsProcessed == processed
+                && r.CreatedAtUtc <= cutoff
+                && r.PdfBlob != null)
+            .OrderBy(r => r.CreatedAtUtc)
+            .Select(r => r.Id)
+            .Take(Math.Max(1, batchSize))
+            .ToListAsync(ct);
+
+        if (ids.Count == 0)
+            return 0;
+
+        return await db.SourcePrintJobs
+            .Where(r => ids.Contains(r.Id))
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.PdfBlob, (byte[]?)null), ct);
+    }
 }

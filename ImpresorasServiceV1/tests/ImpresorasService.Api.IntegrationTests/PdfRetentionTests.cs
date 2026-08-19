@@ -74,6 +74,55 @@ public sealed class PdfRetentionTests
         Assert.Equal(3, await db.PrintJobs.CountAsync(j => j.PdfBlob != null));
     }
 
+    /// <summary>
+    /// El origen es donde esta el grueso del volumen (100 % de las filas conservando su PDF en la
+    /// medicion del 12/08/2026). Lo que protege este test es que una fila SIN procesar no se toca
+    /// nunca: su PDF es el unico ejemplar que existe todavia, y borrarlo pierde el documento.
+    /// </summary>
+    [Fact]
+    public async Task ReleaseExpiredSourcePdfsAsync_ReleasesOnlyProcessedRowsPastRetention()
+    {
+        using var setup = SqliteTestDbHelper.CreateOpenSqliteInMemory();
+        var db = setup.Db;
+
+        // Procesada hace 40 dias: se libera.
+        db.SourcePrintJobs.Add(NewSourceRow(1, isProcessed: true, createdAtUtc: Now.AddDays(-40)));
+        // Procesada hace 5 dias: dentro del plazo, se conserva.
+        db.SourcePrintJobs.Add(NewSourceRow(2, isProcessed: true, createdAtUtc: Now.AddDays(-5)));
+        // SIN procesar y antiquisima: su PDF aun no se ha ingerido, NO se toca.
+        db.SourcePrintJobs.Add(NewSourceRow(3, isProcessed: false, createdAtUtc: Now.AddDays(-90)));
+        await db.SaveChangesAsync();
+
+        var released = await PdfRetention.ReleaseExpiredSourcePdfsAsync(db, Now.AddDays(-30), batchSize: 500);
+
+        Assert.Equal(1, released);
+
+        db.ChangeTracker.Clear();
+        Assert.Null(await SourcePdfOf(db, 1));
+        Assert.NotNull(await SourcePdfOf(db, 2));
+        Assert.NotNull(await SourcePdfOf(db, 3));
+    }
+
+    private static async Task<byte[]?> SourcePdfOf(Infrastructure.Persistence.ImpresorasDbContext db, long id)
+        => await db.SourcePrintJobs.AsNoTracking()
+            .Where(r => r.Id == id)
+            .Select(r => r.PdfBlob)
+            .SingleAsync();
+
+    private static Infrastructure.Persistence.SourcePrintJobRecord NewSourceRow(
+        long id, bool isProcessed, DateTimeOffset createdAtUtc) => new()
+    {
+        Id = id,
+        SourceSystem = "TEST",
+        ExternalJobId = $"SRC-{id}",
+        StoreId = 1,
+        DocumentType = "FACTURA",
+        Channel = "DEFAULT",
+        PdfBlob = MinimalPdf.Bytes,
+        CreatedAtUtc = createdAtUtc,
+        IsProcessed = isProcessed
+    };
+
     private static async Task<byte[]?> PdfOf(Infrastructure.Persistence.ImpresorasDbContext db, string externalJobId)
         => await db.PrintJobs.AsNoTracking()
             .Where(j => j.ExternalJobId == externalJobId)

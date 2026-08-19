@@ -84,10 +84,11 @@ public sealed class PdfRetentionBackgroundService : BackgroundService
 
         var cutoff = _timeProvider.GetUtcNow().AddDays(-Math.Max(1, _options.Value.RetentionDays));
         var released = await PdfRetention.ReleaseExpiredPdfsAsync(db, cutoff, _options.Value.BatchSize, ct);
+        var releasedFromSource = await PdfRetention.ReleaseExpiredSourcePdfsAsync(db, cutoff, _options.Value.BatchSize, ct);
 
-        if (released > 0)
+        if (released > 0 || releasedFromSource > 0)
             _logger.LogInformation(
-                "Retencion de PDF: liberados {Released} trabajos cerrados antes de {Cutoff:yyyy-MM-dd}. Se conservan fila, hash y metadatos.",
-                released, cutoff);
+                "Retencion de PDF anterior a {Cutoff:yyyy-MM-dd}: liberados {Released} trabajos cerrados y {ReleasedFromSource} filas de origen ya procesadas. Se conservan fila, hash y metadatos.",
+                cutoff, released, releasedFromSource);
     }
 }

@@ -104,7 +104,17 @@ public class SapHanaJobSourceAdapter : IJobSourceAdapter
         await tx.CommitAsync(cancellationToken);
         _lastClaimToken = claimToken;
 
+        // Una fila sin PDF no puede imprimirse. No deberia existir entre las no procesadas -la
+        // retencion solo toca las que ya lo estan-, pero si aparece se descarta con traza en vez de
+        // reventar el lote entero al calcular el hash.
+        var withoutPdf = claimedRows.Where(x => x.PdfBlob is null || x.PdfBlob.Length == 0).ToList();
+        if (withoutPdf.Count > 0)
+            _logger.LogError(
+                "Origen: {Count} filas sin PDF pese a no estar procesadas; se omiten. Ids={Ids}",
+                withoutPdf.Count, string.Join(",", withoutPdf.Select(x => x.Id)));
+
         var jobs = claimedRows
+            .Where(x => x.PdfBlob is not null && x.PdfBlob.Length > 0)
             .OrderBy(x => x.CreatedAtUtc)
             .ThenBy(x => x.Id)
             .Select(row => new IncomingPrintJob(
@@ -114,7 +124,7 @@ public class SapHanaJobSourceAdapter : IJobSourceAdapter
                 StoreId: row.StoreId,
                 DocumentType: row.DocumentType,
                 Channel: string.IsNullOrWhiteSpace(row.Channel) ? "DEFAULT" : row.Channel,
-                PdfBlob: row.PdfBlob,
+                PdfBlob: row.PdfBlob!,
                 CreatedAtUtc: row.CreatedAtUtc))
             .ToList();
 
