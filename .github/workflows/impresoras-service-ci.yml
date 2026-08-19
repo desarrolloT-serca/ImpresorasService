@@ -17,7 +17,13 @@ on:
 jobs:
   dotnet:
     name: Build and test (.NET 8)
-    runs-on: ubuntu-latest
+    # H-11 (docs/auditoria/revision-garantias-2026-08-12.md): en ubuntu,
+    # RuntimeInformation.IsOSPlatform(OSPlatform.Windows) es false y TODO el CI corria con
+    # NoOpPrintSpooler — la rama de produccion de AddInfrastructure no se ejercitaba nunca, y
+    # tampoco el fail-fast que exige spooler real fuera de desarrollo. En windows-latest se
+    # ejercita la seleccion correcta. NO cierra H-11: sigue sin haber pruebas de
+    # WindowsPrintSpooler en si, que necesitan un spooler o una impresora.
+    runs-on: windows-latest
     defaults:
       run:
         working-directory: ImpresorasServiceV1
