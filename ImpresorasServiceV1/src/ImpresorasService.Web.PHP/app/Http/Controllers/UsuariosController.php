@@ -120,6 +120,44 @@ class UsuariosController extends Controller
         }
     }
 
+    /**
+     * Activa o desactiva un usuario sin pasar por el formulario de edicion. Desactivar corta el
+     * acceso en la siguiente peticion -la Api comprueba is_active en cada una-, asi que es la via
+     * rapida cuando hay que echar a alguien y no se quiere borrar su historial.
+     */
+    public function activacion(Request $request, int $usuario): RedirectResponse
+    {
+        $activar = $request->boolean('activar');
+
+        // La Api tambien lo impide; comprobarlo aqui ahorra el viaje y da mejor mensaje.
+        $sessionUser = session('impresoras_user', []);
+        $loggedUserId = $sessionUser['userId'] ?? $sessionUser['UserId'] ?? null;
+        if (! $activar && (int) $loggedUserId === $usuario) {
+            return back()->with('error', 'No puedes desactivar tu propio usuario.');
+        }
+
+        try {
+            // El PUT de la Api exige login, rol y tienda, asi que se releen y se reenvian tal cual:
+            // lo unico que cambia es isActive. Sin password, la contrasena no se toca.
+            $user = $this->api->get("api/users/{$usuario}");
+
+            $this->api->put("api/users/{$usuario}", [
+                'login'       => $user['login'] ?? $user['Login'] ?? null,
+                'displayName' => $user['displayName'] ?? $user['DisplayName'] ?? null,
+                'role'        => $user['role'] ?? $user['Role'] ?? null,
+                'storeId'     => $user['storeId'] ?? $user['StoreId'] ?? null,
+                'isActive'    => $activar,
+            ]);
+
+            return redirect()->route('usuarios.index')->with(
+                'success',
+                $activar ? 'Usuario activado.' : 'Usuario desactivado. Su acceso queda cortado de inmediato.'
+            );
+        } catch (\GuzzleHttp\Exception\RequestException $e) {
+            return back()->withErrors($this->extractApiErrors($e, 'form'));
+        }
+    }
+
     public function destroy(int $usuario): RedirectResponse
     {
         $sessionUser = session('impresoras_user', []);

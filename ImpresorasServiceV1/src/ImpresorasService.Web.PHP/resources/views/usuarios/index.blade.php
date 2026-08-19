@@ -43,6 +43,7 @@
                 <th>Usuario</th>
                 <th>Rol</th>
                 <th>Tienda</th>
+                <th>Estado</th>
                 <th class="actions-col">Acciones</th>
             </tr>
         </thead>
@@ -54,6 +55,8 @@
                 $displayName = $user['displayName']  ?? $user['DisplayName']  ?? '';
                 $role        = $user['role']          ?? $user['Role']          ?? 'Employee';
                 $storeId     = $user['storeId']      ?? $user['StoreId']      ?? null;
+                // Null = Api antigua sin el campo: se asume activo, que es el DEFAULT de la columna.
+                $isActive    = (bool) ($user['isActive'] ?? $user['IsActive'] ?? true);
                 $storeName   = $storeId !== null ? ($storeNameById[(string)$storeId] ?? null) : null;
                 $rl          = $roleLabels[$role]  ?? $role;
                 $rc          = $roleClass[$role]   ?? 'employee';
@@ -90,6 +93,13 @@
                         <span class="user-displayname">—</span>
                     @endif
                 </td>
+                <td>
+                    @if($isActive)
+                        <span class="badge badge-success">Activo</span>
+                    @else
+                        <span class="badge badge-neutral" title="No puede iniciar sesion y su token deja de valer en la siguiente peticion">Desactivado</span>
+                    @endif
+                </td>
                 <td class="actions-col">
                     @if($id)
                     <x-ui.action-buttons>
@@ -99,6 +109,30 @@
                            aria-label="Editar {{ $login }}">
                             <x-ui.action-icon name="edit" label="Editar" />
                         </a>
+                        @if($isActive)
+                        <x-ui.confirm-form
+                            :action="route('usuarios.activacion', $id)"
+                            title="Desactivar usuario"
+                            message="{{ $displayName ?: $login }} dejara de poder entrar y su sesion abierta se cortara en la siguiente peticion. Se conserva el usuario y su historial."
+                            confirm-label="Desactivar"
+                        >
+                            <input type="hidden" name="activar" value="0">
+                            <x-slot:trigger>
+                                <button type="submit" class="btn btn-ghost btn-icon" title="Desactivar usuario" aria-label="Desactivar {{ $login }}">
+                                    <x-ui.action-icon name="power" label="Desactivar" />
+                                </button>
+                            </x-slot:trigger>
+                        </x-ui.confirm-form>
+                        @else
+                        {{-- Reactivar no necesita confirmacion: no rompe nada y se deshace igual de rapido. --}}
+                        <form action="{{ route('usuarios.activacion', $id) }}" method="POST" class="inline">
+                            @csrf
+                            <input type="hidden" name="activar" value="1">
+                            <button type="submit" class="btn btn-ghost btn-icon" title="Activar usuario" aria-label="Activar {{ $login }}">
+                                <x-ui.action-icon name="check" label="Activar" />
+                            </button>
+                        </form>
+                        @endif
                         <x-ui.confirm-form
                             :action="route('usuarios.destroy', $id)"
                             method="DELETE"
@@ -116,7 +150,7 @@
                 </td>
             </tr>
             @empty
-            <x-ui.empty-row colspan="4" message="No hay usuarios." />
+            <x-ui.empty-row colspan="5" message="No hay usuarios." />
             @endforelse
         </tbody>
     </x-ui.table>

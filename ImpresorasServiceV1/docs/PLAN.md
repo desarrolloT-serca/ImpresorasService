@@ -59,9 +59,8 @@ Cinco bloques. **B0 desbloquea a los demás y no es código.** Dentro de cada bl
 | ~~B2.2~~ | Invalidación de acceso (Fase 5) | **`IsActive` + `TokenVersion`** | ✅ Comprobados en cada petición (`UserRevocationValidator`). Requiere el DDL de B0.4. Expiración fija en 8 h: descartada por ahora |
 | ~~B2.3~~ | Reintentos de impresión | **Quitar el 90 sobrante** | ✅ `BackoffSeconds=[15,30,60]`. Sin cambio de comportamiento |
 
-> **Pendiente de UI (B5):** la Api ya acepta y devuelve `IsActive`, pero la pantalla de usuarios del
-> frontend no tiene todavía un control para activar/desactivar. Hasta que lo tenga, desactivar es una
-> llamada a `PUT api/users/{id}`. Borrar el usuario sí funciona desde la UI y también corta el acceso.
+> **UI incluida.** `/usuarios` muestra el estado y ofrece activar/desactivar por fila
+> (`POST /usuarios/{id}/activacion`). Desactivar pide confirmación; reactivar no, porque no rompe nada.
 
 ### B3 · Bloqueado por el gate I-1
 
