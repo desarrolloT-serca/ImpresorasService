@@ -153,14 +153,9 @@ Variables de entorno que sobreescriben appsettings (patrón `Section__Key`):
 - **Retención de PDF** (`PdfRetentionBackgroundService`): implementada y **apagada por defecto** (`PdfRetention:Enabled=false`). Libera el blob de los trabajos en estado terminal pasados `RetentionDays`, conservando fila, `pdf_sha256` y metadatos.
 
 ### Pendiente
-- Confirmación IPP **por trabajo** (hoy una lectura de `printer-state` marca `PrintedConfirmed` a todo el lote de esa impresora) — Fase 3.4 de `docs/roadmapimpresoras.md`, H-01 de `docs/auditoria/revision-garantias-2026-08-12.md`
-- Claim atómico de `PrintJob` (UPDATE condicional en `PrintExecutionService`) — Fase 2.2. Hoy `RowVersion` **no** es token de concurrencia EF (BLOB no comparable en HANA); el único control es un check de snapshot no atómico
-- Operaciones manuales (`cancel`, `route`) por UPDATE condicional de estado — Fase 2.5
-- Invalidación inmediata de acceso: `User.IsActive`, `TokenVersion`, expiración configurable — Fase 5 (hoy el token vive 8 h fijas y borrar un usuario no lo revoca)
-- Deriva de reloj en el lease del lock: el umbral sale del reloj local, no de `CURRENT_UTCTIMESTAMP` — H-10 (a)
-- Retención de PDF en `printer_source_print_job` (hoy solo se limpia `printer_print_job`) — H-15
-- Tests e2e de IPP/watchdog/conectividad; el CI corre en `ubuntu-latest`, así que `WindowsPrintSpooler` no se ejercita nunca — H-11
-- Pruebas con bot Telegram real en producción (operativo, no código)
+**Ver `docs/PLAN.md`** — fuente de verdad única del trabajo pendiente, en bloques por dependencia.
+No se duplica aquí para que no diverja. El resto de roadmaps y auditorías del repositorio son
+evidencia o historia; `PLAN.md` dice cuál manda para qué.
 
 ### DDL
 El esquema real vive extraído en `scripts/sql/schema/` (regenerar con `scripts/extraer-ddl-hana.ps1`, no editar a mano).
@@ -228,6 +223,7 @@ src/ImpresorasService.Web.PHP/
 tests/ImpresorasService.Api.IntegrationTests/  → xUnit + SQLite en memoria
 
 scripts/sql/                          → DDL para SAP HANA
+docs/PLAN.md                          → QUÉ HACER: plan único de trabajo pendiente
 docs/                                 → guías de despliegue, estilo, smoke tests
-TELEGRAM_AND_IPP_ROADMAP.md           → roadmap detallado de próximas características
+TELEGRAM_AND_IPP_ROADMAP.md           → completado (IPP y Telegram ya implementados); histórico
 ```
