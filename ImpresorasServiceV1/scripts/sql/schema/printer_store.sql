@@ -8,5 +8,6 @@ CREATE COLUMN TABLE "ZTEST_VICENTE_2"."printer_store" (
     "name" VARCHAR(120) NOT NULL,
     "is_active" BOOLEAN DEFAULT 1 NOT NULL,
     "created_at_utc" TIMESTAMP NOT NULL,
-    "updated_at_utc" TIMESTAMP NOT NULL
+    "updated_at_utc" TIMESTAMP NOT NULL,
+    PRIMARY KEY ("store_id")
 );

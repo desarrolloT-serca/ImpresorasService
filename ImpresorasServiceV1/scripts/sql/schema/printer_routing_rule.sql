@@ -15,5 +15,6 @@ CREATE COLUMN TABLE "ZTEST_VICENTE_2"."printer_routing_rule" (
     "valid_to_utc" TIMESTAMP,
     "created_by" VARCHAR(120) NOT NULL,
     "created_at_utc" TIMESTAMP NOT NULL,
-    "updated_at_utc" TIMESTAMP NOT NULL
+    "updated_at_utc" TIMESTAMP NOT NULL,
+    PRIMARY KEY ("rule_id")
 );

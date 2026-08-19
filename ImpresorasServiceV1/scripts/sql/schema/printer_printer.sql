@@ -18,7 +18,8 @@ CREATE COLUMN TABLE "ZTEST_VICENTE_2"."printer_printer" (
     "last_connection_check_at_utc" TIMESTAMP,
     "last_connection_transport" VARCHAR(40),
     "last_connection_error" VARCHAR(400),
-    "ipp_supported" TINYINT
+    "ipp_supported" TINYINT,
+    PRIMARY KEY ("printer_id")
 );
 
 CREATE UNIQUE INDEX "ix_printer_printer_store_id_spool_queue" ON "ZTEST_VICENTE_2"."printer_printer" ("store_id", "spool_queue");

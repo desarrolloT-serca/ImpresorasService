@@ -15,5 +15,6 @@ CREATE COLUMN TABLE "ZTEST_VICENTE_2"."printer_source_print_job" (
     "is_processed" BOOLEAN DEFAULT 0 NOT NULL,
     "claimed_by" VARCHAR(200),
     "claimed_until_utc" TIMESTAMP,
-    "claim_token" VARCHAR(64)
+    "claim_token" VARCHAR(64),
+    PRIMARY KEY ("id")
 );

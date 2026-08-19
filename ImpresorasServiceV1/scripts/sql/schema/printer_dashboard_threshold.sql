@@ -19,5 +19,6 @@ CREATE COLUMN TABLE "ZTEST_VICENTE_2"."printer_dashboard_threshold" (
     "conn_critical_failures_min" INTEGER DEFAULT 3 NOT NULL,
     "conn_warning_severity" VARCHAR(32) DEFAULT 'warning' NOT NULL,
     "conn_critical_severity" VARCHAR(32) DEFAULT 'critical' NOT NULL,
-    "updated_at_utc" TIMESTAMP NOT NULL
+    "updated_at_utc" TIMESTAMP NOT NULL,
+    PRIMARY KEY ("id")
 );

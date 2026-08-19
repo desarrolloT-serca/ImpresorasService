@@ -9,7 +9,8 @@ CREATE COLUMN TABLE "ZTEST_VICENTE_2"."printer_user" (
     "password_hash" VARCHAR(256) NOT NULL,
     "role" VARCHAR(40) NOT NULL,
     "store_id" INTEGER,
-    "display_name" VARCHAR(120)
+    "display_name" VARCHAR(120),
+    PRIMARY KEY ("user_id")
 );
 
 CREATE UNIQUE INDEX "ix_printer_user_login" ON "ZTEST_VICENTE_2"."printer_user" ("login");

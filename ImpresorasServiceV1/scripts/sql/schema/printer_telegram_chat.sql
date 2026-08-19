@@ -8,5 +8,6 @@ CREATE COLUMN TABLE "ZTEST_VICENTE_2"."printer_telegram_chat" (
     "description" NVARCHAR(120),
     "is_active" TINYINT DEFAULT 1 NOT NULL,
     "created_at_utc" NVARCHAR(26) NOT NULL,
-    "store_id" INTEGER
+    "store_id" INTEGER,
+    PRIMARY KEY ("chat_id")
 );

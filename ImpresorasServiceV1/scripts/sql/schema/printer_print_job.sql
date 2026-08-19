@@ -21,7 +21,8 @@ CREATE COLUMN TABLE "ZTEST_VICENTE_2"."printer_print_job" (
     "correlation_id" VARBINARY(16) NOT NULL,
     "created_at_utc" TIMESTAMP NOT NULL,
     "updated_at_utc" TIMESTAMP NOT NULL,
-    "row_version" BLOB
+    "row_version" BLOB,
+    PRIMARY KEY ("job_id")
 );
 
 CREATE UNIQUE INDEX "ix_printer_print_job_source_external" ON "ZTEST_VICENTE_2"."printer_print_job" ("source_system", "external_job_id");

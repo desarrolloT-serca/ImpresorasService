@@ -1,4 +1,4 @@
-# Extrae el DDL real de las tablas de ImpresorasService desde SAP HANA y lo escribe en
+﻿# Extrae el DDL real de las tablas de ImpresorasService desde SAP HANA y lo escribe en
 # scripts/sql/schema/, un fichero por tabla.
 #
 # Es SOLO LECTURA: consulta el catálogo de HANA (SYS.TABLES, SYS.TABLE_COLUMNS, SYS.CONSTRAINTS,
@@ -139,7 +139,7 @@ try {
         $meta = $allTables | Where-Object { $_.TABLE_NAME -ceq $table }
         $columns = $allColumns | Where-Object { $_.TABLE_NAME -ceq $table }
 
-        if (-not $meta -or $columns.Count -eq 0) {
+        if (-not $meta -or @($columns).Count -eq 0) {
             Write-Host "  [--] $table : no existe en $Schema" -ForegroundColor DarkYellow
             $missing += $table
             continue
@@ -157,7 +157,11 @@ try {
 
         $constraints = $allConstraints | Where-Object { $_.TABLE_NAME -ceq $table }
 
-        $pkCols = $constraints | Where-Object { $_.IS_PRIMARY_KEY -eq "TRUE" }
+        # @() obligatorio: con una sola columna de PK -que es el caso de TODAS las tablas de este
+        # esquema- Where-Object devuelve un PSCustomObject escalar, y .Count sobre un PSCustomObject
+        # es $null, no 1. Sin el envoltorio la rama nunca entraba y el DDL generado salia sin una
+        # sola PRIMARY KEY, aunque _inventario.sql si las listaba.
+        $pkCols = @($constraints | Where-Object { $_.IS_PRIMARY_KEY -eq "TRUE" } | Sort-Object { [int]$_.POSITION })
         if ($pkCols.Count -gt 0) {
             $names = ($pkCols | ForEach-Object { '"' + $_.COLUMN_NAME + '"' }) -join ", "
             $lines += "    PRIMARY KEY ($names)"

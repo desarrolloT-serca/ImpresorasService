@@ -14,5 +14,6 @@ CREATE COLUMN TABLE "ZTEST_VICENTE_2"."printer_print_job_event" (
     "actor_type" VARCHAR(30) NOT NULL,
     "actor_id" VARCHAR(120),
     "metadata_json" TEXT,
-    "occurred_at_utc" TIMESTAMP NOT NULL
+    "occurred_at_utc" TIMESTAMP NOT NULL,
+    PRIMARY KEY ("event_id")
 );

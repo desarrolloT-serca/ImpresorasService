@@ -8,5 +8,6 @@ CREATE COLUMN TABLE "ZTEST_VICENTE_2"."printer_telegram_config" (
     "min_severity" NVARCHAR(20) DEFAULT 'critical' NOT NULL,
     "notify_on_recovery" TINYINT DEFAULT 1 NOT NULL,
     "check_interval_minutes" INTEGER DEFAULT 5 NOT NULL,
-    "updated_at_utc" NVARCHAR(26) NOT NULL
+    "updated_at_utc" NVARCHAR(26) NOT NULL,
+    PRIMARY KEY ("id")
 );

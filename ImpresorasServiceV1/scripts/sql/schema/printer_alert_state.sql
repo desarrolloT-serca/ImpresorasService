@@ -8,5 +8,6 @@ CREATE COLUMN TABLE "ZTEST_VICENTE_2"."printer_alert_state" (
     "last_health" NVARCHAR(20) DEFAULT 'healthy' NOT NULL,
     "notified_health" NVARCHAR(20),
     "notified_at_utc" NVARCHAR(26),
-    "checked_at_utc" NVARCHAR(26) NOT NULL
+    "checked_at_utc" NVARCHAR(26) NOT NULL,
+    PRIMARY KEY ("store_id")
 );
