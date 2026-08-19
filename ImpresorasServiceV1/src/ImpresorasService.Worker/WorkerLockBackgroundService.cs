@@ -11,7 +11,7 @@ namespace ImpresorasService.Worker;
 /// </summary>
 public sealed class WorkerLockBackgroundService : BackgroundService
 {
-    /// <summary>Ciclos consecutivos sin lock tras los que el fallo pasa de Warning a Error.</summary>
+    /// <summary>Ciclos consecutivos con el lock inaccesible tras los que el fallo pasa de Warning a Error.</summary>
     private const int CyclesBeforeEscalating = 6;
 
     /// <summary>Cada cuántos ciclos se repite el Error mientras siga sin lock (evita inundar el log).</summary>
@@ -23,6 +23,11 @@ public sealed class WorkerLockBackgroundService : BackgroundService
     /// Running y /health respondía ok, porque el fallo del lock solo dejaba un Warning cada 10s.
     /// A partir de <see cref="CyclesBeforeEscalating"/> ciclos se escala a Error —nivel que la
     /// monitorización sí recoge— y luego se repite espaciado.
+    ///
+    /// Cuenta solo los ciclos en que el lock resultó <em>inaccesible</em> (excepción al consultarlo).
+    /// Quedarse sin lock porque lo tiene otra instancia es el standby normal de una configuración
+    /// de dos Workers y no se escala: en la prueba de dos procesos del 19/08/2026 la instancia
+    /// pasiva, sana, disparaba este Error cada 10 minutos.
     /// </summary>
     internal static bool ShouldEscalate(int consecutiveFailures)
         => consecutiveFailures == CyclesBeforeEscalating
@@ -60,7 +65,7 @@ public sealed class WorkerLockBackgroundService : BackgroundService
                 "Worker lock: HeartbeatIntervalSeconds ({Heartbeat}s) >= LeaseSeconds ({Lease}s). El holder quedará inactivo entre renovaciones; use un heartbeat claramente menor que el lease.",
                 heartbeatSeconds, leaseSeconds);
 
-        var consecutiveFailures = 0;
+        var consecutiveUnreachable = 0;
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -72,6 +77,7 @@ public sealed class WorkerLockBackgroundService : BackgroundService
             }
 
             bool acquired;
+            var unreachable = false;
             try
             {
                 await using var scope = _scopeFactory.CreateAsyncScope();
@@ -86,6 +92,7 @@ public sealed class WorkerLockBackgroundService : BackgroundService
             {
                 _logger.LogWarning(ex, "Worker lock: fallo al adquirir/renovar; esta instancia queda inactiva este ciclo.");
                 acquired = false;
+                unreachable = true;
             }
 
             if (acquired != _state.IsHolder)
@@ -96,20 +103,22 @@ public sealed class WorkerLockBackgroundService : BackgroundService
                     _logger.LogWarning("Worker lock: instancia {InstanceId} PERDIÓ/NO OBTUVO el lock — deja de procesar.", WorkerLockState.InstanceId);
             }
 
-            if (acquired)
+            if (unreachable)
             {
-                consecutiveFailures = 0;
+                consecutiveUnreachable++;
+                if (ShouldEscalate(consecutiveUnreachable))
+                    _logger.LogError(
+                        "Worker lock: {Seconds}s sin poder consultar el lock ({Cycles} ciclos seguidos). El Worker NO esta " +
+                        "procesando NADA (ingesta, impresion, conectividad y alertas parados) aunque el servicio figure en " +
+                        "ejecucion. Revisa los privilegios de la conexion sobre printer_worker_lock, o pon " +
+                        "WorkerLock:Enabled=false si esta instalacion es de instancia unica.",
+                        consecutiveUnreachable * heartbeatSeconds, consecutiveUnreachable);
             }
             else
             {
-                consecutiveFailures++;
-                if (ShouldEscalate(consecutiveFailures))
-                    _logger.LogError(
-                        "Worker lock: {Seconds}s sin lock ({Cycles} ciclos seguidos). El Worker NO esta procesando NADA " +
-                        "(ingesta, impresion, conectividad y alertas parados) aunque el servicio figure en ejecucion. " +
-                        "Revisa los privilegios de la conexion sobre printer_worker_lock, o pon WorkerLock:Enabled=false " +
-                        "si esta instalacion es de instancia unica.",
-                        consecutiveFailures * heartbeatSeconds, consecutiveFailures);
+                consecutiveUnreachable = 0;
+                if (!acquired)
+                    _logger.LogDebug("Worker lock: el lock lo tiene otra instancia; esta queda en espera (standby).");
             }
 
             _state.SetHolder(acquired, leaseSeconds);
