@@ -106,6 +106,30 @@ de las dos: o se confirma de verdad, o se deja de afirmar.
   es la decisión que determina si un fallo se reintenta, y cada reintento es otro envío al
   spooler. **Sigue sin cubrirse** el lanzamiento del proceso, IPP y HANA.
 
+### Desplegado el 19/08/2026 — verificado en caliente
+
+| Comprobación | Resultado |
+|---|---|
+| Retención de PDF | ✅ 60 filas del origen liberadas en el primer barrido, 0 en `printer_print_job`. Sin warning de `NOT NULL`: el DDL está bien |
+| Lock con reloj de HANA (B1.2) | ✅ Funciona contra el provider real. **Reveló 19 s de deriva** entre `BELDA2` y HANA — con `LeaseSeconds=30` eso estaba cerca de provocar dos titulares |
+| Revocación de acceso (B2.2) | ✅ Las sesiones abiertas siguen valiendo: los tokens quedaron en versión 0, igual que el `DEFAULT` |
+| Arranque del Worker | ✅ Lock adquirido, sin errores de HANA |
+
+### Riesgo operativo conocido: el Worker muere al pararlo
+
+`Sap.Data.Hana.PInvokeMethods64.HanaCommand_Cancel` lanza `AccessViolationException` dentro de
+`BackgroundService.StopAsync`: al parar el servicio, el `stoppingToken` cancela el comando en
+vuelo contra HANA y el driver nativo revienta. Visto dos veces el 19/08/2026, **las dos**
+parando el servicio.
+
+- Una `AccessViolation` viene del driver de SAP y no se captura con `try/catch`. No es código nuestro.
+- **No explica una parada espontánea**: un Worker que nadie para no se muere por esto.
+- El coste es una parada sucia, no pérdida de trabajo — el claim atómico y el barrido de `Printing` stale cubren lo que quede a medias.
+- Los servicios llevan ya acciones de recuperación (5 s / 15 s / 60 s), **sin `failureflag`** a propósito: con él, esta muerte durante una parada solicitada rearrancaría el servicio a los 5 s.
+
+Si algún día hiciera falta atacarlo: no pasar el `stoppingToken` a las operaciones EF y dejar
+que el timeout de shutdown las corte. Cambio amplio y con contrapartidas; hoy no compensa.
+
 ### Lo que queda sin cobertura (deuda reconocida)
 
 | Qué | Por qué no está |
@@ -113,6 +137,15 @@ de las dos: o se confirma de verdad, o se deja de afirmar.
 | `StoreHealthAlertBackgroundService` | Ningún test. La lógica de reintento de alerta se añadió sin cubrir: `RunOnceAsync` es privado y hacerlo testeable es un refactor mayor que el cambio |
 | Lanzamiento real del proceso de impresión, IPP, provider HANA | Necesitan spooler, impresora o base de datos reales. Es el fondo de H-11 |
 | Reclamar entre la lectura y el UPDATE (409 de `cancel`) | Exige interponerse en el comando SQL |
+
+> **Ruido en el Event Log.** Los tests de integración escriben en el registro de Windows de la
+> máquina: cada `dotnet test` deja 7 advertencias y 3 errores con `SqliteException` sobre
+> `/api/printers`, indistinguibles a simple vista de un fallo de producción. El entorno
+> `Testing` no debería registrar el proveedor EventLog.
+>
+> Aparte, EF avisa de `Skip`/`Take` sin `OrderBy` en once `.Take(1)` usados como "¿existe?".
+> Es inocuo —el orden da igual si solo compruebas existencia— y **no se toca**: cambiarlos por
+> `AnyAsync()` tiene precedente de romper el dashboard con el provider de HANA (`432b717`).
 
 ---
 
