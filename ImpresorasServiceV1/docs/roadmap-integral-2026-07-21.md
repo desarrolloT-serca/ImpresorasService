@@ -125,9 +125,18 @@ G5  UI/UX y accesibilidad                     ← P2/P3
 | A-KPI-05 | P2 | G2 (parcial ✅) | pruebas 1-6, #1 verde | fechas nativas verificadas (✅); #2-6 pendientes |
 | A-KPI-06 | P3 | G3.3 | — | contrato actualizado |
 | A-KPI-07 | P3 | G3.2 | id TZ inválido | endpoint no 500 |
-| A-ARCH-01 | P1 | G4.1 ✅ (código) | `WorkerLockCoordinatorTests` (2º holder bloqueado / relevo tras expirar) | lock verificado en staging con 2 procesos reales (pendiente) |
+| A-ARCH-01 | P1 | G4.1 ✅ | `WorkerLockCoordinatorTests` (2º holder bloqueado / relevo tras expirar) | ✅ verificado el 19/08/2026 con 2 procesos reales contra `ZTEST_VICENTE_2` (ver nota abajo) |
 | A-ARCH-03 | P2 | G4.2 | — | estados en un único punto |
 | A-UI-02 | P2 | G5.1 | — | sin solapes críticos |
+
+**Nota A-ARCH-01 (19/08/2026).** Verificación con dos procesos reales, posible por fin tras el GRANT
+sobre `printer_worker_lock` (ver H-14 en `auditoria/revision-garantias-2026-08-12.md`). Con la cola a
+cero trabajos en curso, se arrancó una segunda instancia del binario publicado en paralelo al
+servicio: **no adquirió el lock** y `holder` siguió siendo el del servicio. Al parar el servicio, la
+segunda tomó el relevo al expirar el lease y `holder` pasó a su instancia; al rearrancar el servicio,
+el lock volvió a él. El relevo tardó ~1 min: el peor caso es `LeaseSeconds` + `HeartbeatIntervalSeconds`
+(30 + 10) porque el candidato solo comprueba una vez por heartbeat. Durante la prueba se disparó
+también el `Error` por 6 ciclos sin lock que se añadió tras el incidente del 17/08.
 
 ---
 
