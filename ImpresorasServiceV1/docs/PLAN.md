@@ -17,7 +17,8 @@ cuál sigue vivo y para qué; el resto no hay que leerlo para decidir en qué tr
 |---|---|
 | **`PLAN.md`** (este) | **Qué hacer y en qué orden.** Lo único que hay que leer para elegir tarea |
 | `auditoria/revision-garantias-2026-08-12.md` | Evidencia de los hallazgos H-01…H-15, con su estado real. La referencia técnica cuando toque uno |
-| `roadmapimpresoras.md` | Especificación de las fases 2.2, 2.5, 3.4, 5.x y 6.2. **Contiene el diseño, no el estado** — no lleva marcas de hecho/pendiente |
+| `roadmapimpresoras.md` | Especificación de las fases 2.2, 2.5, 3.4, 5.x y 6.2. **Contiene el diseño, no el estado** — no lleva marcas de hecho/pendiente. La 3.4 quedó descartada, ver abajo |
+| `gate-i1-ipp-por-trabajo.md` | Resultado medido del gate I-1 contra el parque real, y por qué la confirmación por trabajo no sale |
 | `roadmap-integral-2026-07-21.md` | Cerrado salvo G2 (#2-6), que necesita tráfico real. Se consulta, no se planifica desde él |
 | `auditoria/plan-remediacion.md` | Origen de los AUD-xx. Casi todo absorbido aquí |
 | `contrato-kpi-dashboard.md` | Contrato vivo de los KPI. No es un roadmap |
@@ -38,7 +39,7 @@ Cinco bloques. **B0 desbloquea a los demás y no es código.** Dentro de cada bl
 |---|---|---|
 | ~~B0.1~~ | ~~`migrate_pdf_blob_nullable.sql`~~ | ✅ **Aplicado el 19/08/2026.** `pdf_blob` es nullable en las dos tablas; la retención de 90 días ya puede liberar |
 | B0.2 | Ejecutar `scripts/extraer-ddl-hana.ps1` contra HANA y commitear el resultado | Confirma las `PRIMARY KEY` (hoy reconstruidas desde `_inventario.sql`, no desde una ejecución real) y añade `printer_worker_lock`, creado después de la extracción del 12/08 |
-| B0.3 | **Gate I-1**: comprobar contra una impresora real del parque si responde `Get-Job-Attributes` por IPP | B3. Sin este dato, la confirmación por trabajo no se puede ni planificar |
+| ~~B0.3~~ | ~~**Gate I-1**~~ | ✅ **Ejecutado el 19/08/2026** — ver `docs/gate-i1-ipp-por-trabajo.md`. Positivo en la pregunta, pero **no viable con el envío actual**: solo 2 de 8 impresoras lo soportan y, sobre todo, no imprimimos por IPP, así que nunca vemos el `job-id` que la operación necesita |
 | ~~B0.4~~ | ~~`migrate_user_revocation.sql`~~ | ✅ **Aplicado el 19/08/2026.** `is_active` y `token_version` existen; los 3 usuarios quedaron activos y en versión 0, sin cerrar ninguna sesión. **`main` vuelve a ser desplegable** |
 
 > **Los cuatro `ALTER` quedaron aplicados el 19/08/2026** y verificados contra HANA. Nota para la
@@ -67,12 +68,12 @@ Cinco bloques. **B0 desbloquea a los demás y no es código.** Dentro de cada bl
 > **UI incluida.** `/usuarios` muestra el estado y ofrece activar/desactivar por fila
 > (`POST /usuarios/{id}/activacion`). Desactivar pide confirmación; reactivar no, porque no rompe nada.
 
-### B3 · Bloqueado por el gate I-1
+### B3 · Desbloqueado, y el gate cambió la respuesta
 
-| # | Trabajo | Hallazgo |
-|---|---|---|
-| B3.1 | Confirmación IPP **por trabajo** en vez de por `printer-state` | H-01, Fase 3.4 |
-| B3.2 | Si I-1 sale negativo: renombrar `PrintedConfirmed` y sus etiquetas para que no afirmen lo que no comprueban | H-01, Fase 3.5 |
+| # | Trabajo | Hallazgo | Estado |
+|---|---|---|---|
+| B3.1 | Confirmación IPP **por trabajo** | H-01, Fase 3.4 | ❌ **Descartado por ahora.** El `job-id` lo asigna la impresora al recibir el trabajo, y enviamos por SumatraPDF → spooler de Windows: ese id no llega nunca a nuestro proceso. Solo sería viable imprimiendo por IPP (`Print-Job`), y aun así en el 25 % del parque |
+| B3.2 | Renombrar `PrintedConfirmed` y sus etiquetas para que no afirmen lo que no comprueban | H-01, Fase 3.5 | ⏳ **Es lo que queda, y ahora es la única salida.** Cubre el 100 % del parque. Decisión de producto: toca UI, KPI e histórico |
 
 Hoy una lectura de `printer-state` marca `PrintedConfirmed` a **todo el lote** de esa impresora, PHP
 lo etiqueta «Impreso» y el KPI `printed` incluye además `SpoolAccepted` y `PrintedUnknown`. Sale una
