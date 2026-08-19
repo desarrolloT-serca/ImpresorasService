@@ -144,6 +144,13 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateLifetime = true,
             ClockSkew = TimeSpan.Zero
         };
+
+        // Firma y caducidad correctas no bastan: el usuario pudo ser borrado, desactivado o haber
+        // cambiado su contraseña después de emitirse este token (Fase 5).
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = UserRevocationValidator.ValidateAsync
+        };
     });
 
 builder.Services.AddAuthorization(options =>

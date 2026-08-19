@@ -88,6 +88,11 @@ public class AuthController : ControllerBase
         if (!BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
             return (null, "Credenciales inválidas");
 
+        // Después de verificar la contraseña a propósito: quien no acierte las credenciales recibe
+        // siempre el mismo mensaje y no puede averiguar qué logins existen.
+        if (!user.IsActive)
+            return (null, "Usuario desactivado. Contacte con un administrador.");
+
         return (user, null);
     }
 
@@ -110,6 +115,10 @@ public class AuthController : ControllerBase
         };
         if (user.StoreId.HasValue)
             claims.Add(new Claim("StoreId", user.StoreId.Value.ToString()));
+
+        // Version con la que se emite. UserRevocationValidator la compara contra la de la base de
+        // datos en cada petición: si la contraseña cambió, este token deja de valer.
+        claims.Add(new Claim(UserRevocationValidator.TokenVersionClaim, user.TokenVersion.ToString()));
 
         var token = new JwtSecurityToken(
             issuer: _config["Jwt:Issuer"] ?? "ImpresorasService",

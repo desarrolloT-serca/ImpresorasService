@@ -385,6 +385,8 @@ public class ImpresorasDbContext : DbContext
             entity.Property(x => x.Role).HasColumnName("role");
             entity.Property(x => x.StoreId).HasColumnName("store_id");
             entity.Property(x => x.DisplayName).HasColumnName("display_name");
+            entity.Property(x => x.IsActive).HasColumnName("is_active").HasDefaultValue(true);
+            entity.Property(x => x.TokenVersion).HasColumnName("token_version").HasDefaultValue(0);
             entity.Property(x => x.UserId).ValueGeneratedOnAdd();
             entity.Property(x => x.Login).HasMaxLength(80).IsRequired();
             entity.Property(x => x.PasswordHash).HasMaxLength(256).IsRequired();

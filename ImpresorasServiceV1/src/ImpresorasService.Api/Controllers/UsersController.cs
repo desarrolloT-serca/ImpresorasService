@@ -32,7 +32,8 @@ public class UsersController : ControllerBase
                 x.Login,
                 x.DisplayName,
                 Role = RoleCatalog.Normalize(x.Role),
-                x.StoreId
+                x.StoreId,
+                x.IsActive
             })
             .ToListAsync(cancellationToken);
 
@@ -51,7 +52,8 @@ public class UsersController : ControllerBase
                 x.Login,
                 x.DisplayName,
                 Role = RoleCatalog.Normalize(x.Role),
-                x.StoreId
+                x.StoreId,
+                x.IsActive
             })
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -136,14 +138,28 @@ public class UsersController : ControllerBase
                 return Conflict(new { error = "No se puede demover al ultimo administrador." });
         }
 
+        var deactivating = request.IsActive == false && user.IsActive;
+        if (deactivating && IsCurrentUser(user))
+            return Conflict(new { error = "No puedes desactivar tu propio usuario." });
+
+        // Desactivar al último administrador deja el sistema sin nadie que pueda administrarlo:
+        // mismo motivo por el que no se puede demover ni borrar.
+        if (deactivating && RoleCatalog.Normalize(user.Role) == RoleCatalog.Admin && await IsLastAdminAsync(id, cancellationToken))
+            return Conflict(new { error = "No se puede desactivar al ultimo administrador." });
+
         user.Login = request.Login.Trim();
         user.DisplayName = string.IsNullOrWhiteSpace(request.DisplayName) ? request.Login.Trim() : request.DisplayName.Trim();
         user.Role = role;
         user.StoreId = NeedsStore(role) ? request.StoreId : null;
+        if (request.IsActive.HasValue)
+            user.IsActive = request.IsActive.Value;
 
         if (!string.IsNullOrWhiteSpace(request.Password))
         {
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password.Trim(), BCrypt.Net.BCrypt.GenerateSalt(10));
+            // Cerrar las sesiones abiertas: si se cambia la contraseña es porque la anterior ya no
+            // debe servir, y un token emitido con ella seguiría valiendo hasta 8 horas.
+            user.TokenVersion++;
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -153,7 +169,8 @@ public class UsersController : ControllerBase
             user.Login,
             user.DisplayName,
             user.Role,
-            user.StoreId
+            user.StoreId,
+            user.IsActive
         });
     }
 
@@ -167,22 +184,25 @@ public class UsersController : ControllerBase
         if (IsCurrentUser(user))
             return Conflict(new { error = "No puedes eliminar tu propio usuario." });
 
-        if (RoleCatalog.Normalize(user.Role) == RoleCatalog.Admin)
-        {
-            var remainingRoles = await _dbContext.Users
-                .AsNoTracking()
-                .Where(x => x.UserId != id)
-                .Select(x => x.Role)
-                .ToListAsync(cancellationToken);
-            var hasRemainingAdmin = remainingRoles.Any(role => RoleCatalog.Normalize(role) == RoleCatalog.Admin);
-            if (!hasRemainingAdmin)
-                return Conflict(new { error = "No se puede eliminar el ultimo administrador." });
-        }
+        if (RoleCatalog.Normalize(user.Role) == RoleCatalog.Admin && await IsLastAdminAsync(id, cancellationToken))
+            return Conflict(new { error = "No se puede eliminar el ultimo administrador." });
 
         _dbContext.Users.Remove(user);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return NoContent();
+    }
+
+    /// <summary>Si no queda ningún otro Admin, este es el último y no puede irse.</summary>
+    private async Task<bool> IsLastAdminAsync(int excludedUserId, CancellationToken ct)
+    {
+        var remainingRoles = await _dbContext.Users
+            .AsNoTracking()
+            .Where(x => x.UserId != excludedUserId && x.IsActive)
+            .Select(x => x.Role)
+            .ToListAsync(ct);
+
+        return !remainingRoles.Any(role => RoleCatalog.Normalize(role) == RoleCatalog.Admin);
     }
 
     private async Task<string?> ValidateRequestAsync(
@@ -276,4 +296,6 @@ public record UpdateUserRequest(
     string Role,
     int? StoreId,
     string? DisplayName = null,
-    string? Password = null);
+    string? Password = null,
+    /// <summary>Null deja el estado como está; un cliente antiguo no desactiva a nadie sin querer.</summary>
+    bool? IsActive = null);
