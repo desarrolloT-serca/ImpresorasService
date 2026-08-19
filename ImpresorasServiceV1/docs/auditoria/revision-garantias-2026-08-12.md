@@ -340,6 +340,16 @@ Corrección: guardar el instante de la última renovación exitosa y que `IsHold
 
 **Aceptación:** dos Workers reales contra el mismo HANA, suspendiendo el holder con `Ctrl+Break`, no deben solapar envíos.
 
+> **(a) resuelto el 19/08/2026.** `WorkerLockCoordinator.GetSharedNowAsync` lee
+> `CURRENT_UTCTIMESTAMP FROM DUMMY` cuando el proveedor es HANA, así que el umbral del lease sale
+> del reloj donde vive el dato y la deriva entre servidores deja de importar. Si la consulta falla
+> se cae al reloj local con warning: quedarse sin lock por no poder leer la hora dejaría al Worker
+> inerte, que es peor que el riesgo que se está evitando. En SQLite se sigue usando el
+> `TimeProvider` inyectado — es lo que permite simular la expiración del lease en los tests.
+> **Pendiente de verificar contra HANA:** no hay entorno en esta pasada.
+>
+> **(b) resuelto** antes, con la caducidad en `WorkerLockState.IsHolder`.
+
 ---
 
 ### H-11 · CI nunca ejercita la ruta de producción — **DEMOSTRADO**
@@ -349,6 +359,12 @@ Corrección: guardar el instante de la última renovación exitosa y que `IsHold
 Los tests son SQLite (`SqliteTestDbHelper.cs`), un solo proyecto, 8 ficheros de prueba. No cubren el watchdog, ni IPP, ni conectividad, ni las alertas.
 
 Los tres componentes de los que depende la corrección física del producto — provider HANA, spooler de Windows, IPP — tienen **cobertura cero**. "Tests verdes" no dice nada sobre producción; la hipótesis del documento se confirma en su forma más fuerte.
+
+> **Mitigado a medias el 19/08/2026.** El job .NET del CI pasa a `windows-latest`, así que
+> `RuntimeInformation.IsOSPlatform(OSPlatform.Windows)` ya es true y deja de ejercitarse solo la
+> rama `NoOpPrintSpooler` de `AddInfrastructure`. **El hallazgo sigue abierto:** no hay ni una
+> prueba de `WindowsPrintSpooler`, de IPP ni contra HANA; lo único que cambia es qué rama de la
+> selección de dependencias se recorre.
 
 ---
 
@@ -430,6 +446,17 @@ los metadatos — la trazabilidad y los KPI no dependen del blob. Hacer lo propi
 `printer_source_print_job` para las filas ya procesadas, que es donde más volumen hay. N debe ser
 mayor que la ventana en la que un operador aún puede querer reimprimir.
 **Aceptación:** un trabajo terminal de hace N+1 días conserva su fila y su hash, y no su PDF.
+
+> **Resuelto en código el 19/08/2026, pendiente de DDL.** `PdfRetentionBackgroundService` barre
+> las dos tablas: `printer_print_job` por estado terminal + ventana (12/08) y
+> `printer_source_print_job` por `is_processed` + la misma ventana (19/08), que es donde estaba el
+> grueso del volumen medido aquí. Una fila de origen **sin procesar** no se toca nunca: su PDF es
+> el único ejemplar que existe todavía, y hay un test que lo fija.
+>
+> Sigue **apagado por defecto** (`PdfRetention:Enabled=false`) y **no puede funcionar** hasta que
+> se aplique `scripts/sql/migrate_pdf_blob_nullable.sql`, que ahora lleva los dos `ALTER`: en
+> ambas tablas `pdf_blob` es `BLOB NOT NULL`. El plazo de conservación sigue siendo la decisión
+> de protección de datos que este hallazgo señalaba.
 
 ---
 

@@ -3,7 +3,7 @@
 **Fuente de verdad única del trabajo pendiente.** Cualquier otro roadmap o auditoría del repositorio
 es evidencia o historia, no una lista de tareas.
 
-**Estado a 2026-08-19**, sobre `main` @ `7b7a7af`. Suites: `dotnet test` 153/153, `php artisan test`
+**Estado a 2026-08-19**, sobre `main`. Suites: `dotnet test` 154/154, `php artisan test`
 13/13, `npm run build` limpio, `composer audit` limpio.
 
 ---
@@ -36,19 +36,19 @@ Cinco bloques. **B0 desbloquea a los demás y no es código.** Dentro de cada bl
 
 | # | Acción | Desbloquea |
 |---|---|---|
-| B0.1 | Aplicar `scripts/sql/migrate_pdf_blob_nullable.sql` en HANA | B1.1. Sin esto `PdfRetention` no libera nada aunque se active: `pdf_blob` es `BLOB NOT NULL` y el barrido solo deja un warning |
+| B0.1 | Aplicar `scripts/sql/migrate_pdf_blob_nullable.sql` en HANA (**dos** `ALTER`: `printer_print_job` y `printer_source_print_job`) | La retención entera. El código está listo desde el 19/08; sin este DDL no libera nada, `pdf_blob` es `BLOB NOT NULL` y el barrido solo deja un warning |
 | B0.2 | Ejecutar `scripts/extraer-ddl-hana.ps1` contra HANA y commitear el resultado | Confirma las `PRIMARY KEY` (hoy reconstruidas desde `_inventario.sql`, no desde una ejecución real) y añade `printer_worker_lock`, creado después de la extracción del 12/08 |
 | B0.3 | **Gate I-1**: comprobar contra una impresora real del parque si responde `Get-Job-Attributes` por IPP | B3. Sin este dato, la confirmación por trabajo no se puede ni planificar |
 
 > B0.3 es una prueba de media hora con una impresora y `curl`. Es la que más decisiones destraba.
 
-### B1 · Ejecutable ya — sin decisión previa
+### ~~B1 · Ejecutable ya — sin decisión previa~~ ✅ HECHO 2026-08-19
 
-| # | Acción | Hallazgo | Criterio de cierre |
+| # | Acción | Hallazgo | Estado |
 |---|---|---|---|
-| B1.1 | Extender la retención a `printer_source_print_job` | H-15 | Una fila procesada de hace N+1 días conserva metadatos y no el PDF. **Ojo:** su `pdf_blob` también es `NOT NULL`, así que B0.1 debe cubrir las dos tablas |
-| B1.2 | Derivar el umbral del lease del reloj de HANA (`CURRENT_UTCTIMESTAMP`), no del proceso | H-10 (a) | Dos Workers con relojes desfasados no se solapan. Hoy una instancia adelantada se lleva un lease vivo |
-| B1.3 | Mover el job .NET del CI a `windows-latest` | H-11 (parcial) | El CI deja de ejercitar solo la rama `NoOpPrintSpooler`. **No cierra H-11**: sigue sin haber pruebas del spooler en sí |
+| ~~B1.1~~ | Retención extendida a `printer_source_print_job` | H-15 | ✅ `PdfRetention.ReleaseExpiredSourcePdfsAsync`, corte `is_processed` + antigüedad. Una fila sin procesar no se toca nunca (test). **Falta B0.1**, que ahora cubre las dos tablas |
+| ~~B1.2~~ | Umbral del lease desde el reloj de la base de datos | H-10 (a) | ✅ `CURRENT_UTCTIMESTAMP` cuando el proveedor es HANA, con fallback al reloj local y traza. En SQLite sigue el `TimeProvider`, que es lo que hace deterministas los tests del relevo. **Sin verificar contra HANA** |
+| ~~B1.3~~ | Job .NET del CI en `windows-latest` | H-11 (parcial) | ✅ El CI deja de correr todo con `NoOpPrintSpooler`. **No cierra H-11**: sigue sin haber pruebas del spooler en sí (ver B5) |
 
 ### B2 · Necesitan una decisión tuya antes de tocar código
 
