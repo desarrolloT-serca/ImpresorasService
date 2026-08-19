@@ -28,7 +28,12 @@ class ColaController extends Controller
         } elseif ($effectiveStore !== null) {
             $params['storeId'] = $effectiveStore;
         }
-        if ($request->filled('status')) {
+        // Excluyentes: failedWithoutRetry es un conjunto de estados (el mismo del KPI del dashboard),
+        // no un estado suelto, asi que gana sobre el filtro de estado si llegan los dos.
+        $failedWithoutRetry = $request->boolean('failedWithoutRetry');
+        if ($failedWithoutRetry) {
+            $params['failedWithoutRetry'] = 'true';
+        } elseif ($request->filled('status')) {
             $params['status'] = $request->integer('status');
         }
         if ($externalJobId !== '') {
@@ -70,7 +75,8 @@ class ColaController extends Controller
         return view('cola', [
             'jobs' => $jobs,
             'storeId' => $request->input('storeId'),
-            'status' => $request->input('status'),
+            'status' => $failedWithoutRetry ? null : $request->input('status'),
+            'failedWithoutRetry' => $failedWithoutRetry,
             'externalJobId' => $externalJobId,
             'page' => $page,
             'limit' => $limit,

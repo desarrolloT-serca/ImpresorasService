@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using ImpresorasService.Application.Abstractions;
+using ImpresorasService.Application.Services;
 using ImpresorasService.Domain;
 using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure.Persistence;
@@ -33,6 +34,7 @@ public class PrintJobsController : ControllerBase
         [FromQuery] int? page,
         [FromQuery] string? externalJobId,
         [FromQuery] bool? includeTotal,
+        [FromQuery] bool? failedWithoutRetry,
         CancellationToken cancellationToken)
     {
         IQueryable<PrintJob> query = _dbContext.PrintJobs.AsNoTracking();
@@ -43,7 +45,14 @@ public class PrintJobsController : ControllerBase
         if (effectiveStoreId.HasValue)
             query = query.Where(x => x.StoreId == effectiveStoreId.Value);
 
-        if (status.HasValue)
+        // Mismo predicado que el KPI "sin reenviar" del dashboard, no una copia: así el número que
+        // muestra el dashboard siempre se puede auditar listando exactamente esos trabajos. Con el
+        // filtro por Status suelto no coincidían (un ErrorFinal es solo parte del conjunto).
+        if (failedWithoutRetry == true)
+        {
+            query = query.Where(DashboardPrintJobPredicates.FailedWithoutRetryCurrent);
+        }
+        else if (status.HasValue)
         {
             query = query.Where(x => x.Status == status.Value);
         }

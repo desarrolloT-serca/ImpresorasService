@@ -181,10 +181,12 @@ class DashboardController extends Controller
                 $isPrintedStatus = in_array($statusInt, [3, 4, 5], true);
                 // Documento con señal de fallo: fallo final, reintento programado o impreso tras reintentos.
                 $hasFailureSignal = $statusInt === 8 || $statusInt === 6 || ($isPrintedStatus && $attemptCount > 1);
-                // Contrato (docs/contrato-kpi-dashboard.md): ErrorFinal, o no-terminal/Cancelled/PrinterBlocked
+                // Contrato (docs/contrato-kpi-dashboard.md): ErrorFinal, o no-terminal/PrinterBlocked
                 // con reintentos ya consumidos. Independiente de hasFailureSignal (VAL-P2-006).
+                // Debe coincidir con DashboardPrintJobPredicates.FailedWithoutRetryCurrent: Cancelado (7)
+                // queda fuera, cancelar cierra el trabajo y no deja nada pendiente de reenvio.
                 $isFailedWithoutRetryStatus = $statusInt === 8
-                    || (in_array($statusInt, [0, 1, 2, 7, 9], true) && $attemptCount > 1);
+                    || (in_array($statusInt, [0, 1, 2, 9], true) && $attemptCount > 1);
                 $storeId = (int) ($job['storeId'] ?? $job['StoreId'] ?? 0);
                 $printerId = (int) ($job['printerId'] ?? $job['PrinterId'] ?? 0);
                 $createdAtRaw = $job['createdAtUtc'] ?? $job['CreatedAtUtc'] ?? $job['created_at_utc'] ?? null;

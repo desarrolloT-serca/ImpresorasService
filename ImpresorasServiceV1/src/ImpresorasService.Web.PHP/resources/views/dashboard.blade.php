@@ -462,7 +462,10 @@
                                         } elseif (stripos($reason, 'sin reenviar') !== false) {
                                             $alertType = 'failed_no_retry';
                                             $alertTypeLabel = 'Sin reenviar';
-                                            $href = '/cola?storeId=' . urlencode((string)$storeId) . '&status=8';
+                                            // failedWithoutRetry, no status=8: el KPI cuenta tambien
+                                            // los atascados con reintentos agotados, y con status=8
+                                            // el listado devolvia menos trabajos que el numero mostrado.
+                                            $href = '/cola?storeId=' . urlencode((string)$storeId) . '&failedWithoutRetry=1';
                                         } elseif (stripos($reason, 'conectividad') !== false || stripos($reason, 'fallos de conexion') !== false) {
                                             $alertType = 'connectivity';
                                             $alertTypeLabel = 'Conectividad';

@@ -12,12 +12,17 @@ namespace ImpresorasService.Application.Services;
 /// </summary>
 public static class DashboardPrintJobPredicates
 {
+    /// <remarks>
+    /// <see cref="PrintJobStatus.Cancelled"/> queda FUERA: cancelar es una decisión explícita del
+    /// operador que cierra el trabajo, así que un cancelado tras agotar reintentos no está pendiente
+    /// de reenvío. Mientras contaba, inflaba el KPI de forma permanente (nunca se resuelve solo),
+    /// degradaba la salud de la tienda y mantenía viva la alerta de Telegram por trabajos ya cerrados.
+    /// </remarks>
     public static readonly Expression<Func<PrintJob, bool>> FailedWithoutRetryCurrent =
         x => x.Status == PrintJobStatus.ErrorFinal
              || ((x.Status == PrintJobStatus.Pending
                   || x.Status == PrintJobStatus.Routed
                   || x.Status == PrintJobStatus.Printing
-                  || x.Status == PrintJobStatus.Cancelled
                   || x.Status == PrintJobStatus.PrinterBlocked)
                  && x.AttemptCount > 1);
 

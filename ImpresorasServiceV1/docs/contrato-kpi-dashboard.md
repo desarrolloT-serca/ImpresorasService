@@ -15,9 +15,18 @@ antes de corregirlo, no solo por inspección de código.
 | `printed` | Trabajos cuya **primera** transición a un estado impreso ocurre en la ventana (cuenta una sola vez por `JobId`, sin importar cuántas veces se actualice después) | `MIN(PrintJobEvents.OccurredAtUtc)` agrupado por `JobId`, donde `NewStatus IN (SpoolAccepted, PrintedConfirmed, PrintedUnknown)`, filtrado a `[from, now]` | ídem |
 | `failed` | Trabajos distintos con **al menos una** señal de fallo en la ventana (no se re-imputa un job que ya cuenta por otra señal en la misma ventana) | Unión, deduplicada por `JobId`: eventos con `NewStatus IN (ErrorFinal, RetryScheduled)` en `[from, now]`; **más** los jobs de `printed` (mismo cálculo) cuyo `AttemptCount > 1` | ídem |
 | `queueCurrent` | Foto actual, sin ventana temporal | `Status IN (Pending, Routed, Printing, RetryScheduled)` | ídem |
-| `failedWithoutRetryCurrent` | Fallidos sin reenvío pendiente — foto de estado actual, **sin ventana temporal** (corregido 2026-07-21, A-KPI-01: filtrar por `UpdatedAtUtc` hacía que un `ErrorFinal` terminal "desapareciera" al cruzar medianoche, ya que su `UpdatedAtUtc` no vuelve a moverse — falsas alertas de recuperación y fallos ocultos). Idéntico en `today`/`7d`/`30d` por diseño. | `DashboardPrintJobPredicates.FailedWithoutRetryCurrent` (sin filtro de fecha) | ídem |
+| `failedWithoutRetryCurrent` | Fallidos sin reenvío pendiente — foto de estado actual, **sin ventana temporal** (corregido 2026-07-21, A-KPI-01: filtrar por `UpdatedAtUtc` hacía que un `ErrorFinal` terminal "desapareciera" al cruzar medianoche, ya que su `UpdatedAtUtc` no vuelve a moverse — falsas alertas de recuperación y fallos ocultos). Idéntico en `today`/`7d`/`30d` por diseño. **`Cancelled` queda fuera** (corregido 2026-08-17): cancelar es una decisión explícita del operador que cierra el trabajo, así que un cancelado tras agotar reintentos no está pendiente de reenvío — mientras contaba inflaba el KPI de forma permanente (nunca se resuelve solo) y mantenía viva la alerta de la tienda por trabajos ya cerrados. | `DashboardPrintJobPredicates.FailedWithoutRetryCurrent` (sin filtro de fecha) | ídem |
 | `activePrinters` | Impresoras activas actuales | foto actual | tienda efectiva |
 | `activeStores` | Tiendas activas actuales | foto actual | tienda efectiva |
+
+## `failedWithoutRetryCurrent` debe ser auditable desde la cola
+
+El número que muestra el dashboard tiene que poder abrirse y listarse: `GET /api/printjobs?failedWithoutRetry=true`
+aplica el mismo `DashboardPrintJobPredicates.FailedWithoutRetryCurrent`, no una copia, y es a donde
+enlazan el dashboard y el botón "Sin reenviar" de la cola. Antes se enlazaba a `status=8`, que es solo
+un subconjunto (`ErrorFinal`), así que el KPI mostraba más trabajos de los que el operador podía ver
+—y la diferencia no era diagnosticable desde la UI. Si en el futuro cambia el predicado, no hay nada
+que sincronizar: ambos lados leen la misma expresión.
 
 ## Por qué `failed` no es solo "eventos en la ventana"
 

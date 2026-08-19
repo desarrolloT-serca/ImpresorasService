@@ -100,6 +100,57 @@ public sealed class DashboardControllerTests : IntegrationTestBase
         Assert.Equal(3, printer.ReceivedWindow); // los 3 jobs asignados a esta impresora, creados hoy
     }
 
+    /// <summary>
+    /// El KPI "sin reenviar" y el listado de cola que abre el operador al pulsarlo deben devolver
+    /// exactamente el mismo conjunto. Antes el dashboard enlazaba a `status=8` (solo ErrorFinal),
+    /// que es un subconjunto: el número mostrado no cuadraba con la lista y no había forma de
+    /// auditar la diferencia. Además fija que un Cancelado tras agotar reintentos NO cuenta:
+    /// cancelar cierra el trabajo, no deja nada pendiente de reenvío.
+    /// </summary>
+    [Fact]
+    public async Task GetOverview_FailedWithoutRetryKpi_MatchesQueueFilterAndExcludesCancelled()
+    {
+        const int storeId = 987;
+        const int printerId = 5987;
+        var now = DateTimeOffset.UtcNow;
+        Guid cancelledJobId;
+
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
+
+            if (!await db.Stores.AnyAsync(s => s.StoreId == storeId))
+            {
+                db.Stores.Add(new Store { StoreId = storeId, Name = "Sin Reenviar Store", IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now });
+            }
+            if (!await db.Printers.AnyAsync(p => p.PrinterId == printerId))
+            {
+                db.Printers.Add(new Printer { PrinterId = printerId, StoreId = storeId, PrinterName = "Sin Reenviar Printer", SpoolQueue = @"\\host\q987", Host = "host", IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now });
+            }
+            db.PrintJobs.RemoveRange(await db.PrintJobs.Where(j => j.StoreId == storeId).ToListAsync());
+
+            AddJobWithEvent(db, MakeJob(now, PrintJobStatus.ErrorFinal, storeId: storeId, printerId: printerId, attemptCount: 1));
+            AddJobWithEvent(db, MakeJob(now, PrintJobStatus.PrinterBlocked, storeId: storeId, printerId: printerId, attemptCount: 2));
+            var cancelled = MakeJob(now, PrintJobStatus.Cancelled, storeId: storeId, printerId: printerId, attemptCount: 4);
+            cancelledJobId = cancelled.JobId;
+            AddJobWithEvent(db, cancelled);
+            AddJobWithEvent(db, MakeJob(now, PrintJobStatus.Pending, storeId: storeId, printerId: printerId));
+            await db.SaveChangesAsync();
+        }
+
+        var overviewResponse = await Client.GetAsync($"/api/dashboard/overview?window=today&storeId={storeId}");
+        overviewResponse.EnsureSuccessStatusCode();
+        var overview = await ReadAsJsonAsync<DashboardOverviewResponse>(overviewResponse);
+        var store = Assert.Single(overview!.Stores!);
+        Assert.Equal(2, store.FailedWithoutRetryCurrent); // ErrorFinal + PrinterBlocked(2 intentos); el Cancelado no
+
+        var queueResponse = await Client.GetAsync($"/api/printjobs?storeId={storeId}&failedWithoutRetry=true&includeTotal=true");
+        queueResponse.EnsureSuccessStatusCode();
+        var page = await ReadAsJsonAsync<PagedJobs>(queueResponse);
+        Assert.Equal(store.FailedWithoutRetryCurrent, page!.Count);
+        Assert.DoesNotContain(page.Value!, j => j.JobId == cancelledJobId);
+    }
+
     [Fact]
     public void FailedWithoutRetryCurrentPredicate_TranslatesWithHanaProvider()
     {
@@ -327,8 +378,21 @@ public sealed class DashboardControllerTests : IntegrationTestBase
         public int StoreId { get; set; }
         public string? Health { get; set; }
         public int QueuedCurrent { get; set; }
+        public int FailedWithoutRetryCurrent { get; set; }
         public int UnassignedQueueCurrent { get; set; }
         public List<PrinterRow>? Printers { get; set; }
+    }
+
+    private sealed class PagedJobs
+    {
+        public List<QueueJob>? Value { get; set; }
+        public int Count { get; set; }
+    }
+
+    private sealed class QueueJob
+    {
+        public Guid JobId { get; set; }
+        public int AttemptCount { get; set; }
     }
 
     private sealed class PrinterRow

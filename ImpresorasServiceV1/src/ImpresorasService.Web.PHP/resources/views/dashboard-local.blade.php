@@ -47,7 +47,7 @@
         $attentionItems[] = ['level' => $queue >= 10 ? 'warning' : 'info', 'title' => 'Trabajos en cola', 'text' => $queue . ' trabajo(s) pendientes de salida.', 'href' => url('/cola?storeId=' . $storeId . '&status=0')];
     }
     if ($failedNoRetry > 0) {
-        $attentionItems[] = ['level' => 'critical', 'title' => 'Fallos sin reenviar', 'text' => $failedNoRetry . ' trabajo(s) necesitan seguimiento.', 'href' => url('/cola?storeId=' . $storeId . '&status=8')];
+        $attentionItems[] = ['level' => 'critical', 'title' => 'Fallos sin reenviar', 'text' => $failedNoRetry . ' trabajo(s) necesitan seguimiento.', 'href' => url('/cola?storeId=' . $storeId . '&failedWithoutRetry=1')];
     }
     if ($unassigned > 0) {
         $attentionItems[] = ['level' => 'warning', 'title' => 'Cola sin impresora', 'text' => $unassigned . ' trabajo(s) no tienen impresora asignada.', 'href' => url('/cola?storeId=' . $storeId)];

@@ -218,8 +218,9 @@ class DashboardControllerTest extends TestCase
      * F2.2: cuando el overview no responde, PHP recalcula desde `api/printjobs` (fallback) y debe
      * marcar `partialData` si el número de jobs alcanza el límite honesto de 500 (VAL-P1-004), y
      * el predicado `failedWithoutRetryCurrent` debe alinearse con el contrato (ErrorFinal o
-     * Pending/Routed/Printing/Cancelled/PrinterBlocked con AttemptCount>1 — VAL-P2-006), incluyendo
-     * el mapeo de PrinterBlocked que antes faltaba en normalizePrintJobStatus.
+     * Pending/Routed/Printing/PrinterBlocked con AttemptCount>1 — VAL-P2-006), incluyendo
+     * el mapeo de PrinterBlocked que antes faltaba en normalizePrintJobStatus. `Cancelled` quedó
+     * fuera del predicado (2026-08-17), así que el fallback tampoco debe contarlo.
      */
     public function test_dashboard_falls_back_to_legacy_aggregation_with_partial_data_warning(): void
     {
@@ -291,8 +292,9 @@ class DashboardControllerTest extends TestCase
         $response->assertViewHas('partialData', true);
         $response->assertViewHas('kpis', function (array $kpis): bool {
             // 498 Pending (sin señal de fallo) + Cancelled(attempt=2) + PrinterBlocked(attempt=2):
-            // ambos cuentan ahora en failedWithoutRetryCurrent (antes del fix, solo ErrorFinal contaba -> 0).
-            return $kpis['failedWithoutRetryCurrent'] === 2;
+            // solo cuenta PrinterBlocked. El cancelado lo cerró el operador, no está pendiente de
+            // reenvío — mismo criterio que DashboardPrintJobPredicates.FailedWithoutRetryCurrent.
+            return $kpis['failedWithoutRetryCurrent'] === 1;
         });
     }
 
