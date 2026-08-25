@@ -1,0 +1,121 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;450;500;600&display=swap">
+  <style>
+    body { margin: 0; background: #f7f8fa; color: #1a1f2b; font-family: "IBM Plex Sans", system-ui, sans-serif; }
+    a { color: #1b2f82; } a:hover { color: #102368; }
+    table { width: 100%; border-collapse: collapse; }
+    .cap { display: grid; gap: 4px; margin-bottom: 12px; }
+    .capname { font-size: 14px; font-weight: 600; }
+    .capwhy { font-size: 12px; line-height: 1.5; color: #616b7c; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 7px; vertical-align: 1px; }
+    .verdict { font-size: 12px; line-height: 1.55; color: #8a94a6; margin: 12px 0 0; }
+
+    /* A — cabecera azul, el 6a que ya esta desplegado */
+    .a th { background: #1b2f82; color: #fff; font-size: 11px; font-weight: 800; letter-spacing: 0.055em; text-transform: uppercase; padding: 9px 12px; text-align: center; }
+    .a th:first-child { border-left: 4px solid #ed1b2f; text-align: left; }
+    .a td { border-top: 1px solid #d8dee8; padding: 11px 12px; font-size: 13px; text-align: center; }
+    .a td:first-child { border-left: 4px solid transparent; text-align: left; font-weight: 800; }
+    .a tr.crit td { background: #fdf5f6; }
+    .a tr.crit td:first-child { border-left-color: #ed1b2f; }
+    .a tr.warn td:first-child { border-left-color: #b66b00; }
+
+    /* B — cabecera neutra */
+    .b th { background: #f7f8fa; color: #616b7c; font-size: 12px; font-weight: 500; padding: 9px 14px; text-align: right; border-bottom: 1px solid #e3e7ee; }
+    .b th:first-child, .b th.left { text-align: left; }
+    .b td { border-bottom: 1px solid #eef0f4; padding: 0 14px; height: 42px; font-size: 13px; text-align: right; }
+    .b td:first-child, .b td.left { text-align: left; }
+    .b tr.sel td { background: #f5f7fd; }
+  </style>
+</helmet>
+
+<div style="padding:40px 44px 48px;display:grid;gap:30px">
+
+  <div style="display:grid;gap:8px">
+    <h1 style="margin:0;font-size:24px;font-weight:600;letter-spacing:-0.01em">Cabecera de tabla</h1>
+    <p style="margin:0;max-width:78ch;font-size:14px;line-height:1.55;color:#3c4557">Mismos datos, mismas columnas, mismo alto de fila. A es lo que hay hoy en producci&oacute;n; B es lo que propone reducir la presencia del azul.</p>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:28px;align-items:start">
+
+    <div>
+      <div class="cap">
+        <span class="capname">A &mdash; cabecera azul</span>
+        <span class="capwhy">El dise&ntilde;o aprobado. La cabecera ancla la tabla y el filete rojo marca d&oacute;nde empieza. Se reconoce al instante como la tabla de esta aplicaci&oacute;n.</span>
+      </div>
+      <div style="background:#fff;border:1px solid #c3cbe4;border-radius:6px;overflow:hidden">
+        <table class="a">
+          <thead>
+            <tr><th>Tienda</th><th>Salud</th><th>Cola</th><th>Sin reenviar</th><th>Impresoras</th></tr>
+          </thead>
+          <tbody>
+            <tr class="crit"><td>0412 Getafe Norte</td><td style="color:#ed1b2f;font-weight:800;font-size:11px;letter-spacing:.05em">CR&Iacute;TICA</td><td>34</td><td>7</td><td>2 / 3 OK</td></tr>
+            <tr class="warn"><td>0731 Alcal&aacute; Centro</td><td style="color:#b66b00;font-weight:800;font-size:11px;letter-spacing:.05em">AVISO</td><td>18</td><td>0</td><td>1 / 2 OK</td></tr>
+            <tr class="warn"><td>1180 Torrej&oacute;n Sur</td><td style="color:#b66b00;font-weight:800;font-size:11px;letter-spacing:.05em">AVISO</td><td>6</td><td>0</td><td>1 / 1 OK</td></tr>
+            <tr><td>0208 Vallecas</td><td style="color:#5f6b7a;font-weight:800;font-size:11px;letter-spacing:.05em">SALUDABLE</td><td>2</td><td>0</td><td>1 / 1 OK</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="verdict">A favor: identidad inmediata y la tabla no se pierde en la p&aacute;gina. En contra: con dos o tres tablas por pantalla el azul deja de ser una se&ntilde;al y pasa a ser el fondo, y el filete rojo gasta el color de alarma en decoraci&oacute;n.</p>
+    </div>
+
+    <div>
+      <div class="cap">
+        <span class="capname">B &mdash; cabecera neutra</span>
+        <span class="capwhy">La cabecera se retira y el dato manda. La severidad se lee por el punto, no por una palabra en may&uacute;sculas y color.</span>
+      </div>
+      <div style="background:#fff;border:1px solid #e3e7ee;border-radius:6px;overflow:hidden">
+        <table class="b">
+          <thead>
+            <tr><th class="left">Tienda</th><th class="left">Salud</th><th>Cola</th><th>Sin reenviar</th><th>Impresoras</th></tr>
+          </thead>
+          <tbody>
+            <tr class="sel"><td style="font-weight:500">0412 Getafe Norte</td><td class="left"><span class="dot" style="background:#c8283c"></span>Cr&iacute;tica</td><td>34</td><td>7</td><td>2 / 3</td></tr>
+            <tr><td style="font-weight:500">0731 Alcal&aacute; Centro</td><td class="left"><span class="dot" style="background:#b06a00"></span>Atenci&oacute;n</td><td>18</td><td>0</td><td>1 / 2</td></tr>
+            <tr><td style="font-weight:500">1180 Torrej&oacute;n Sur</td><td class="left"><span class="dot" style="background:#b06a00"></span>Atenci&oacute;n</td><td>6</td><td>0</td><td>1 / 1</td></tr>
+            <tr><td style="font-weight:500">0208 Vallecas</td><td class="left"><span class="dot" style="background:#1a7f5a"></span>Operativa</td><td>2</td><td>0</td><td>1 / 1</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="verdict">A favor: escala a muchas tablas sin ruido, las cifras se alinean a la derecha y quedan comparables, y el color solo aparece donde hay estado. En contra: sin la cabecera azul la p&aacute;gina pierde anclaje visual y se parece m&aacute;s a cualquier panel de administraci&oacute;n.</p>
+    </div>
+
+  </div>
+
+  <div style="background:#fff;border:1px solid #e3e7ee;border-radius:6px;padding:20px 22px;display:grid;gap:8px">
+    <span style="font-size:12px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#616b7c">Punto intermedio</span>
+    <p style="margin:0;max-width:88ch;font-size:13px;line-height:1.6;color:#3c4557">Si B convence pero se echa de menos el anclaje: cabecera neutra y una regla azul de 2px bajo ella. Se conserva la marca en la tabla sin pintar toda la banda. Es el que yo probar&iacute;a antes de decidir.</p>
+    <div style="background:#fff;border:1px solid #e3e7ee;border-radius:6px;overflow:hidden;margin-top:6px;max-width:640px">
+      <table class="b">
+        <thead>
+          <tr style="border-bottom:2px solid #1b2f82"><th class="left">Tienda</th><th class="left">Salud</th><th>Cola</th><th>Sin reenviar</th></tr>
+        </thead>
+        <tbody>
+          <tr><td style="font-weight:500">0412 Getafe Norte</td><td class="left"><span class="dot" style="background:#c8283c"></span>Cr&iacute;tica</td><td>34</td><td>7</td></tr>
+          <tr><td style="font-weight:500">0731 Alcal&aacute; Centro</td><td class="left"><span class="dot" style="background:#b06a00"></span>Atenci&oacute;n</td><td>18</td><td>0</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1240,"height":940}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

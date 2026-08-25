@@ -1,0 +1,182 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;450;500;600;700&display=swap">
+  <style>
+    body { margin: 0; background: #f7f8fa; color: #1a1f2b; font-family: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #1b2f82; } a:hover { color: #102368; }
+    .sheet { display: grid; gap: 40px; padding: 40px 44px 52px; }
+    .block { display: grid; gap: 16px; }
+    .btitle { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #616b7c; }
+    .rule { height: 1px; background: #e3e7ee; }
+    .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .swatch { display: grid; gap: 8px; }
+    .chipcolor { width: 100%; height: 46px; border-radius: 4px; border: 1px solid rgba(26,31,43,.08); }
+    .cname { font-size: 12px; font-weight: 500; }
+    .chex { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: #616b7c; }
+    .crole { font-size: 11px; color: #8a94a6; }
+    .btn { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 13px; border-radius: 4px; font-size: 13px; font-weight: 500; font-family: inherit; cursor: pointer; border: 1px solid transparent; }
+    .cell { padding: 0 14px; height: 40px; display: flex; align-items: center; font-size: 13px; }
+    .th { font-size: 12px; font-weight: 500; color: #616b7c; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+    .chip { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px 0 8px; border-radius: 999px; font-size: 11px; font-weight: 500; background: #f0f2f6; color: #3c4557; }
+    .navitem { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 10px; border-radius: 4px; font-size: 13px; font-weight: 450; color: #3c4557; }
+    .field { display: grid; gap: 6px; max-width: 300px; }
+    .fl { font-size: 13px; font-weight: 500; }
+    .fh { font-size: 12px; color: #616b7c; }
+    .fi { height: 38px; border: 1px solid #d5dae4; border-radius: 4px; background: #fff; padding: 0 11px; display: flex; align-items: center; font-size: 13px; }
+    .old { color: #8a94a6; font-size: 12px; }
+  </style>
+</helmet>
+
+<div class="sheet">
+
+  <div class="block">
+    <h1 style="margin:0;font-size:24px;font-weight:600;letter-spacing:-0.01em">Sistema visual</h1>
+    <p style="margin:0;max-width:70ch;font-size:14px;line-height:1.55;color:#3c4557">Consola de operaciones. El azul deja de pintar superficies y pasa a significar interacci&oacute;n; los neutros sostienen la interfaz. La escala tipogr&aacute;fica es lo que hoy no existe: la hoja actual tiene 117 declaraciones con peso 700 o m&aacute;s y solo dos por debajo.</p>
+  </div>
+
+  <div class="rule"></div>
+
+  <div class="block">
+    <h2 class="btitle">Escala tipogr&aacute;fica</h2>
+    <div style="display:grid;gap:14px">
+      <div style="display:grid;grid-template-columns:150px 1fr;gap:20px;align-items:baseline">
+        <span class="old">22px &middot; 600</span>
+        <span style="font-size:22px;font-weight:600;letter-spacing:-0.01em">T&iacute;tulo de p&aacute;gina</span>
+      </div>
+      <div style="display:grid;grid-template-columns:150px 1fr;gap:20px;align-items:baseline">
+        <span class="old">16px &middot; 600</span>
+        <span style="font-size:16px;font-weight:600">T&iacute;tulo de secci&oacute;n</span>
+      </div>
+      <div style="display:grid;grid-template-columns:150px 1fr;gap:20px;align-items:baseline">
+        <span class="old">14px &middot; 400</span>
+        <span style="font-size:14px;font-weight:400;line-height:1.5">Texto de interfaz. Es el peso por defecto de casi todo lo que se lee.</span>
+      </div>
+      <div style="display:grid;grid-template-columns:150px 1fr;gap:20px;align-items:baseline">
+        <span class="old">13px &middot; 400</span>
+        <span style="font-size:13px">Celda de tabla &mdash; 0412 Getafe Norte</span>
+      </div>
+      <div style="display:grid;grid-template-columns:150px 1fr;gap:20px;align-items:baseline">
+        <span class="old">12px &middot; 400</span>
+        <span style="font-size:12px;color:#616b7c">Metadato secundario, siempre en gris</span>
+      </div>
+      <div style="display:grid;grid-template-columns:150px 1fr;gap:20px;align-items:baseline">
+        <span class="old">30px &middot; 650</span>
+        <span style="font-size:30px;font-weight:650;letter-spacing:-0.02em;font-variant-numeric:tabular-nums">1 284</span>
+      </div>
+    </div>
+    <p style="margin:6px 0 0;font-size:12px;color:#8a94a6">Suelo de 11px. Hoy hay texto a 8 y 9px en seis sitios.</p>
+  </div>
+
+  <div class="rule"></div>
+
+  <div class="block">
+    <h2 class="btitle">Color por funci&oacute;n</h2>
+    <div style="display:grid;grid-template-columns:repeat(6, minmax(0,1fr));gap:16px">
+      <div class="swatch"><div class="chipcolor" style="background:#1b2f82"></div><span class="cname">Primario</span><span class="chex">#1b2f82</span><span class="crole">Acci&oacute;n, selecci&oacute;n, foco</span></div>
+      <div class="swatch"><div class="chipcolor" style="background:#102368"></div><span class="cname">Primario oscuro</span><span class="chex">#102368</span><span class="crole">Hover del primario</span></div>
+      <div class="swatch"><div class="chipcolor" style="background:#eef1fb"></div><span class="cname">Primario suave</span><span class="chex">#eef1fb</span><span class="crole">Fondo de selecci&oacute;n</span></div>
+      <div class="swatch"><div class="chipcolor" style="background:#ed1b2f"></div><span class="cname">Rojo de marca</span><span class="chex">#ed1b2f</span><span class="crole">Solo identidad</span></div>
+      <div class="swatch"><div class="chipcolor" style="background:#c8283c"></div><span class="cname">Cr&iacute;tico</span><span class="chex">#c8283c</span><span class="crole">Estado, no decoraci&oacute;n</span></div>
+      <div class="swatch"><div class="chipcolor" style="background:#f7f8fa;border-color:#d5dae4"></div><span class="cname">Fondo</span><span class="chex">#f7f8fa</span><span class="crole">Lienzo de p&aacute;gina</span></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(6, minmax(0,1fr));gap:16px">
+      <div class="swatch"><div class="chipcolor" style="background:#ffffff;border-color:#d5dae4"></div><span class="cname">Superficie</span><span class="chex">#ffffff</span><span class="crole">Paneles y filas</span></div>
+      <div class="swatch"><div class="chipcolor" style="background:#e3e7ee"></div><span class="cname">Borde</span><span class="chex">#e3e7ee</span><span class="crole">Separaci&oacute;n</span></div>
+      <div class="swatch"><div class="chipcolor" style="background:#1a1f2b"></div><span class="cname">Texto</span><span class="chex">#1a1f2b</span><span class="crole">Titulares y dato</span></div>
+      <div class="swatch"><div class="chipcolor" style="background:#616b7c"></div><span class="cname">Texto tenue</span><span class="chex">#616b7c</span><span class="crole">Etiquetas y metadato</span></div>
+      <div class="swatch"><div class="chipcolor" style="background:#1a7f5a"></div><span class="cname">Operativo</span><span class="chex">#1a7f5a</span><span class="crole">Estado bueno</span></div>
+      <div class="swatch"><div class="chipcolor" style="background:#b06a00"></div><span class="cname">Atenci&oacute;n</span><span class="chex">#b06a00</span><span class="crole">Estado de aviso</span></div>
+    </div>
+    <p style="margin:6px 0 0;font-size:12px;color:#8a94a6">El rojo de marca y el rojo de estado se separan: hoy son el mismo valor y por eso un error no destaca sobre un adorno.</p>
+  </div>
+
+  <div class="rule"></div>
+
+  <div class="block">
+    <h2 class="btitle">Botones</h2>
+    <div class="row">
+      <span class="btn" style="background:#1b2f82;color:#fff">Reenviar 7</span>
+      <span class="btn" style="background:#fff;border-color:#d5dae4;color:#1a1f2b">Ver en cola</span>
+      <span class="btn" style="background:transparent;color:#3c4557">Cancelar</span>
+      <span class="btn" style="background:#fff;border-color:#e0b3bb;color:#c8283c">Eliminar impresora</span>
+    </div>
+    <p style="margin:0;font-size:12px;color:#8a94a6">Cuatro familias y ninguna m&aacute;s. Altura 34px, radio 4px, peso 500. El rojo s&oacute;lido se reserva para la confirmaci&oacute;n final, no para el bot&oacute;n que la abre.</p>
+  </div>
+
+  <div class="rule"></div>
+
+  <div class="block">
+    <h2 class="btitle">Estados</h2>
+    <div class="row">
+      <span class="chip"><span class="dot" style="background:#1a7f5a"></span>Operativo</span>
+      <span class="chip"><span class="dot" style="background:#b06a00"></span>Atenci&oacute;n</span>
+      <span class="chip"><span class="dot" style="background:#c8283c"></span>Cr&iacute;tico</span>
+      <span class="chip"><span class="dot" style="background:#98a1b2"></span>Sin comprobar</span>
+    </div>
+    <p style="margin:0;font-size:12px;color:#8a94a6">El punto lleva el color; el chip apenas se ti&ntilde;e. Con treinta y cuatro tiendas en pantalla, el patr&oacute;n actual de fondo m&aacute;s borde m&aacute;s texto de color convierte la tabla en un sem&aacute;foro.</p>
+  </div>
+
+  <div class="rule"></div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px">
+
+    <div class="block">
+      <h2 class="btitle">Navegaci&oacute;n</h2>
+      <div style="width:248px;background:#fff;border:1px solid #e3e7ee;border-radius:6px;padding:10px 8px;display:grid;gap:2px">
+        <span style="font-size:11px;font-weight:600;letter-spacing:0.09em;text-transform:uppercase;color:#8a94a6;padding:8px 10px 4px">Operaci&oacute;n</span>
+        <span class="navitem" style="background:#eef1fb;color:#1b2f82;font-weight:500;box-shadow:inset 2px 0 0 #1b2f82">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          Dashboard
+        </span>
+        <span class="navitem">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          Cola
+        </span>
+        <span class="navitem">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          Impresoras
+        </span>
+      </div>
+      <p style="margin:0;font-size:12px;color:#8a94a6">El item activo se ti&ntilde;e, no se rellena. Hoy se vuelve un bloque azul s&oacute;lido que pesa m&aacute;s que el contenido de la p&aacute;gina.</p>
+    </div>
+
+    <div class="block">
+      <h2 class="btitle">Campo de formulario</h2>
+      <div style="display:grid;gap:22px">
+        <div class="field">
+          <span class="fl">Host</span>
+          <span class="fh">Direcci&oacute;n de red de la impresora</span>
+          <span class="fi" style="font-family:'IBM Plex Mono',monospace">192.168.1.24</span>
+        </div>
+        <div class="field">
+          <span class="fl">Cola de spool</span>
+          <span class="fh">Nombre de la cola en el servidor de impresi&oacute;n</span>
+          <span class="fi" style="border-color:#1b2f82;box-shadow:0 0 0 3px rgba(27,47,130,.14);font-family:'IBM Plex Mono',monospace">\\\\SRV-PRINT\\TICKET-02</span>
+        </div>
+      </div>
+      <p style="margin:0;font-size:12px;color:#8a94a6">Etiqueta, pista y campo pegados; aire entre grupos. La agrupaci&oacute;n se hace con t&iacute;tulos y divisores, no metiendo cada grupo en su propia tarjeta.</p>
+    </div>
+
+  </div>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1240,"height":1560}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

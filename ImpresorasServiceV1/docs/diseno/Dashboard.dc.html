@@ -1,0 +1,265 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;450;500;600&display=swap">
+  <style>
+    body { margin: 0; background: #f7f8fa; color: #1a1f2b; font-family: "IBM Plex Sans", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #1b2f82; } a:hover { color: #102368; }
+    .mono { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
+    .panel { background: #fff; border: 1px solid #e3e7ee; border-radius: 6px; }
+    .phead { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; padding: 15px 18px; border-bottom: 1px solid #eef0f4; }
+    .ptitle { margin: 0; font-size: 16px; font-weight: 600; }
+    .pmeta { font-size: 12px; color: #616b7c; }
+    .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex: none; }
+    .chip { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px 0 8px; border-radius: 999px; font-size: 11px; font-weight: 500; background: #f0f2f6; color: #3c4557; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; height: 30px; padding: 0 12px; border-radius: 4px; font-size: 12px; font-weight: 500; border: 1px solid transparent; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    table { width: 100%; border-collapse: collapse; }
+    th { background: #f7f8fa; color: #616b7c; font-size: 12px; font-weight: 500; padding: 8px 16px; text-align: right; border-bottom: 1px solid #e3e7ee; }
+    th.left { text-align: left; }
+    td { border-bottom: 1px solid #eef0f4; padding: 0 16px; height: 44px; font-size: 13px; text-align: right; vertical-align: middle; }
+    td.left { text-align: left; }
+    tr:last-child td { border-bottom: none; }
+  </style>
+</helmet>
+
+<div style="display:grid;grid-template-columns:248px 1fr;min-height:1180px">
+
+  <aside style="background:#fff;border-right:1px solid #e3e7ee;padding:16px 10px;display:grid;gap:2px;align-content:start">
+    <div style="display:flex;align-items:center;gap:9px;padding:4px 10px 18px">
+      <div style="width:26px;height:26px;border-radius:4px;background:#1b2f82;display:grid;place-items:center">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      </div>
+      <span style="font-size:14px;font-weight:600;letter-spacing:-0.01em">ImpresorasService</span>
+    </div>
+
+    <span style="font-size:11px;font-weight:600;letter-spacing:0.09em;text-transform:uppercase;color:#8a94a6;padding:8px 10px 4px">Operaci&oacute;n</span>
+    <span style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:4px;font-size:13px;font-weight:500;background:#eef1fb;color:#1b2f82;box-shadow:inset 2px 0 0 #1b2f82">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      Dashboard
+    </span>
+    <span style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:4px;font-size:13px;font-weight:450;color:#3c4557">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      Cola
+    </span>
+    <span style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:4px;font-size:13px;font-weight:450;color:#3c4557">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      Impresoras
+    </span>
+
+    <span style="font-size:11px;font-weight:600;letter-spacing:0.09em;text-transform:uppercase;color:#8a94a6;padding:18px 10px 4px">Configuraci&oacute;n</span>
+    <span style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:4px;font-size:13px;font-weight:450;color:#3c4557">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M10 21v-6h4v6"/></svg>
+      Tiendas
+    </span>
+    <span style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:4px;font-size:13px;font-weight:450;color:#3c4557">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+      Usuarios
+    </span>
+  </aside>
+
+  <main style="display:grid;align-content:start">
+
+    <header style="display:flex;align-items:center;justify-content:space-between;gap:18px;padding:20px 28px 18px;border-bottom:1px solid #e3e7ee;background:#fff">
+      <div style="display:grid;gap:2px">
+        <h1 style="margin:0;font-size:22px;font-weight:600;letter-spacing:-0.01em">Dashboard</h1>
+        <span style="font-size:12px;color:#616b7c">34 tiendas &middot; 96 impresoras activas</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 11px;border:1px solid #d5dae4;border-radius:4px;background:#fff;font-size:13px">
+          Hoy
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#616b7c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </span>
+        <span style="display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 11px;border:1px solid #d5dae4;border-radius:4px;background:#fff;font-size:13px">
+          Todas las tiendas
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#616b7c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </span>
+        <span style="display:inline-flex;align-items:center;gap:7px;font-size:12px;color:#616b7c;padding-left:6px;border-left:1px solid #e3e7ee;margin-left:2px;height:22px">
+          <span class="dot" style="background:#1a7f5a"></span>hace 24 s
+        </span>
+      </div>
+    </header>
+
+    <div style="padding:24px 28px 32px;display:grid;gap:20px">
+
+      <section class="panel">
+        <div class="phead">
+          <h2 class="ptitle">Estado actual de la operaci&oacute;n</h2>
+          <span style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:#c8283c">
+            <span class="dot" style="background:#c8283c"></span>3 tiendas cr&iacute;ticas
+          </span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4, minmax(0,1fr))">
+          <div style="padding:20px 22px;display:grid;gap:5px;border-right:1px solid #eef0f4">
+            <span style="font-size:12px;font-weight:500;color:#616b7c">En cola</span>
+            <span style="font-size:32px;font-weight:650;letter-spacing:-0.02em;font-variant-numeric:tabular-nums;line-height:1.05">47</span>
+            <span style="font-size:12px;color:#8a94a6">trabajos esperando</span>
+          </div>
+          <div style="padding:20px 22px;display:grid;gap:5px;border-right:1px solid #eef0f4">
+            <span style="font-size:12px;font-weight:500;color:#616b7c">Sin reenviar</span>
+            <span style="font-size:32px;font-weight:650;letter-spacing:-0.02em;font-variant-numeric:tabular-nums;line-height:1.05;color:#c8283c">12</span>
+            <span style="font-size:12px;color:#8a94a6">necesitan seguimiento</span>
+          </div>
+          <div style="padding:20px 22px;display:grid;gap:5px;border-right:1px solid #eef0f4">
+            <span style="font-size:12px;font-weight:500;color:#616b7c">Impresoras con problema</span>
+            <span style="font-size:32px;font-weight:650;letter-spacing:-0.02em;font-variant-numeric:tabular-nums;line-height:1.05">5</span>
+            <span style="font-size:12px;color:#8a94a6">3 sin conexi&oacute;n &middot; 2 sin host</span>
+          </div>
+          <div style="padding:20px 22px;display:grid;gap:5px">
+            <span style="font-size:12px;font-weight:500;color:#616b7c">Sin impresora</span>
+            <span style="font-size:32px;font-weight:650;letter-spacing:-0.02em;font-variant-numeric:tabular-nums;line-height:1.05">3</span>
+            <span style="font-size:12px;color:#8a94a6">trabajos sin asignar</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="phead">
+          <h2 class="ptitle">Incidencias priorizadas</h2>
+          <span class="pmeta">6 abiertas &middot; umbrales cola 10 / 30 &middot; sin reenviar 1 / 5</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:16px 1fr 130px 150px;gap:0 16px;align-items:center;padding:14px 18px 14px 0;border-bottom:1px solid #eef0f4">
+          <span style="width:3px;height:100%;background:#c8283c;justify-self:start"></span>
+          <div style="display:grid;gap:3px">
+            <div style="display:flex;align-items:baseline;gap:10px">
+              <span style="font-size:13px;font-weight:500">0412 Getafe Norte</span>
+              <span style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#8a94a6">Sin reenviar</span>
+            </div>
+            <span style="font-size:13px;color:#3c4557">7 trabajos con los reintentos agotados y nadie los ha reenviado</span>
+          </div>
+          <span style="font-size:13px;color:#616b7c;font-variant-numeric:tabular-nums">2 h 14 min</span>
+          <span class="btn" style="background:#1b2f82;color:#fff">Reenviar 7</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:16px 1fr 130px 150px;gap:0 16px;align-items:center;padding:14px 18px 14px 0;border-bottom:1px solid #eef0f4">
+          <span style="width:3px;height:100%;background:#c8283c;justify-self:start"></span>
+          <div style="display:grid;gap:3px">
+            <div style="display:flex;align-items:baseline;gap:10px">
+              <span style="font-size:13px;font-weight:500">0412 Getafe Norte</span>
+              <span style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#8a94a6">Conectividad</span>
+            </div>
+            <span style="font-size:13px;color:#3c4557">TICKET-02 no responde: 6 fallos consecutivos por transporte IPP</span>
+          </div>
+          <span style="font-size:13px;color:#616b7c;font-variant-numeric:tabular-nums">41 min</span>
+          <span class="btn" style="background:#fff;border-color:#d5dae4;color:#1a1f2b">Probar conexi&oacute;n</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:16px 1fr 130px 150px;gap:0 16px;align-items:center;padding:14px 18px 14px 0;border-bottom:1px solid #eef0f4">
+          <span style="width:3px;height:100%;background:#b06a00;justify-self:start"></span>
+          <div style="display:grid;gap:3px">
+            <div style="display:flex;align-items:baseline;gap:10px">
+              <span style="font-size:13px;font-weight:500">0731 Alcal&aacute; Centro</span>
+              <span style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#8a94a6">Sin host</span>
+            </div>
+            <span style="font-size:13px;color:#3c4557">TICKET-01 no tiene host configurado, as&iacute; que no puede recibir trabajos</span>
+          </div>
+          <span style="font-size:13px;color:#8a94a6">sin comprobar</span>
+          <span class="btn" style="background:#fff;border-color:#d5dae4;color:#1a1f2b">Configurar host</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:16px 1fr 130px 150px;gap:0 16px;align-items:center;padding:14px 18px 14px 0">
+          <span style="width:3px;height:100%;background:#b06a00;justify-self:start"></span>
+          <div style="display:grid;gap:3px">
+            <div style="display:flex;align-items:baseline;gap:10px">
+              <span style="font-size:13px;font-weight:500">1180 Torrej&oacute;n Sur</span>
+              <span style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#8a94a6">Sin impresora asignada</span>
+            </div>
+            <span style="font-size:13px;color:#3c4557">3 trabajos esperan porque ninguna regla de enrutado coincide</span>
+          </div>
+          <span style="font-size:13px;color:#616b7c;font-variant-numeric:tabular-nums">28 min</span>
+          <span class="btn" style="background:#fff;border-color:#d5dae4;color:#1a1f2b">Reasignar</span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="phead">
+          <h2 class="ptitle">Rendimiento del periodo</h2>
+          <span class="pmeta">No incluye estado actual &middot; porcentajes sobre 1 284 recibidos</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4, minmax(0,1fr))">
+          <div style="padding:18px 22px;display:grid;gap:4px;border-right:1px solid #eef0f4">
+            <span style="font-size:12px;font-weight:500;color:#616b7c">Recibidos</span>
+            <span style="font-size:26px;font-weight:650;letter-spacing:-0.02em;font-variant-numeric:tabular-nums">1 284</span>
+          </div>
+          <div style="padding:18px 22px;display:grid;gap:4px;border-right:1px solid #eef0f4">
+            <span style="font-size:12px;font-weight:500;color:#616b7c">Impresos</span>
+            <span style="font-size:26px;font-weight:650;letter-spacing:-0.02em;font-variant-numeric:tabular-nums">1 191</span>
+          </div>
+          <div style="padding:18px 22px;display:grid;gap:4px;border-right:1px solid #eef0f4">
+            <span style="font-size:12px;font-weight:500;color:#616b7c">Fallidos</span>
+            <span style="font-size:26px;font-weight:650;letter-spacing:-0.02em;font-variant-numeric:tabular-nums">63</span>
+          </div>
+          <div style="padding:18px 22px;display:grid;gap:6px">
+            <span style="font-size:12px;font-weight:500;color:#616b7c">Tasa de &eacute;xito</span>
+            <span style="font-size:26px;font-weight:650;letter-spacing:-0.02em;font-variant-numeric:tabular-nums">93 %</span>
+            <span style="display:block;height:4px;background:#eef0f4;border-radius:999px;overflow:hidden"><span style="display:block;height:100%;width:93%;background:#1b2f82"></span></span>
+          </div>
+        </div>
+        <div style="padding:20px 22px 22px;border-top:1px solid #eef0f4">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px">
+            <span style="font-size:12px;font-weight:500;color:#616b7c">Cola a lo largo del d&iacute;a</span>
+            <span style="font-size:12px;color:#8a94a6">Pico de 47 a las 18:00</span>
+          </div>
+          <svg viewBox="0 0 1000 190" style="display:block;width:100%;height:auto">
+            <line x1="46" x2="990" y1="26" y2="26" stroke="#eef0f4"/>
+            <line x1="46" x2="990" y1="98" y2="98" stroke="#eef0f4"/>
+            <line x1="46" x2="990" y1="170" y2="170" stroke="#e3e7ee"/>
+            <text x="36" y="30" text-anchor="end" font-size="11" fill="#8a94a6">50</text>
+            <text x="36" y="102" text-anchor="end" font-size="11" fill="#8a94a6">25</text>
+            <text x="36" y="174" text-anchor="end" font-size="11" fill="#8a94a6">0</text>
+            <polygon fill="#1b2f82" fill-opacity="0.07" points="46,158 125,162 204,153 283,144 362,130 441,107 520,81 599,61 678,72 757,92 836,75 915,52 990,35 990,170 46,170"/>
+            <polyline fill="none" stroke="#1b2f82" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points="46,158 125,162 204,153 283,144 362,130 441,107 520,81 599,61 678,72 757,92 836,75 915,52 990,35"/>
+            <line x1="46" x2="990" y1="83" y2="83" stroke="#c8283c" stroke-width="1.5" stroke-dasharray="5 4" opacity="0.8"/>
+            <text x="52" y="76" font-size="11" fill="#c8283c" font-weight="500">Umbral cr&iacute;tico 30</text>
+            <text x="46" y="188" font-size="11" fill="#8a94a6">06:00</text>
+            <text x="362" y="188" font-size="11" fill="#8a94a6">09:00</text>
+            <text x="678" y="188" font-size="11" fill="#8a94a6">15:00</text>
+            <text x="990" y="188" font-size="11" fill="#8a94a6" text-anchor="end">18:00</text>
+          </svg>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="phead">
+          <h2 class="ptitle">Salud por tienda</h2>
+          <span class="pmeta">Problem&aacute;ticas primero &middot; 6 de 34</span>
+        </div>
+        <table>
+          <thead>
+            <tr><th class="left">Tienda</th><th class="left">Salud</th><th class="left">Motivo</th><th>Cola</th><th>Sin reenviar</th><th>Impresoras</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="left" style="font-weight:500">0412 Getafe Norte</td><td class="left"><span class="dot" style="background:#c8283c"></span> Cr&iacute;tica</td><td class="left" style="color:#616b7c">Sin reenviar y conectividad</td><td>34</td><td>7</td><td>2 / 3</td></tr>
+            <tr><td class="left" style="font-weight:500">2044 Legan&eacute;s Este</td><td class="left"><span class="dot" style="background:#c8283c"></span> Cr&iacute;tica</td><td class="left" style="color:#616b7c">Sin impresoras activas</td><td>11</td><td>3</td><td>0 / 2</td></tr>
+            <tr><td class="left" style="font-weight:500">0731 Alcal&aacute; Centro</td><td class="left"><span class="dot" style="background:#b06a00"></span> Atenci&oacute;n</td><td class="left" style="color:#616b7c">Cola acumulada, sin host</td><td>18</td><td>0</td><td>1 / 2</td></tr>
+            <tr><td class="left" style="font-weight:500">1180 Torrej&oacute;n Sur</td><td class="left"><span class="dot" style="background:#b06a00"></span> Atenci&oacute;n</td><td class="left" style="color:#616b7c">3 trabajos sin asignar</td><td>6</td><td>0</td><td>3 / 3</td></tr>
+            <tr><td class="left" style="font-weight:500">0208 Vallecas</td><td class="left"><span class="dot" style="background:#1a7f5a"></span> Operativa</td><td class="left" style="color:#616b7c">Dentro de umbrales</td><td>2</td><td>0</td><td>3 / 3</td></tr>
+          </tbody>
+        </table>
+        <div style="padding:13px 18px;border-top:1px solid #eef0f4">
+          <a href="#todas" style="font-size:13px;font-weight:500;text-decoration:none">Ver las 34 tiendas</a>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":1180}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
