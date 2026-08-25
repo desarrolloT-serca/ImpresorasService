@@ -2,7 +2,6 @@
 
 @section('title', 'Dashboard')
 
-@section('content')
 @php
     $window = $window ?? 'today';
     $tab = $tab ?? 'global';
@@ -120,6 +119,12 @@
     };
 @endphp
 
+@section('topbar-filters')
+    @include('dashboard.partials.filters')
+@endsection
+
+@section('content')
+
 @if(!empty($partialData))
     <div style="margin-bottom:12px;padding:10px 14px;border:1px solid var(--ui-warning);border-radius:8px;background:color-mix(in srgb, var(--ui-warning) 12%, transparent);font-size:0.9rem;">
         Datos parciales: el resumen agregado no esta disponible; se muestran como maximo 500 trabajos recientes por tienda.
@@ -131,7 +136,6 @@
 
 @fragment('dashboard-content')
 <div class="dbx-dashboard-page" data-dashboard-dynamic>
-@include('dashboard.partials.filters')
 
 <section class="dbx-wrap">
 @include('dashboard.partials.tabs')
@@ -401,18 +405,6 @@
         const storeViewEl = form.querySelector('input[name="storeView"]');
         if (storeViewEl && storeViewEl.value) prefs.storeView = storeViewEl.value;
 
-        const healthEl = document.getElementById('health');
-        if (healthEl) prefs.health = healthEl.value;
-
-        const autoRefreshEl = document.getElementById('autoRefresh');
-        if (autoRefreshEl) prefs.autoRefresh = autoRefreshEl.value;
-
-        const storeSortEl = document.getElementById('storeSort');
-        if (storeSortEl) prefs.storeSort = storeSortEl.value;
-
-        const storeColsEl = document.getElementById('storeCols');
-        if (storeColsEl) prefs.storeCols = storeColsEl.value;
-
         const showHealthyEl = form.querySelector('input[type="checkbox"][name="showHealthy"]');
         if (showHealthyEl) prefs.showHealthy = showHealthyEl.checked ? '1' : '0';
 
@@ -449,6 +441,8 @@
 (function() {
     let dashboardAbortController = null;
     let dashboardRequestId = 0;
+    // Fijo, ya no configurable desde la interfaz.
+    const AUTO_REFRESH_SECONDS = 30;
     let autoRefreshTimer = null;
     let autoRefreshCountdownTimer = null;
     let autoRefreshSecondsRemaining = 0;
@@ -535,12 +529,13 @@
     }
 
     function prepareDynamicDashboard(root) {
-        const form = root.querySelector('form[data-dashboard-filter-form]');
+        // El formulario esta en la barra superior, fuera del root que se reemplaza en cada refresco.
+        const form = document.querySelector('form[data-dashboard-filter-form]');
         if (form) {
             form.dataset.dynamicOwned = '1';
         }
 
-        scheduleAutoRefresh(Number(root.querySelector('#autoRefresh')?.value || 0));
+        scheduleAutoRefresh(AUTO_REFRESH_SECONDS);
     }
 
     function showDashboardError(root, url) {
@@ -633,7 +628,7 @@
                 root.classList.remove('is-dynamic-loading');
                 root.removeAttribute('aria-busy');
                 showDashboardError(root, url);
-                scheduleAutoRefresh(Number(root.querySelector('#autoRefresh')?.value || 0));
+                scheduleAutoRefresh(AUTO_REFRESH_SECONDS);
             }
         }
     }

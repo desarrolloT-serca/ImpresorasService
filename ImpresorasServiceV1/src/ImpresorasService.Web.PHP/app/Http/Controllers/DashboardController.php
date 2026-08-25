@@ -36,9 +36,8 @@ class DashboardController extends Controller
         $showHealthy = request()->boolean('showHealthy', true);
         $storeSort = request()->query('storeSort', 'severity');
         $storeCols = max(1, min(4, (int) request()->query('storeCols', 4)));
-        $autoRefreshSecondsRaw = (int) request()->query('autoRefresh', 30);
-        $allowedRefresh = [0, 15, 30, 60, 120];
-        $autoRefreshSeconds = in_array($autoRefreshSecondsRaw, $allowedRefresh, true) ? $autoRefreshSecondsRaw : 0;
+        // Refresco fijo: el selector de segundos se retiro de la interfaz, no hay nada que elegir.
+        $autoRefreshSeconds = 30;
         ['stores' => $storesRaw, 'thr' => $rawThresholdsResponse] =
             \GuzzleHttp\Promise\Utils::unwrap([
                 'stores' => $this->api->getAsync('api/stores?isActive=true'),
@@ -81,9 +80,16 @@ class DashboardController extends Controller
         $jobsPath     = 'api/printjobs?limit=500' . ($effectiveStore !== null ? '&storeId=' . $effectiveStore : '');
         $printersPath = 'api/printers?isActive=true' . ($effectiveStore !== null ? '&storeId=' . $effectiveStore : '');
 
+        // Serie temporal del periodo (grafica de cola y sparklines). getAsync entra en el mismo
+        // lote, asi que no anade latencia; si la Api aun no expone el endpoint la respuesta llega
+        // vacia y la vista simplemente no pinta grafica.
+        $seriesPath = 'api/dashboard/timeseries?window=' . urlencode($window)
+            . ($effectiveStore !== null ? '&storeId=' . $effectiveStore : '');
+
         $batch2 = [
             'jobs'     => $this->api->getAsync($jobsPath),
             'printers' => $this->api->getAsync($printersPath),
+            'series'   => $this->api->getAsync($seriesPath),
         ];
         if ($isAdminDashboard) {
             $batch2['users'] = $this->api->getAsync('api/users');
@@ -92,6 +98,8 @@ class DashboardController extends Controller
         $jobs     = $batch2Result['jobs'];
         $printers = $batch2Result['printers'];
         $users    = $isAdminDashboard ? ($batch2Result['users'] ?? []) : [];
+        $seriesPoints = $batch2Result['series']['points'] ?? $batch2Result['series']['Points'] ?? [];
+        $timeseries = is_array($seriesPoints) ? array_values(array_filter($seriesPoints, 'is_array')) : [];
         $overview = $this->overviewService->fetch($effectiveStore, $window);
 
         [$windowStart, $windowEnd] = $this->resolveWindowRange($window);
@@ -394,6 +402,7 @@ class DashboardController extends Controller
             'thresholds' => $thresholds,
             'generatedAtUtc' => $generatedAtUtc,
             'kpis' => $kpis,
+            'timeseries' => $timeseries,
             'summary' => $summary,
             'alerts' => $alerts,
             'stores' => $stores,

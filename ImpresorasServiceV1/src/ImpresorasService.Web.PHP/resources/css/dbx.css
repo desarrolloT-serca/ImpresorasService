@@ -1829,7 +1829,9 @@ html.dark .dbx-printer-state.off {
     overflow: hidden;
 }
 
-.dbx-op-card::before {
+/* Solo la tarjeta que encabeza la pantalla lleva barra; repetida en las cuatro dejaba de
+   significar nada. El rojo aparece como mucho una vez, en el bloque que posee lo peor que hay. */
+.dbx-op-card-hero::before {
     content: "";
     position: absolute;
     inset: 0 0 auto;
@@ -1837,7 +1839,7 @@ html.dark .dbx-printer-state.off {
     background: var(--ui-primary);
 }
 
-.dbx-op-card-alert::before {
+.dbx-op-card-hero.dbx-op-card-alert::before {
     background: var(--ui-accent);
 }
 
@@ -1858,13 +1860,19 @@ html.dark .dbx-printer-state.off {
 
 .dbx-op-title {
     margin: 0;
-    font-size: 1.05rem;
-    font-weight: 800;
-    color: var(--ui-primary);
-    letter-spacing: 0.02em;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--ui-text);
+    letter-spacing: 0.01em;
 }
 
-.dbx-op-title::before {
+/* El triangulo solo en el titular: era el mismo acento cuatro veces seguidas. */
+.dbx-op-card-hero .dbx-op-title {
+    font-size: 1.15rem;
+    font-weight: 800;
+}
+
+.dbx-op-card-hero .dbx-op-title::before {
     content: "";
     display: inline-block;
     width: 0.72rem;
@@ -1935,6 +1943,11 @@ html.dark .dbx-printer-state.off {
     line-height: 1;
     font-weight: 800;
     color: var(--ui-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.dbx-op-card-hero .dbx-op-tile-value {
+    font-size: 2.6rem;
 }
 
 .dbx-op-tile-note {
@@ -2079,11 +2092,13 @@ html.dark .dbx-printer-state.off {
 .dbx-op-since {
     font-size: 0.78rem;
     color: var(--ui-text-muted);
+    font-variant-numeric: tabular-nums;
 }
 
 .dbx-op-num {
     font-size: 0.88rem;
     font-weight: 800;
+    font-variant-numeric: tabular-nums;
 }
 
 .dbx-op-num-queue {
@@ -2248,4 +2263,149 @@ html.dark .dbx-op-action:hover {
     border-radius: var(--ui-radius-sm);
     background: color-mix(in srgb, var(--ui-primary) 6%, var(--ui-surface));
     font-size: 0.85rem;
+}
+
+/* --- Grafica de cola -------------------------------------------------------------------------
+   Una sola serie, asi que no hay paleta categorica que validar: el color es el primario de marca
+   para el dato y el acento solo para el umbral, que es un estado, no una serie. Rejilla y ejes
+   recesivos; el texto lleva tokens de texto, nunca el color de la serie. */
+.dbx-op-chart {
+    position: relative;
+    margin-top: 18px;
+}
+
+.dbx-op-chart-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+}
+
+.dbx-op-chart-title {
+    margin: 0;
+    font-size: 0.74rem;
+    font-weight: 800;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ui-text-muted);
+}
+
+.dbx-op-chart-svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+}
+
+.dbx-op-chart-grid {
+    stroke: var(--ui-border);
+    stroke-width: 1;
+}
+
+.dbx-op-chart-axis {
+    fill: var(--ui-text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.dbx-op-chart-area {
+    fill: color-mix(in srgb, var(--ui-primary) 10%, transparent);
+}
+
+.dbx-op-chart-line {
+    fill: none;
+    stroke: var(--ui-primary);
+    stroke-width: 2;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+}
+
+.dbx-op-chart-threshold {
+    stroke: var(--ui-accent);
+    stroke-width: 1.5;
+    stroke-dasharray: 5 4;
+    opacity: 0.85;
+}
+
+.dbx-op-chart-threshold-label {
+    fill: var(--ui-accent);
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+}
+
+.dbx-op-chart-cursor {
+    stroke: var(--ui-text-muted);
+    stroke-width: 1;
+    stroke-dasharray: 3 3;
+}
+
+.dbx-op-chart-dot {
+    fill: var(--ui-primary);
+    /* Anillo del color de la superficie: separa el marcador de la linea al solaparse. */
+    stroke: var(--ui-surface);
+    stroke-width: 2;
+}
+
+.dbx-op-chart-hit {
+    fill: transparent;
+}
+
+.dbx-op-chart-tip {
+    position: absolute;
+    top: 0;
+    transform: translate(-50%, -100%);
+    padding: 7px 10px;
+    border: 1px solid var(--ui-border-strong);
+    border-radius: var(--ui-radius-sm);
+    background: var(--ui-surface);
+    box-shadow: var(--ui-shadow);
+    font-size: 0.74rem;
+    line-height: 1.45;
+    color: var(--ui-text);
+    white-space: nowrap;
+    pointer-events: none;
+    font-variant-numeric: tabular-nums;
+}
+
+.dbx-op-chart-tip b {
+    font-weight: 800;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .dbx-op-chart-dot,
+    .dbx-op-chart-cursor {
+        transition: opacity 120ms ease;
+    }
+}
+
+/* Filtros de ambito en la barra superior, junto al selector de tienda. */
+.dbx-topbar-filters {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+.dbx-topbar-filters .dbx-filter-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+}
+
+.dbx-topbar-filters .dbx-filter-label {
+    margin: 0;
+    font-size: 0.875rem;
+    font-weight: 400;
+    color: var(--ui-text);
+    white-space: nowrap;
+}
+
+.dbx-topbar-filters .dbx-toggle {
+    margin: 0;
+    white-space: nowrap;
 }

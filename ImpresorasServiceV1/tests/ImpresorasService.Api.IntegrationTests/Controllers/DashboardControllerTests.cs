@@ -272,6 +272,65 @@ public sealed class DashboardControllerTests : IntegrationTestBase
         Assert.Equal(store.UnassignedQueueCurrent, page!.Count);
     }
 
+    /// <summary>
+    /// La serie temporal tiene que cuadrar con los KPIs del overview: si se suman los tramos sale el
+    /// mismo `received` y el mismo `printed`. Y la profundidad de cola, reconstruida hacia atras
+    /// desde la foto actual, tiene que cerrar en `queueCurrent` en el ultimo tramo.
+    /// </summary>
+    [Fact]
+    public async Task GetTimeseries_SumsToTheSameKpisAndClosesOnTheCurrentQueue()
+    {
+        const int storeId = 989;
+        const int printerId = 5989;
+        var now = DateTimeOffset.UtcNow;
+
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
+
+            if (!await db.Stores.AnyAsync(s => s.StoreId == storeId))
+            {
+                db.Stores.Add(new Store { StoreId = storeId, Name = "Timeseries Store", IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now });
+            }
+            if (!await db.Printers.AnyAsync(p => p.PrinterId == printerId))
+            {
+                db.Printers.Add(new Printer { PrinterId = printerId, StoreId = storeId, PrinterName = "Timeseries Printer", SpoolQueue = @"\\host\q989", Host = "host", IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now });
+            }
+            db.PrintJobs.RemoveRange(await db.PrintJobs.Where(j => j.StoreId == storeId).ToListAsync());
+
+            AddJobWithEvent(db, MakeJob(now, PrintJobStatus.PrintedConfirmed, storeId: storeId, printerId: printerId));
+            AddJobWithEvent(db, MakeJob(now, PrintJobStatus.PrintedConfirmed, storeId: storeId, printerId: printerId));
+            AddJobWithEvent(db, MakeJob(now, PrintJobStatus.Pending, storeId: storeId, printerId: printerId));
+            await db.SaveChangesAsync();
+        }
+
+        var overview = await ReadAsJsonAsync<DashboardOverviewResponse>(
+            await Client.GetAsync($"/api/dashboard/overview?window=today&storeId={storeId}"));
+
+        var response = await Client.GetAsync($"/api/dashboard/timeseries?window=today&storeId={storeId}");
+        response.EnsureSuccessStatusCode();
+        var series = await ReadAsJsonAsync<TimeseriesResponse>(response);
+
+        Assert.NotNull(series);
+        Assert.Equal("hour", series!.Bucket);
+        Assert.NotEmpty(series.Points!);
+        Assert.Equal(overview!.Kpis!.Received, series.Points!.Sum(p => p.Received));
+        Assert.Equal(overview.Kpis.Printed, series.Points!.Sum(p => p.Printed));
+
+        var store = Assert.Single(overview.Stores!);
+        Assert.Equal(store.QueuedCurrent, series.Points!.Last().QueueDepth);
+    }
+
+    [Fact]
+    public async Task GetTimeseries_UsesDailyBucketsOnTheWiderWindows()
+    {
+        var response = await Client.GetAsync("/api/dashboard/timeseries?window=7d");
+
+        response.EnsureSuccessStatusCode();
+        var series = await ReadAsJsonAsync<TimeseriesResponse>(response);
+        Assert.Equal("day", series!.Bucket);
+    }
+
     [Fact]
     public void FailedWithoutRetryCurrentPredicate_TranslatesWithHanaProvider()
     {
@@ -504,6 +563,20 @@ public sealed class DashboardControllerTests : IntegrationTestBase
         public DateTimeOffset? OldestQueuedAtUtc { get; set; }
         public DateTimeOffset? OldestFailedWithoutRetryAtUtc { get; set; }
         public List<PrinterRow>? Printers { get; set; }
+    }
+
+    private sealed class TimeseriesResponse
+    {
+        public string? Bucket { get; set; }
+        public List<TimeseriesPoint>? Points { get; set; }
+    }
+
+    private sealed class TimeseriesPoint
+    {
+        public int Received { get; set; }
+        public int Printed { get; set; }
+        public int Failed { get; set; }
+        public int QueueDepth { get; set; }
     }
 
     private sealed class PagedJobs

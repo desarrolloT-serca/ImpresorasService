@@ -122,6 +122,132 @@ public class DashboardController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Serie temporal del periodo para el dashboard: llegadas, impresos y fallos por tramo, mas la
+    /// profundidad de cola reconstruida. Mismas definiciones que `overview` (cohorte por
+    /// CreatedAtUtc, PrintJobEvents para impreso/fallo), para que la grafica y los KPIs no puedan
+    /// contar cosas distintas.
+    ///
+    /// La cola no se puede consultar en pasado —`queueCurrent` es una foto— asi que se reconstruye
+    /// caminando hacia atras desde la foto de ahora: depth[n-1] = depth[n] - llegadas[n] + salidas[n].
+    /// Sale exacta y ahorra la consulta de sembrado que haria falta yendo hacia delante.
+    ///
+    /// Los tramos se agrupan en memoria y no en SQL a proposito: el provider de HANA traduce mal las
+    /// funciones de truncado de fecha, y el volumen de una ventana de dashboard no lo justifica.
+    /// </summary>
+    [HttpGet("timeseries")]
+    public async Task<IActionResult> GetTimeseries(
+        [FromQuery] string? window,
+        [FromQuery] int? storeId,
+        CancellationToken cancellationToken)
+    {
+        var effectiveStoreId = IsAdmin() ? storeId : GetCurrentUserStoreId();
+        var now = _timeProvider.GetUtcNow();
+        var fromUtc = ResolveWindowStartUtc(window, now);
+        var normalized = NormalizeWindow(window);
+        var bucket = normalized == "today" ? TimeSpan.FromHours(1) : TimeSpan.FromDays(1);
+
+        var activeStoreIds = await _dbContext.Stores.AsNoTracking()
+            .Where(x => x.IsActive)
+            .Select(x => x.StoreId)
+            .ToListAsync(cancellationToken);
+
+        var jobs = _dbContext.PrintJobs.AsNoTracking().Where(x => activeStoreIds.Contains(x.StoreId));
+        if (effectiveStoreId.HasValue)
+            jobs = jobs.Where(x => x.StoreId == effectiveStoreId.Value);
+
+        var arrivals = await jobs
+            .Where(x => x.CreatedAtUtc >= fromUtc && x.CreatedAtUtc <= now)
+            .Select(x => x.CreatedAtUtc)
+            .ToListAsync(cancellationToken);
+
+        // Primer instante impreso por trabajo — KPI-P1-001, igual que `printed` del overview.
+        var printedAt = await _dbContext.PrintJobEvents
+            .Where(e => e.NewStatus != null && DashboardPrintJobPredicates.PrintedStatuses.Contains(e.NewStatus.Value))
+            .Join(jobs, e => e.JobId, j => j.JobId, (e, j) => new { e.JobId, e.OccurredAtUtc })
+            .GroupBy(x => x.JobId)
+            .Select(g => g.Min(x => x.OccurredAtUtc))
+            .Where(t => t >= fromUtc && t <= now)
+            .ToListAsync(cancellationToken);
+
+        // Primera senal de fallo por trabajo, para que un job que reintenta varias veces no pinte
+        // un pico por cada intento.
+        var failedAt = await _dbContext.PrintJobEvents
+            .Where(e => e.NewStatus == PrintJobStatus.ErrorFinal || e.NewStatus == PrintJobStatus.RetryScheduled)
+            .Join(jobs, e => e.JobId, j => j.JobId, (e, j) => new { e.JobId, e.OccurredAtUtc })
+            .GroupBy(x => x.JobId)
+            .Select(g => g.Min(x => x.OccurredAtUtc))
+            .Where(t => t >= fromUtc && t <= now)
+            .ToListAsync(cancellationToken);
+
+        // Salidas de cola: primer evento a un estado que ya no cuenta como "en cola". RetryScheduled
+        // sigue dentro de QueueStatuses, asi que un reintento no cuenta como salida.
+        var departures = await _dbContext.PrintJobEvents
+            .Where(e => e.NewStatus != null && !DashboardPrintJobPredicates.QueueStatuses.Contains(e.NewStatus.Value))
+            .Join(jobs, e => e.JobId, j => j.JobId, (e, j) => new { e.JobId, e.OccurredAtUtc })
+            .GroupBy(x => x.JobId)
+            .Select(g => g.Min(x => x.OccurredAtUtc))
+            .Where(t => t >= fromUtc && t <= now)
+            .ToListAsync(cancellationToken);
+
+        var queueNow = await jobs.CountAsync(
+            j => DashboardPrintJobPredicates.QueueStatuses.Contains(j.Status), cancellationToken);
+
+        var starts = new List<DateTimeOffset>();
+        for (var t = FloorTo(fromUtc, bucket); t <= now; t = t + bucket)
+            starts.Add(t);
+        if (starts.Count == 0)
+            starts.Add(FloorTo(now, bucket));
+
+        int[] Bucketize(List<DateTimeOffset> stamps)
+        {
+            var counts = new int[starts.Count];
+            foreach (var stamp in stamps)
+            {
+                var index = (int)Math.Floor((stamp - starts[0]) / bucket);
+                if (index >= 0 && index < counts.Length)
+                    counts[index]++;
+            }
+            return counts;
+        }
+
+        var received = Bucketize(arrivals);
+        var printed = Bucketize(printedAt);
+        var failed = Bucketize(failedAt);
+        var left = Bucketize(departures);
+
+        // Marcha atras desde la foto actual: el ultimo tramo cierra en queueNow.
+        var depth = new int[starts.Count];
+        var running = queueNow;
+        for (var i = starts.Count - 1; i >= 0; i--)
+        {
+            depth[i] = running;
+            running = Math.Max(0, running - received[i] + left[i]);
+        }
+
+        var points = starts
+            .Select((start, i) => new
+            {
+                startUtc = start,
+                received = received[i],
+                printed = printed[i],
+                failed = failed[i],
+                queueDepth = depth[i]
+            })
+            .ToList();
+
+        return Ok(new
+        {
+            generatedAtUtc = now,
+            appliedFilters = new { window = normalized, storeId = effectiveStoreId },
+            bucket = normalized == "today" ? "hour" : "day",
+            points
+        });
+    }
+
+    private static DateTimeOffset FloorTo(DateTimeOffset value, TimeSpan bucket) =>
+        new(value.Ticks - (value.Ticks % bucket.Ticks), value.Offset);
+
     [HttpGet("thresholds")]
     public async Task<IActionResult> GetThresholds(CancellationToken cancellationToken)
     {

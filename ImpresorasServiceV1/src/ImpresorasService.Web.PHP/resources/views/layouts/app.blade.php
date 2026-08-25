@@ -128,6 +128,7 @@
                     <h1 class="text-2xl font-semibold">@yield('title', 'Dashboard')</h1>
                 </div>
                 <div class="app-topbar-actions flex items-center gap-2 flex-wrap">
+                    @yield('topbar-filters')
                     @php
                         $contextStoreId = $effectiveStoreId ?? $authStoreId ?? null;
                         $contextStore = $contextStoreId !== null

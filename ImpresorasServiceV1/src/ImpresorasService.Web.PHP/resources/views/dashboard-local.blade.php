@@ -5,7 +5,7 @@
 @section('content')
 @php
     $window = $window ?? 'today';
-    $autoRefreshSeconds = (int) ($autoRefreshSeconds ?? 0);
+    $autoRefreshSeconds = 30; // fijo: el selector de segundos se retiro de la interfaz
     $stores = is_array($stores ?? null) ? $stores : [];
     $store = $stores[0] ?? [];
     $storeId = (int) ($store['storeId'] ?? ($effectiveStoreId ?? 0));
@@ -185,16 +185,6 @@
                         <option value="30d" {{ $window === '30d' ? 'selected' : '' }}>30 dias</option>
                     </select>
                 </div>
-                <div class="dbx-filter-item">
-                    <label for="autoRefresh" class="dbx-filter-label">Auto refresh</label>
-                    <select id="autoRefresh" name="autoRefresh" class="select !w-auto" data-current="{{ $autoRefreshSeconds }}">
-                        <option value="0" {{ $autoRefreshSeconds === 0 ? 'selected' : '' }}>Off</option>
-                        <option value="15" {{ $autoRefreshSeconds === 15 ? 'selected' : '' }}>15s</option>
-                        <option value="30" {{ $autoRefreshSeconds === 30 ? 'selected' : '' }}>30s</option>
-                        <option value="60" {{ $autoRefreshSeconds === 60 ? 'selected' : '' }}>60s</option>
-                        <option value="120" {{ $autoRefreshSeconds === 120 ? 'selected' : '' }}>120s</option>
-                    </select>
-                </div>
             </div>
             <div class="local-actions">
                 <a class="btn btn-ghost" href="{{ url('/cola?storeId=' . $storeId) }}">Ver cola</a>
@@ -209,7 +199,7 @@
     <div class="dbx-op">
 
         {{-- Estado actual: no depende del periodo del filtro (A-KPI-01). --}}
-        <section class="dbx-op-card {{ $healthClass === 'critical' ? 'dbx-op-card-alert' : '' }}">
+        <section class="dbx-op-card dbx-op-card-hero {{ $healthClass === 'critical' ? 'dbx-op-card-alert' : '' }}">
             <div class="dbx-op-body">
                 <div class="dbx-op-head">
                     <h2 class="dbx-op-title">Estado actual de la operaci&oacute;n</h2>
@@ -246,7 +236,7 @@
             </div>
         </section>
 
-        <section class="dbx-op-card {{ $attentionItems !== [] ? 'dbx-op-card-alert' : '' }}">
+        <section class="dbx-op-card">
             <div class="dbx-op-body">
                 <div class="dbx-op-head">
                     <h2 class="dbx-op-title">Incidencias priorizadas &mdash; acci&oacute;n requerida</h2>
@@ -378,7 +368,7 @@
 
 <script>
 (function() {
-    const autoRefreshSeconds = {{ (int) ($autoRefreshSeconds ?? 0) }};
+    const autoRefreshSeconds = {{ (int) $autoRefreshSeconds }};
     if (autoRefreshSeconds > 0) {
         setTimeout(function() {
             window.location.reload();

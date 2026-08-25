@@ -120,7 +120,7 @@
 <div class="dbx-op">
 
     {{-- 1. Estado actual de la operacion --------------------------------------------------- --}}
-    <section class="dbx-op-card {{ $opCritical > 0 ? 'dbx-op-card-alert' : '' }}">
+    <section class="dbx-op-card dbx-op-card-hero {{ $opCritical > 0 ? 'dbx-op-card-alert' : '' }}">
         <div class="dbx-op-body">
             <div class="dbx-op-head">
                 <h2 class="dbx-op-title">Estado actual de la operaci&oacute;n</h2>
@@ -280,7 +280,7 @@
                 ($opRank[$a['severity']] ?? 3) <=> ($opRank[$b['severity']] ?? 3));
         @endphp
 
-        <section class="dbx-op-card {{ $opIncidents !== [] ? 'dbx-op-card-alert' : '' }}">
+        <section class="dbx-op-card">
             <div class="dbx-op-body">
                 <div class="dbx-op-head">
                     <h2 class="dbx-op-title">Incidencias priorizadas &mdash; acci&oacute;n requerida</h2>
@@ -358,6 +358,7 @@
                     <span class="dbx-op-rate-bar"><span style="width: {{ $opSuccessRate ?? 0 }}%"></span></span>
                 </div>
             </div>
+            @include('dashboard.partials.grafica-cola')
         </div>
     </section>
 
