@@ -34,32 +34,119 @@
         '30d' => 'Ultimos 30 dias',
         default => 'Hoy',
     };
-    $successRate = $received > 0 ? (int) round(($printed / max(1, $received)) * 100) : 100;
+    $successRate = $received > 0 ? (int) round(($printed / $received) * 100) : null; // sin recibidos no hay tasa que mostrar, no un 100% ficticio
     $generatedAt = (string) ($generatedAtUtc ?? '');
     $updatedLabel = $generatedAt !== '' ? str_replace('T', ' ', substr($generatedAt, 0, 19)) . ' UTC' : 'N/D';
     $canOperate = ($isAdmin ?? false) || ($isStoreManager ?? false);
 
+    // "Desde" de cada incidencia (mismo criterio que el dashboard de admin): el trabajo en cola
+    // mas viejo, el fallo sin reenviar mas viejo, o el ultimo chequeo de la impresora.
+    $sinceLabel = static function ($iso): string {
+        $raw = trim((string) ($iso ?? ''));
+        $ts = $raw !== '' ? strtotime($raw) : false;
+        if ($ts === false) {
+            return 'sin comprobar';
+        }
+        $mins = (int) floor((time() - $ts) / 60);
+        if ($mins < 1) {
+            return 'ahora mismo';
+        }
+        if ($mins < 60) {
+            return $mins . ' min';
+        }
+        $hours = intdiv($mins, 60);
+        if ($hours < 24) {
+            $rest = $mins % 60;
+            return $rest === 0 ? $hours . ' h' : $hours . ' h ' . str_pad((string) $rest, 2, '0', STR_PAD_LEFT) . ' min';
+        }
+        return intdiv($hours, 24) . ' d ' . ($hours % 24) . ' h';
+    };
+    $oldestQueued = $store['oldestQueuedAtUtc'] ?? null;
+    $oldestFailed = $store['oldestFailedWithoutRetryAtUtc'] ?? null;
+    $offlinePrinter = null;
+    $noHostPrinter = null;
+    foreach ($printers as $p) {
+        $err = strtolower((string) ($p['lastConnectionError'] ?? ''));
+        if ($noHostPrinter === null && (trim((string) ($p['host'] ?? '')) === '' || str_contains($err, 'host_not_configured'))) {
+            $noHostPrinter = $p;
+        } elseif ($offlinePrinter === null && ($p['lastConnectionOk'] ?? null) === false) {
+            $offlinePrinter = $p;
+        }
+    }
+
     $attentionItems = [];
     if ($connCritical > 0) {
-        $attentionItems[] = ['level' => 'critical', 'title' => 'Impresoras sin conexion', 'text' => $connCritical . ' impresora(s) requieren revision de conectividad.', 'href' => url('/impresoras?storeId=' . $storeId . '&isActive=true')];
-    }
-    if ($queue > 0) {
-        $attentionItems[] = ['level' => $queue >= 10 ? 'warning' : 'info', 'title' => 'Trabajos en cola', 'text' => $queue . ' trabajo(s) pendientes de salida.', 'href' => url('/cola?storeId=' . $storeId . '&status=0')];
+        $streak = (int) ($offlinePrinter['connectionFailuresStreak'] ?? 0);
+        $transport = trim((string) ($offlinePrinter['lastConnectionTransport'] ?? ''));
+        $detail = array_filter([
+            $streak > 0 ? $streak . ' ' . ($streak === 1 ? 'fallo consecutivo' : 'fallos consecutivos') : null,
+            $transport !== '' ? 'transporte ' . $transport : null,
+        ]);
+        $attentionItems[] = [
+            'level' => 'critical', 'kicker' => 'CONECTIVIDAD',
+            'lead' => $offlinePrinter !== null ? $offlinePrinter['printerName'] . ' sin conexión' : $connCritical . ' impresora(s) sin conexión',
+            'tail' => $detail !== [] ? implode(', ', $detail) : 'requieren revisión de conectividad',
+            'since' => $offlinePrinter['lastConnectionCheckAtUtc'] ?? null,
+            'action' => ['Ver impresoras', $offlinePrinter !== null
+                ? '/impresoras?storeId=' . $storeId . '&printerId=' . (int) $offlinePrinter['printerId']
+                : '/impresoras?storeId=' . $storeId],
+        ];
     }
     if ($failedNoRetry > 0) {
-        $attentionItems[] = ['level' => 'critical', 'title' => 'Fallos sin reenviar', 'text' => $failedNoRetry . ' trabajo(s) necesitan seguimiento.', 'href' => url('/cola?storeId=' . $storeId . '&failedWithoutRetry=1')];
+        $attentionItems[] = [
+            'level' => 'critical', 'kicker' => 'SIN REENVIAR',
+            'lead' => $failedNoRetry . ' ' . ($failedNoRetry === 1 ? 'trabajo sin reenviar' : 'trabajos sin reenviar'),
+            'tail' => 'reintentos agotados y nadie los ha reenviado',
+            'since' => $oldestFailed,
+            'action' => ['Reenviar ' . $failedNoRetry, '/cola?storeId=' . $storeId . '&failedWithoutRetry=1'],
+        ];
+    }
+    if ($queue > 0) {
+        $attentionItems[] = [
+            'level' => $queue >= 10 ? 'warning' : 'info', 'kicker' => 'COLA',
+            'lead' => 'Cola de ' . $queue . ' ' . ($queue === 1 ? 'trabajo' : 'trabajos'),
+            'tail' => 'pendientes de salida',
+            'since' => $oldestQueued,
+            'action' => ['Ver en cola', '/cola?storeId=' . $storeId . '&status=0'],
+        ];
     }
     if ($unassigned > 0) {
-        $attentionItems[] = ['level' => 'warning', 'title' => 'Cola sin impresora', 'text' => $unassigned . ' trabajo(s) no tienen impresora asignada.', 'href' => url('/cola?storeId=' . $storeId)];
+        $attentionItems[] = [
+            'level' => 'warning', 'kicker' => 'SIN IMPRESORA ASIGNADA',
+            'lead' => $unassigned . ' ' . ($unassigned === 1 ? 'trabajo sin impresora' : 'trabajos sin impresora'),
+            'tail' => 'ninguna regla de enrutado coincide',
+            'since' => $oldestQueued,
+            'action' => ['Ver los sin impresora', '/cola?storeId=' . $storeId . '&unassigned=1'],
+        ];
     }
     if ($missingHost > 0) {
-        $attentionItems[] = ['level' => 'warning', 'title' => 'Configuracion incompleta', 'text' => $missingHost . ' impresora(s) sin host configurado.', 'href' => url('/impresoras?storeId=' . $storeId)];
+        $attentionItems[] = [
+            'level' => 'warning', 'kicker' => 'SIN HOST',
+            'lead' => $noHostPrinter !== null ? $noHostPrinter['printerName'] . ' sin host configurado' : $missingHost . ' impresora(s) sin host',
+            'tail' => 'no puede recibir trabajos',
+            'since' => $noHostPrinter['lastConnectionCheckAtUtc'] ?? null,
+            'action' => ['Configurar host', $noHostPrinter !== null
+                ? '/impresoras?storeId=' . $storeId . '&printerId=' . (int) $noHostPrinter['printerId']
+                : '/impresoras?storeId=' . $storeId],
+        ];
     }
     if ($connWarning > 0) {
-        $attentionItems[] = ['level' => 'warning', 'title' => 'Conectividad inestable', 'text' => $connWarning . ' impresora(s) acumulan fallos de conexion.', 'href' => url('/impresoras?storeId=' . $storeId . '&isActive=true')];
+        $attentionItems[] = [
+            'level' => 'warning', 'kicker' => 'CONECTIVIDAD',
+            'lead' => $connWarning . ' impresora(s) con conectividad inestable',
+            'tail' => 'acumulan fallos de conexión',
+            'since' => $offlinePrinter['lastConnectionCheckAtUtc'] ?? null,
+            'action' => ['Ver impresoras', '/impresoras?storeId=' . $storeId],
+        ];
     }
     if (!empty($partialData)) {
-        $attentionItems[] = ['level' => 'warning', 'title' => 'Datos parciales', 'text' => 'El resumen agregado no esta disponible; se muestran como maximo 500 trabajos recientes.', 'href' => null];
+        $attentionItems[] = [
+            'level' => 'warning', 'kicker' => 'DATOS PARCIALES',
+            'lead' => 'Resumen agregado no disponible',
+            'tail' => 'se muestran como máximo 500 trabajos recientes',
+            'since' => null,
+            'action' => null,
+        ];
     }
 
     $sortedPrinters = $printers;
@@ -81,7 +168,7 @@
         </div>
         <div class="local-health-panel">
             <span class="dbx-pill {{ $healthClass }}">{{ $healthLabel }}</span>
-            <strong>{{ $successRate }}%</strong>
+            <strong>{{ $successRate === null ? '—' : $successRate . '%' }}</strong>
             <span>impresos sobre recibidos</span>
             <small>Actualizado: {{ $updatedLabel }}</small>
         </div>
@@ -119,94 +206,128 @@
         </form>
     </x-ui.card>
 
-    <section class="local-kpi-grid">
-        <article class="local-kpi {{ $queue > 0 ? 'is-warning' : '' }}">
-            <span>Cola actual</span>
-            <strong>{{ $queue }}</strong>
-            <small>trabajos pendientes</small>
-        </article>
-        <article class="local-kpi {{ $failedNoRetry > 0 ? 'is-critical' : '' }}">
-            <span>Sin reenviar</span>
-            <strong>{{ $failedNoRetry }}</strong>
-            <small>fallos activos</small>
-        </article>
-        <article class="local-kpi {{ $unassigned > 0 ? 'is-warning' : '' }}">
-            <span>Sin asignar</span>
-            <strong>{{ $unassigned }}</strong>
-            <small>sin impresora</small>
-        </article>
-        <article class="local-kpi">
-            <span>Impresoras activas</span>
-            <strong>{{ $connectedPrinters }}</strong>
-            <small>{{ count($printers) }} registradas</small>
-        </article>
-        <article class="local-kpi">
-            <span>Recibidos</span>
-            <strong>{{ $received }}</strong>
-            <small>{{ $windowLabel }}</small>
-        </article>
-        <article class="local-kpi">
-            <span>Impresos</span>
-            <strong>{{ $printed }}</strong>
-            <small>{{ $failed }} fallidos</small>
-        </article>
-    </section>
+    <div class="dbx-op">
 
-    <section class="local-main-grid">
-        <x-ui.card class="local-attention-card">
-            <div class="dbx-title-row">
-                <h2 class="dbx-title">Requiere atencion</h2>
-                <span class="dbx-subtle">Prioridad operativa</span>
-            </div>
-            @if(count($attentionItems) === 0)
-                <div class="local-empty-state">
-                    <strong>Sin incidencias activas</strong>
-                    <span>La tienda esta dentro de los umbrales definidos.</span>
+        {{-- Estado actual: no depende del periodo del filtro (A-KPI-01). --}}
+        <section class="dbx-op-card {{ $healthClass === 'critical' ? 'dbx-op-card-alert' : '' }}">
+            <div class="dbx-op-body">
+                <div class="dbx-op-head">
+                    <h2 class="dbx-op-title">Estado actual de la operaci&oacute;n</h2>
+                    @if($healthClass === 'critical')
+                        <span class="dbx-op-meta-alert">REQUIERE ATENCIÓN</span>
+                    @elseif($healthClass === 'warning')
+                        <span class="dbx-op-meta-alert" style="color: var(--ui-warning)">REVISAR</span>
+                    @else
+                        <span class="dbx-op-meta-ok">OPERACIÓN NORMAL</span>
+                    @endif
                 </div>
-            @else
-                <div class="local-attention-list">
-                    @foreach($attentionItems as $item)
-                        @php
-                            $href = $item['href'] !== null && ($canOperate || !str_contains($item['href'], '/impresoras')) ? $item['href'] : null;
-                        @endphp
-                        <div class="local-attention-item is-{{ $item['level'] }}">
-                            <div>
-                                <strong>{{ $item['title'] }}</strong>
-                                <span>{{ $item['text'] }}</span>
-                            </div>
-                            @if($href)
-                                <a class="btn btn-ghost" href="{{ $href }}">Abrir</a>
-                            @endif
-                        </div>
-                    @endforeach
-                </div>
-            @endif
-        </x-ui.card>
-
-        <x-ui.card class="local-flow-card">
-            <div class="dbx-title-row">
-                <h2 class="dbx-title">Flujo del periodo</h2>
-                <span class="dbx-subtle">{{ $windowLabel }}</span>
-            </div>
-            @php
-                $flowBase = max(1, $received, $printed, $failed, $queue);
-            @endphp
-            <div class="local-flow-bars">
-                @foreach([
-                    ['label' => 'Recibidos', 'value' => $received, 'class' => 'info'],
-                    ['label' => 'Impresos', 'value' => $printed, 'class' => 'success'],
-                    ['label' => 'Fallidos', 'value' => $failed, 'class' => 'danger'],
-                    ['label' => 'En cola', 'value' => $queue, 'class' => 'warning'],
-                ] as $metric)
-                    <div class="local-flow-row">
-                        <span>{{ $metric['label'] }}</span>
-                        <div><i class="{{ $metric['class'] }}" style="width: {{ (int) round(($metric['value'] / $flowBase) * 100) }}%"></i></div>
-                        <strong>{{ $metric['value'] }}</strong>
+                <div class="dbx-op-tiles">
+                    <div class="dbx-op-tile">
+                        <span class="dbx-op-tile-label">EN COLA</span>
+                        <strong class="dbx-op-tile-value">{{ $queue }}</strong>
+                        <span class="dbx-op-tile-note">trabajos esperando</span>
                     </div>
-                @endforeach
+                    <div class="dbx-op-tile {{ $failedNoRetry > 0 ? 'dbx-op-tile-alert' : '' }}">
+                        <span class="dbx-op-tile-label">SIN REENVIAR</span>
+                        <strong class="dbx-op-tile-value">{{ $failedNoRetry }}</strong>
+                        <span class="dbx-op-tile-note">necesitan seguimiento</span>
+                    </div>
+                    <div class="dbx-op-tile {{ $connCritical > 0 ? 'dbx-op-tile-alert' : '' }}">
+                        <span class="dbx-op-tile-label">IMPRESORAS ACTIVAS</span>
+                        <strong class="dbx-op-tile-value">{{ $connectedPrinters }}</strong>
+                        <span class="dbx-op-tile-note">{{ count($printers) }} registradas</span>
+                    </div>
+                    <div class="dbx-op-tile">
+                        <span class="dbx-op-tile-label">SIN IMPRESORA</span>
+                        <strong class="dbx-op-tile-value">{{ $unassigned }}</strong>
+                        <span class="dbx-op-tile-note">trabajos sin asignar</span>
+                    </div>
+                </div>
             </div>
-        </x-ui.card>
-    </section>
+        </section>
+
+        <section class="dbx-op-card {{ $attentionItems !== [] ? 'dbx-op-card-alert' : '' }}">
+            <div class="dbx-op-body">
+                <div class="dbx-op-head">
+                    <h2 class="dbx-op-title">Incidencias priorizadas &mdash; acci&oacute;n requerida</h2>
+                    <span class="dbx-op-meta">{{ count($attentionItems) }} {{ count($attentionItems) === 1 ? 'abierta' : 'abiertas' }}</span>
+                </div>
+                @if($attentionItems === [])
+                    <p class="dbx-op-empty">Sin incidencias activas. La tienda est&aacute; dentro de los umbrales definidos.</p>
+                @else
+                    <div class="dbx-op-table-wrap">
+                        <table class="dbx-op-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:104px">Severidad</th>
+                                    <th>Incidencia</th>
+                                    <th style="width:112px">Desde</th>
+                                    <th style="width:196px">Acci&oacute;n</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($attentionItems as $item)
+                                    @php
+                                        // Las paginas de impresoras solo se ofrecen a quien puede operar sobre ellas.
+                                        $href = $item['action'] !== null && ($canOperate || !str_contains($item['action'][1], '/impresoras'))
+                                            ? $item['action'][1]
+                                            : null;
+                                    @endphp
+                                    <tr class="is-{{ $item['level'] }}">
+                                        <td><span class="dbx-op-sev dbx-op-sev-{{ $item['level'] }}">{{ ['critical' => 'CRÍTICO', 'warning' => 'AVISO', 'info' => 'INFO'][$item['level']] ?? 'AVISO' }}</span></td>
+                                        <td class="dbx-op-cell-text">
+                                            <span class="dbx-op-kicker">{{ $item['kicker'] }}</span>
+                                            <span class="dbx-op-text"><b>{{ $item['lead'] }}</b> &mdash; {{ $item['tail'] }}</span>
+                                        </td>
+                                        <td class="dbx-op-since" title="{{ $item['since'] ?? 'Sin dato de inicio' }}">{{ $sinceLabel($item['since']) }}</td>
+                                        <td>
+                                            @if($href)
+                                                <a href="{{ url($href) }}" class="dbx-op-action {{ $item['level'] === 'critical' ? 'dbx-op-action-critical' : '' }}">{{ $item['action'][0] }}</a>
+                                            @else
+                                                <span class="dbx-op-since">&mdash;</span>
+                                            @endif
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                @endif
+            </div>
+        </section>
+
+        <section class="dbx-op-card">
+            <div class="dbx-op-body">
+                <div class="dbx-op-head">
+                    <h2 class="dbx-op-title">Rendimiento del periodo &mdash; {{ $windowLabel }}</h2>
+                    <span class="dbx-op-meta">
+                        No incluye estado actual &middot;
+                        {{ $received > 0 ? 'porcentajes sobre ' . $received . ' recibidos' : 'sin trabajos recibidos en el periodo' }}
+                    </span>
+                </div>
+                <div class="dbx-op-tiles dbx-op-tiles-kpi">
+                    <div class="dbx-op-tile">
+                        <span class="dbx-op-tile-label">RECIBIDOS</span>
+                        <strong class="dbx-op-tile-value">{{ $received }}</strong>
+                    </div>
+                    <div class="dbx-op-tile">
+                        <span class="dbx-op-tile-label">IMPRESOS</span>
+                        <strong class="dbx-op-tile-value">{{ $printed }}</strong>
+                    </div>
+                    <div class="dbx-op-tile {{ $failed > 0 ? 'dbx-op-tile-alert' : '' }}">
+                        <span class="dbx-op-tile-label">FALLIDOS</span>
+                        <strong class="dbx-op-tile-value">{{ $failed }}</strong>
+                    </div>
+                    <div class="dbx-op-tile dbx-op-tile-rate">
+                        <span class="dbx-op-tile-label">TASA DE &Eacute;XITO</span>
+                        <strong class="dbx-op-tile-value">{{ $successRate === null ? '—' : $successRate . ' %' }}</strong>
+                        <span class="dbx-op-rate-bar"><span style="width: {{ $successRate ?? 0 }}%"></span></span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </div>
 
     <x-ui.card class="local-printers-card">
         <div class="dbx-title-row">

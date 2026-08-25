@@ -31,8 +31,12 @@ class ColaController extends Controller
         // Excluyentes: failedWithoutRetry es un conjunto de estados (el mismo del KPI del dashboard),
         // no un estado suelto, asi que gana sobre el filtro de estado si llegan los dos.
         $failedWithoutRetry = $request->boolean('failedWithoutRetry');
+        $unassigned = $request->boolean('unassigned');
         if ($failedWithoutRetry) {
             $params['failedWithoutRetry'] = 'true';
+        } elseif ($unassigned) {
+            // Mismo conjunto que unassignedQueueCurrent del dashboard: en cola y sin impresora.
+            $params['unassigned'] = 'true';
         } elseif ($request->filled('status')) {
             $params['status'] = $request->integer('status');
         }
@@ -75,8 +79,9 @@ class ColaController extends Controller
         return view('cola', [
             'jobs' => $jobs,
             'storeId' => $request->input('storeId'),
-            'status' => $failedWithoutRetry ? null : $request->input('status'),
+            'status' => ($failedWithoutRetry || $unassigned) ? null : $request->input('status'),
             'failedWithoutRetry' => $failedWithoutRetry,
+            'unassigned' => $unassigned,
             'externalJobId' => $externalJobId,
             'page' => $page,
             'limit' => $limit,

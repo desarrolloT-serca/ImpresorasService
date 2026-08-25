@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using ImpresorasService.Application.Abstractions;
 using ImpresorasService.Application.Services;
 using ImpresorasService.Domain;
@@ -320,6 +320,21 @@ public class DashboardController : ControllerBase
             })
             .ToDictionaryAsync(x => x.StoreId, x => x.FailedWithoutRetryCurrent, cancellationToken);
 
+        // "Desde" de las incidencias priorizadas (dashboard): antiguedad de la cola y del fallo sin
+        // reenviar mas antiguo de cada tienda. Sin ventana, igual que los KPIs de estado actual que
+        // acompanan (A-KPI-01): la incidencia sigue abierta aunque empezara antes del periodo.
+        var oldestQueuedStats = await allJobs
+            .Where(j => DashboardPrintJobPredicates.QueueStatuses.Contains(j.Status))
+            .GroupBy(j => j.StoreId)
+            .Select(g => new { StoreId = g.Key, Oldest = g.Min(j => j.CreatedAtUtc) })
+            .ToDictionaryAsync(x => x.StoreId, x => x.Oldest, cancellationToken);
+
+        var oldestFailedStats = await allJobs
+            .Where(DashboardPrintJobPredicates.FailedWithoutRetryCurrent)
+            .GroupBy(j => j.StoreId)
+            .Select(g => new { StoreId = g.Key, Oldest = g.Min(j => j.UpdatedAtUtc) })
+            .ToDictionaryAsync(x => x.StoreId, x => x.Oldest, cancellationToken);
+
         // Breakdown por impresora: evita que el fallback PHP tenga que pedir jobs crudos
         // (api/printjobs?limit=5000, truncado a 500 por la API) solo para calcular estos chips.
         var printerQueueCurrent = await allJobs
@@ -406,6 +421,8 @@ public class DashboardController : ControllerBase
                 Health: health,
                 HealthReason: healthReason,
                 UnassignedQueueCurrent: unassignedQueueCurrent,
+                OldestQueuedAtUtc: oldestQueuedStats.TryGetValue(store.StoreId, out var oldestQueuedAt) ? oldestQueuedAt : null,
+                OldestFailedWithoutRetryAtUtc: oldestFailedStats.TryGetValue(store.StoreId, out var oldestFailedAt) ? oldestFailedAt : null,
                 Printers: storePrinters ?? []));
 
             alertInputs.Add(new StoreAlertInput(
@@ -586,6 +603,8 @@ public class DashboardController : ControllerBase
         string Health,
         string HealthReason,
         int UnassignedQueueCurrent,
+        DateTimeOffset? OldestQueuedAtUtc,
+        DateTimeOffset? OldestFailedWithoutRetryAtUtc,
         IReadOnlyList<PrinterDashboardRow> Printers);
 
     private sealed record PrinterDashboardRow(

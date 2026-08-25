@@ -61,14 +61,17 @@
             </div>
             <div class="dbx-form-actions">
                 @php
-                    $errorFilterUrl = url('/cola?' . http_build_query(array_merge(request()->except(['status', 'page', 'failedWithoutRetry']), ['status' => 8])));
+                    $errorFilterUrl = url('/cola?' . http_build_query(array_merge(request()->except(['status', 'page', 'failedWithoutRetry', 'unassigned']), ['status' => 8])));
                     // Mismo conjunto que el KPI "sin reenviar" del dashboard: incluye ademas de los
                     // errores los trabajos atascados con reintentos ya consumidos, que no salen en "Solo errores".
-                    $noRetryFilterUrl = url('/cola?' . http_build_query(array_merge(request()->except(['status', 'page', 'failedWithoutRetry']), ['failedWithoutRetry' => 1])));
+                    $noRetryFilterUrl = url('/cola?' . http_build_query(array_merge(request()->except(['status', 'page', 'failedWithoutRetry', 'unassigned']), ['failedWithoutRetry' => 1])));
+                    $unassignedFilterUrl = url('/cola?' . http_build_query(array_merge(request()->except(['status', 'page', 'failedWithoutRetry', 'unassigned']), ['unassigned' => 1])));
                 @endphp
-                <a href="{{ $errorFilterUrl }}" class="btn {{ !($failedWithoutRetry ?? false) && ($status ?? '') == '8' ? 'btn-danger' : 'btn-ghost' }}">Solo errores</a>
+                <a href="{{ $errorFilterUrl }}" class="btn {{ !($failedWithoutRetry ?? false) && !($unassigned ?? false) && ($status ?? '') == '8' ? 'btn-danger' : 'btn-ghost' }}">Solo errores</a>
                 <a href="{{ $noRetryFilterUrl }}" class="btn {{ ($failedWithoutRetry ?? false) ? 'btn-danger' : 'btn-ghost' }}"
                    title="Errores finales mas trabajos atascados con los reintentos agotados">Sin reenviar</a>
+                <a href="{{ $unassignedFilterUrl }}" class="btn {{ ($unassigned ?? false) ? 'btn-danger' : 'btn-ghost' }}"
+                   title="Trabajos en cola que ninguna regla de enrutado ha asignado a una impresora">Sin impresora</a>
                 <a href="{{ url('/cola') }}" class="btn btn-ghost">Limpiar</a>
             </div>
         </form>

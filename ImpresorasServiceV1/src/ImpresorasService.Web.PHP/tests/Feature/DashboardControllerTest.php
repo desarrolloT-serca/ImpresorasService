@@ -331,6 +331,139 @@ class DashboardControllerTest extends TestCase
         });
     }
 
+    public function test_dashboard_hides_the_success_rate_when_the_period_has_no_received_jobs(): void
+    {
+        $api = $this->makeOverviewApiClient(
+            jobs: [],
+            printers: [],
+            overviewKpis: [
+                'received' => 0, 'printed' => 0, 'failed' => 0, 'queueCurrent' => 0,
+                'failedWithoutRetryCurrent' => 32, 'activePrinters' => 1, 'activeStores' => 1,
+            ],
+        );
+
+        $this->app->instance(ApiClient::class, $api);
+
+        $response = $this
+            ->withSession([
+                'impresoras_token' => 'token',
+                'impresoras_user' => ['role' => 'Admin', 'login' => 'admin'],
+            ])
+            ->get('/?window=today');
+
+        $content = $response->assertOk()->getContent();
+        // Sin recibidos no hay tasa de exito: se pinta "—", no un 100% ficticio.
+        self::assertStringContainsString('<strong class="dbx-op-tile-value">—</strong>', $content);
+        self::assertStringContainsString('sin trabajos recibidos en el periodo', $content);
+    }
+
+    /**
+     * queueCurrent y failedWithoutRetryCurrent son foto de estado actual (sin ventana, A-KPI-01):
+     * dividirlos entre los recibidos del periodo producia porcentajes imposibles (32/1 = 3200%).
+     */
+    public function test_dashboard_never_expresses_current_state_kpis_as_a_percentage_of_the_window(): void
+    {
+        $api = $this->makeOverviewApiClient(
+            jobs: [],
+            printers: [],
+            overviewKpis: [
+                'received' => 1, 'printed' => 1, 'failed' => 0, 'queueCurrent' => 4,
+                'failedWithoutRetryCurrent' => 32, 'activePrinters' => 1, 'activeStores' => 1,
+            ],
+        );
+
+        $this->app->instance(ApiClient::class, $api);
+
+        $content = $this
+            ->withSession([
+                'impresoras_token' => 'token',
+                'impresoras_user' => ['role' => 'Admin', 'login' => 'admin'],
+            ])
+            ->get('/?window=today')
+            ->assertOk()
+            ->getContent();
+
+        self::assertStringNotContainsString('3200', $content);
+        // Cola y sin reenviar se muestran en absoluto, dentro de "Estado actual de la operacion".
+        self::assertStringContainsString('<strong class="dbx-op-tile-value">4</strong>', $content);
+        self::assertStringContainsString('<strong class="dbx-op-tile-value">32</strong>', $content);
+        // Los porcentajes solo salen del bloque de periodo, y dicen sobre que base se calculan.
+        self::assertStringContainsString('porcentajes sobre 1 recibidos', $content);
+        self::assertStringContainsString('<strong class="dbx-op-tile-value">100 %</strong>', $content);
+    }
+
+    /**
+     * Los botones de una incidencia tienen que llevar al subconjunto que la produce, no al listado
+     * entero de la tienda: la impresora concreta que falla, y los trabajos sin impresora asignada.
+     * Sin esto el operador aterrizaba en una lista de 200 trabajos sin saber cuales eran los rotos.
+     */
+    public function test_incident_actions_link_to_the_filtered_subset_that_causes_them(): void
+    {
+        $api = $this->makeOverviewApiClient(
+            jobs: [],
+            printers: [[
+                'printerId' => 77, 'storeId' => 10, 'printerName' => 'TICKET-02', 'isActive' => true,
+                'lastConnectionOk' => false, 'lastConnectionCheckAtUtc' => gmdate('c', time() - 2400),
+                'lastConnectionTransport' => 'IPP', 'lastConnectionError' => 'timeout',
+                'connectionFailuresStreak' => 6,
+            ]],
+            overviewKpis: [
+                'received' => 10, 'printed' => 8, 'failed' => 2, 'queueCurrent' => 4,
+                'failedWithoutRetryCurrent' => 3, 'activePrinters' => 1, 'activeStores' => 1,
+            ],
+            overviewAlerts: [
+                ['storeId' => 10, 'storeName' => 'Tienda 10', 'health' => 'critical', 'healthReason' => 'Impresora(s) sin conexion (conectividad)', 'queuedCurrent' => 4, 'failedWithoutRetryCurrent' => 3],
+                ['storeId' => 10, 'storeName' => 'Tienda 10', 'health' => 'critical', 'healthReason' => 'Acumula 1 o mas fallos sin reenviar', 'queuedCurrent' => 4, 'failedWithoutRetryCurrent' => 3],
+            ],
+            overviewStoreExtra: ['unassignedQueueCurrent' => 2],
+        );
+
+        $this->app->instance(ApiClient::class, $api);
+
+        $content = $this
+            ->withSession([
+                'impresoras_token' => 'token',
+                'impresoras_user' => ['role' => 'Admin', 'login' => 'admin'],
+            ])
+            ->get('/?window=today')
+            ->assertOk()
+            ->getContent();
+
+        // Conectividad: a la impresora caida, no a las de la tienda.
+        self::assertStringContainsString('/impresoras?storeId=10&amp;printerId=77', $content);
+        // Sin reenviar: al mismo conjunto que cuenta el KPI.
+        self::assertStringContainsString('/cola?storeId=10&amp;failedWithoutRetry=1', $content);
+        // Sin impresora asignada: a los trabajos sin impresora, no a la cola entera.
+        self::assertStringContainsString('/cola?storeId=10&amp;unassigned=1', $content);
+    }
+
+    public function test_employee_can_follow_a_printer_alert_to_the_read_only_printer_panel(): void
+    {
+        $this->app->instance(ApiClient::class, $this->makeOverviewApiClient(
+            jobs: [],
+            printers: [],
+            overviewKpis: [
+                'received' => 0, 'printed' => 0, 'failed' => 0, 'queueCurrent' => 0,
+                'failedWithoutRetryCurrent' => 0, 'activePrinters' => 0, 'activeStores' => 1,
+            ],
+        ));
+
+        $this->withSession([
+            'impresoras_token' => 'token',
+            'impresoras_user' => ['role' => 'Employee', 'storeId' => 10, 'login' => 'employee'],
+        ])->get('/impresoras?storeId=10')
+            ->assertOk()
+            ->assertSee('Impresoras');
+    }
+
+    public function test_employee_printer_panel_does_not_start_connection_checks(): void
+    {
+        $view = str_replace("\r\n", "\n", file_get_contents(resource_path('views/impresoras/index.blade.php')));
+
+        self::assertStringContainsString('const canCheckConnection =', $view);
+        self::assertStringContainsString('if (canCheckConnection && pingInterval > 0)', $view);
+    }
+
     /**
      * Fase 2: con overview disponible, el bucle de agregación local sobre `api/printjobs` no debe
      * ejecutarse en absoluto (no solo quedar sobrescrito al final). Se simulan 600 jobs crudos —
@@ -373,14 +506,21 @@ class DashboardControllerTest extends TestCase
      * @param list<array<string, mixed>> $printers
      * @param array<string, int> $overviewKpis
      */
-    private function makeOverviewApiClient(array $jobs, array $printers, array $overviewKpis): ApiClient
-    {
-        return new class($jobs, $printers, $overviewKpis) extends ApiClient
+    private function makeOverviewApiClient(
+        array $jobs,
+        array $printers,
+        array $overviewKpis,
+        array $overviewAlerts = [],
+        array $overviewStoreExtra = [],
+    ): ApiClient {
+        return new class($jobs, $printers, $overviewKpis, $overviewAlerts, $overviewStoreExtra) extends ApiClient
         {
             public function __construct(
                 private readonly array $jobs,
                 private readonly array $printers,
                 private readonly array $overviewKpis,
+                private readonly array $overviewAlerts,
+                private readonly array $overviewStoreExtra,
             ) {
                 parent::__construct(new Client(['base_uri' => 'http://api.test/']), 'http://api.test');
             }
@@ -416,7 +556,7 @@ class DashboardControllerTest extends TestCase
                     'api/dashboard/overview?window=today' => [
                         'kpis' => $this->overviewKpis,
                         'stores' => [
-                            [
+                            array_merge([
                                 'storeId' => 10,
                                 'storeName' => 'Tienda 10',
                                 'connectedPrinters' => 1,
@@ -427,8 +567,9 @@ class DashboardControllerTest extends TestCase
                                 'failedWithoutRetryCurrent' => $this->overviewKpis['failedWithoutRetryCurrent'],
                                 'health' => 'healthy',
                                 'healthReason' => 'Operacion dentro de umbrales',
-                            ],
+                            ], $this->overviewStoreExtra),
                         ],
+                        'alerts' => $this->overviewAlerts,
                     ],
                     default => [],
                 };

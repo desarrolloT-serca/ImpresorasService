@@ -148,11 +148,28 @@ class ImpresorasController extends Controller
         $selectedStoreGroup = $selectedKey !== null ? ($printersByStore[$selectedKey] ?? null) : null;
         $selectedPrinters = is_array($selectedStoreGroup['printers'] ?? null) ? $selectedStoreGroup['printers'] : [];
 
+        // El dashboard enlaza aqui desde una incidencia concreta: se acota el listado a la impresora
+        // que la provoca. Si el id ya no existe (impresora borrada) se cae al listado completo en vez
+        // de dejar al operador en una pagina vacia.
+        $focusedPrinter = null;
+        if ($request->filled('printerId')) {
+            $focusPrinterId = $request->integer('printerId');
+            $match = array_values(array_filter(
+                $selectedPrinters,
+                static fn (array $printer): bool => (int) ($printer['printerId'] ?? $printer['PrinterId'] ?? 0) === $focusPrinterId,
+            ));
+            if ($match !== []) {
+                $focusedPrinter = $match[0];
+                $selectedPrinters = $match;
+            }
+        }
+
         $view = view('impresoras.index', [
             'printers' => $selectedPrinters,
             'printersByStore' => array_values($printersByStore),
             'selectedStoreGroup' => $selectedStoreGroup,
             'selectedStoreId' => $selectedStoreGroup['storeId'] ?? null,
+            'focusedPrinter' => $focusedPrinter,
             'hasAnyPrinters' => count($printers) > 0,
             'pingIntervalSeconds' => config('impresoras.ping_interval_seconds', 30),
         ]);

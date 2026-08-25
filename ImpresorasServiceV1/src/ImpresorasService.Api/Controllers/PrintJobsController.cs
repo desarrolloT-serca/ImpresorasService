@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using ImpresorasService.Application.Abstractions;
 using ImpresorasService.Application.Services;
 using ImpresorasService.Domain;
@@ -35,6 +35,7 @@ public class PrintJobsController : ControllerBase
         [FromQuery] string? externalJobId,
         [FromQuery] bool? includeTotal,
         [FromQuery] bool? failedWithoutRetry,
+        [FromQuery] bool? unassigned,
         CancellationToken cancellationToken)
     {
         IQueryable<PrintJob> query = _dbContext.PrintJobs.AsNoTracking();
@@ -51,6 +52,13 @@ public class PrintJobsController : ControllerBase
         if (failedWithoutRetry == true)
         {
             query = query.Where(DashboardPrintJobPredicates.FailedWithoutRetryCurrent);
+        }
+        else if (unassigned == true)
+        {
+            // Mismo conjunto que unassignedQueueCurrent del dashboard: en cola Y sin impresora. Fija
+            // sus propios estados, por eso va en la cascada excluyente y no como filtro adicional.
+            query = query.Where(x => x.PrinterId == null
+                                     && DashboardPrintJobPredicates.QueueStatuses.Contains(x.Status));
         }
         else if (status.HasValue)
         {

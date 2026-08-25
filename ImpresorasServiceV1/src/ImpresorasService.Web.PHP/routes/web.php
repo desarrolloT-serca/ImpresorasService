@@ -20,12 +20,12 @@ Route::middleware('auth.impresoras')->group(function () {
     Route::post('/store-filter', [StoreFilterController::class, 'update'])->name('store-filter.update');
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/cola', [ColaController::class, 'index']);
+    Route::get('/impresoras', [ImpresorasController::class, 'index'])->name('impresoras.index');
     Route::middleware('manager.only')->group(function () {
         Route::post('/cola/{id}/reintentar', [ColaController::class, 'reintentar'])->name('cola.reintentar');
         Route::post('/cola/{id}/cancelar', [ColaController::class, 'cancelar'])->name('cola.cancelar');
         Route::post('/cola/reintentar-masivo', [ColaController::class, 'reintentarMasivo'])->name('cola.reintentar_masivo');
         Route::post('/cola/cancelar-masivo', [ColaController::class, 'cancelarMasivo'])->name('cola.cancelar_masivo');
-        Route::get('/impresoras', [ImpresorasController::class, 'index'])->name('impresoras.index');
         Route::post('/impresoras/{impresora}/netconnection', [ImpresorasController::class, 'netconnection'])->name('impresoras.netconnection');
     });
     Route::middleware('admin.only')->group(function () {

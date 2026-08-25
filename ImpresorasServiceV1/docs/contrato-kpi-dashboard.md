@@ -19,6 +19,41 @@ antes de corregirlo, no solo por inspección de código.
 | `activePrinters` | Impresoras activas actuales | foto actual | tienda efectiva |
 | `activeStores` | Tiendas activas actuales | foto actual | tienda efectiva |
 
+## Antigüedad de las incidencias: `oldestQueuedAtUtc` / `oldestFailedWithoutRetryAtUtc`
+
+Añadidos 2026-08-24 en `stores[]` de `GET /api/dashboard/overview`, para la columna «Desde» de las
+incidencias priorizadas del dashboard. No son KPIs de periodo: siguen la misma regla **sin ventana**
+que `queueCurrent` y `failedWithoutRetryCurrent` (A-KPI-01), porque una incidencia abierta hace tres
+días sigue abierta hoy y filtrarla por la ventana la haría desaparecer del panel sin haberse resuelto.
+
+| Campo | Definición | Fuente / timestamp |
+|---|---|---|
+| `oldestQueuedAtUtc` | Instante de creación del trabajo **en cola** más antiguo de la tienda. `null` si no hay cola. | `MIN(CreatedAtUtc)` sobre `Status IN (Pending, Routed, Printing, RetryScheduled)`, agrupado por tienda |
+| `oldestFailedWithoutRetryAtUtc` | Última actualización del **fallo sin reenviar** más antiguo de la tienda. `null` si no hay ninguno. | `MIN(UpdatedAtUtc)` sobre `DashboardPrintJobPredicates.FailedWithoutRetryCurrent`, agrupado por tienda |
+
+Se usa `CreatedAtUtc` para la cola (cuándo entró el trabajo, que es lo que el operador percibe como
+espera) y `UpdatedAtUtc` para el fallo (cuándo quedó en estado terminal, no cuándo se creó).
+
+La antigüedad de una incidencia de **conectividad** o de **host sin configurar** no sale de aquí: la
+da `Printer.LastConnectionCheckAtUtc`, que ya viajaba en `GET /api/printers`. Sin chequeo previo el
+dashboard muestra «sin comprobar», no un cero.
+
+## Porcentajes: solo dentro del mismo periodo
+
+Los KPIs sin ventana (`queueCurrent`, `failedWithoutRetryCurrent`) **no se expresan como porcentaje**
+de `received`. Mezclar ambas escalas producía cifras imposibles — 32 fallos acumulados sobre 1
+recibido en el día daba «3200%» — o un 0% que escondía 32 trabajos rotos. El dashboard los muestra en
+absoluto, bajo el rótulo «Estado actual de la operación», separado del bloque «Rendimiento del
+periodo», que es el único que lleva porcentajes y declara sobre qué base se calculan. Sin trabajos
+recibidos no hay tasa de éxito: se pinta «—», nunca un 100% ficticio.
+
+## `unassignedQueueCurrent` debe ser auditable desde la cola
+
+Misma regla que `failedWithoutRetryCurrent`: `GET /api/printjobs?unassigned=true` devuelve
+exactamente el conjunto que cuenta el KPI — en cola (`QueueStatuses`) **y** sin `PrinterId`. Fija sus
+propios estados, así que entra en la misma cascada excluyente que `failedWithoutRetry` y no se
+combina con `status`. Un trabajo sin impresora ya cerrado no cuenta ni en el KPI ni en el listado.
+
 ## `failedWithoutRetryCurrent` debe ser auditable desde la cola
 
 El número que muestra el dashboard tiene que poder abrirse y listarse: `GET /api/printjobs?failedWithoutRetry=true`

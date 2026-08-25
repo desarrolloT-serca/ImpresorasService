@@ -449,6 +449,16 @@ class DashboardController extends Controller
         }
     }
 
+    /**
+     * @param array<string, mixed> $source
+     */
+    private function readNullableString(array $source, string $key): ?string
+    {
+        $value = $source[$key] ?? $source[ucfirst($key)] ?? null;
+
+        return is_string($value) && $value !== '' ? $value : null;
+    }
+
     private function makeEmptyStore(int $storeId, array $storeNameById): array
     {
         $realName = trim((string) ($storeNameById[$storeId] ?? ''));
@@ -469,6 +479,10 @@ class DashboardController extends Controller
             'healthReason' => 'Operacion dentro de umbrales',
             'printers' => [],
             'unassignedQueueCurrent' => 0,
+            // "Desde" de las incidencias priorizadas. Solo llegan con overview: el fallback legacy
+            // sobre api/printjobs esta truncado a 500 y daria una antiguedad falsa.
+            'oldestQueuedAtUtc' => null,
+            'oldestFailedWithoutRetryAtUtc' => null,
         ];
     }
 
@@ -546,6 +560,8 @@ class DashboardController extends Controller
             $storeStats[$storeId]['health'] = (string) ($overviewStore['health'] ?? $overviewStore['Health'] ?? $storeStats[$storeId]['health']);
             $storeStats[$storeId]['healthReason'] = (string) ($overviewStore['healthReason'] ?? $overviewStore['HealthReason'] ?? $storeStats[$storeId]['healthReason']);
             $storeStats[$storeId]['unassignedQueueCurrent'] = $this->readInt($overviewStore, 'unassignedQueueCurrent', (int) ($storeStats[$storeId]['unassignedQueueCurrent'] ?? 0));
+            $storeStats[$storeId]['oldestQueuedAtUtc'] = $this->readNullableString($overviewStore, 'oldestQueuedAtUtc');
+            $storeStats[$storeId]['oldestFailedWithoutRetryAtUtc'] = $this->readNullableString($overviewStore, 'oldestFailedWithoutRetryAtUtc');
 
             $this->applyOverviewPrinters($storeStats[$storeId], $overviewStore);
         }

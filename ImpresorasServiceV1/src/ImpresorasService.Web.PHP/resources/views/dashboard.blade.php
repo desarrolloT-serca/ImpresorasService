@@ -6,7 +6,7 @@
 @php
     $window = $window ?? 'today';
     $tab = $tab ?? 'global';
-    $storeView = request('storeView', 'detalle');
+    $storeView = request('storeView', 'estado');
     if ($tab === 'stores') {
         $tab = 'global';
         $storeView = 'estado';
@@ -136,477 +136,23 @@
 <section class="dbx-wrap">
 @include('dashboard.partials.tabs')
 
-@php
-    $receivedVal = (int) ($kpis['received'] ?? 0);
-    $printedVal = (int) ($kpis['printed'] ?? 0);
-    $failedVal = (int) ($kpis['failed'] ?? 0);
-    $queueVal = (int) ($kpis['queueCurrent'] ?? 0);
-    $failedNoRetryVal = (int) ($kpis['failedWithoutRetryCurrent'] ?? 0);
-    $hasNoPrintActivity = $receivedVal === 0 && $queueVal === 0 && $failedVal === 0;
-    $base = max(1, $receivedVal, $printedVal, $failedVal, $queueVal, $failedNoRetryVal);
-    $totalPeriod = max(1, $receivedVal);
-    $receivedPct = $totalPeriod > 0 ? 100 : 0;
-    $printedPct = $totalPeriod > 0 ? (int) round(($printedVal / $totalPeriod) * 100) : 0;
-    $failedPct = $totalPeriod > 0 ? (int) round(($failedVal / $totalPeriod) * 100) : 0;
-    $queuePct = $totalPeriod > 0 ? (int) round(($queueVal / $totalPeriod) * 100) : 0;
-    $failedNoRetryPct = $totalPeriod > 0 ? (int) round(($failedNoRetryVal / $totalPeriod) * 100) : 0;
-    $successRate = $totalPeriod > 0 ? $printedPct : null;
-    $summary = is_array($summary ?? null) ? $summary : [];
-    $storesTotalSummary = (int) ($summary['storesTotal'] ?? 0);
-    $storesActiveSummary = (int) ($summary['storesActive'] ?? 0);
-    $printersTotalSummary = (int) ($summary['printersTotal'] ?? 0);
-    $printersActiveSummary = (int) ($summary['printersActive'] ?? 0);
-    $usersTotalSummary = (int) ($summary['usersTotal'] ?? 0);
-    $storesList = is_array($stores ?? null) ? $stores : [];
-    $storesTotal = max(1, count($storesList));
-    $healthyCount = 0;
-    $warningCount = 0;
-    $criticalCount = 0;
-    $totalQueueAllStores = 0;
-    $totalFailedNoRetryAllStores = 0;
-    $totalUnassignedAllStores = 0;
-    $primaryStore = $storesList[0] ?? null;
-    $primaryHealth = strtolower((string)($primaryStore['health'] ?? 'healthy'));
-    $primaryReason = (string)($primaryStore['healthReason'] ?? 'Operacion dentro de umbrales');
-    $primaryConnectedPrinters = (int)($primaryStore['connectedPrinters'] ?? 0);
-    $primaryUnassignedQueue = (int)($primaryStore['unassignedQueueCurrent'] ?? 0);
-    $primaryFailedNoRetry = (int)($primaryStore['failedWithoutRetryCurrent'] ?? 0);
-    $primaryPrinters = is_array($primaryStore['printers'] ?? null) ? $primaryStore['printers'] : [];
-    $topPrinter = $primaryPrinters[0] ?? null;
-    $topPrinterName = (string)($topPrinter['printerName'] ?? 'Sin impresora destacada');
-    $topPrinterQueue = (int)($topPrinter['queueCurrent'] ?? 0);
-
-    // Tienda mas conflictiva (para widgets).
-    $worstStore = null;
-    $worstScore = -1;
-
-    foreach($storesList as $storeItem) {
-        $healthState = strtolower((string)($storeItem['health'] ?? 'healthy'));
-        if ($healthState === 'critical') {
-            $criticalCount++;
-        } elseif ($healthState === 'warning') {
-            $warningCount++;
-        } else {
-            $healthyCount++;
-        }
-
-        $queued = (int)($storeItem['queuedCurrent'] ?? 0);
-        $failedNoRetry = (int)($storeItem['failedWithoutRetryCurrent'] ?? 0);
-        $unassigned = (int)($storeItem['unassignedQueueCurrent'] ?? 0);
-
-        $totalQueueAllStores += $queued;
-        $totalFailedNoRetryAllStores += $failedNoRetry;
-        $totalUnassignedAllStores += $unassigned;
-
-        $score = ($healthState === 'critical' ? 1000 : ($healthState === 'warning' ? 500 : 0)) + ($queued * 2) + ($failedNoRetry * 5);
-        if ($score > $worstScore) {
-            $worstScore = $score;
-            $worstStore = $storeItem;
-        }
-    }
-
-    $healthyShare = (int) round(($healthyCount / $storesTotal) * 100);
-    $warningShare = (int) round(($warningCount / $storesTotal) * 100);
-    $criticalShare = max(0, 100 - $healthyShare - $warningShare);
-    $healthyEnd = $healthyShare;
-    $warningEnd = $healthyShare + $warningShare;
-
-    if ($criticalCount > 0) {
-        $donutStatusLabel = 'Crítico';
-        $donutStatusShare = $criticalShare;
-        $donutAriaLabel = 'Tiendas críticas: ' . $criticalShare . '%';
-    } elseif ($warningCount > 0) {
-        $donutStatusLabel = 'Warning';
-        $donutStatusShare = $warningShare;
-        $donutAriaLabel = 'Tiendas en warning: ' . $warningShare . '%';
-    } else {
-        $donutStatusLabel = 'OK';
-        $donutStatusShare = $healthyShare;
-        $donutAriaLabel = 'Tiendas saludables: ' . $healthyShare . '%';
-    }
-
-    $topStores = $storesList;
-    $hasStoreRisk = $warningCount > 0 || $criticalCount > 0;
-@endphp
 
 @if($tab === 'global')
-    <section class="dbx-dual-panels">
-        <article class="dbx-card">
-            <div class="dbx-card-body">
-                <div class="dbx-title-row dbx-title-row-center">
-                    <h2 class="dbx-title dbx-title-center">Estad&iacute;sticas de impresi&oacute;n</h2>
-                </div>
-                <div class="dbx-stats-meta">
-                    <span class="dbx-subtle">Periodo: {{ $windowLabel }}</span>
-                    <button type="button" id="dbx-stats-toggle" class="btn btn-ghost dbx-compact-toggle">
-                        %
-                    </button>
-                </div>
-                @if($hasNoPrintActivity)
-                    <div class="dbx-empty-activity" role="status">
-                        Sin actividad de impresi&oacute;n en el periodo seleccionado.
-                    </div>
-                @endif
-                <div class="dbx-bars">
-                    <div class="dbx-bar-row dbx-bar-row-info">
-                        <span class="dbx-bar-label">Recibidos</span>
-                        <div class="dbx-bar-track"><div class="dbx-bar-fill info" style="width: {{ (int) round(($receivedVal / $base) * 100) }}%"></div></div>
-                        <span class="dbx-bar-value">
-                            <span class="dbx-bar-value-number">{{ $receivedVal }}</span>
-                            <span class="dbx-bar-value-percent" style="display:none">{{ $receivedPct }}%</span>
-                        </span>
-                    </div>
-                    <div class="dbx-bar-row dbx-bar-row-success">
-                        <span class="dbx-bar-label">Impresos</span>
-                        <div class="dbx-bar-track"><div class="dbx-bar-fill success" style="width: {{ (int) round(($printedVal / $base) * 100) }}%"></div></div>
-                        <span class="dbx-bar-value">
-                            <span class="dbx-bar-value-number">{{ $printedVal }}</span>
-                            <span class="dbx-bar-value-percent" style="display:none">{{ $printedPct }}%</span>
-                        </span>
-                    </div>
-                    <div class="dbx-bar-row dbx-bar-row-warning">
-                        <span class="dbx-bar-label">En cola</span>
-                        <div class="dbx-bar-track"><div class="dbx-bar-fill warning" style="width: {{ (int) round(($queueVal / $base) * 100) }}%"></div></div>
-                        <span class="dbx-bar-value">
-                            <span class="dbx-bar-value-number">{{ $queueVal }}</span>
-                            <span class="dbx-bar-value-percent" style="display:none">{{ $queuePct }}%</span>
-                        </span>
-                    </div>
-                    <div class="dbx-bar-row dbx-bar-row-danger">
-                        <span class="dbx-bar-label">Fallidos</span>
-                        <div class="dbx-bar-track"><div class="dbx-bar-fill danger" style="width: {{ (int) round(($failedVal / $base) * 100) }}%"></div></div>
-                        <span class="dbx-bar-value">
-                            <span class="dbx-bar-value-number">{{ $failedVal }}</span>
-                            <span class="dbx-bar-value-percent" style="display:none">{{ $failedPct }}%</span>
-                        </span>
-                    </div>
-                    <div class="dbx-bar-row dbx-bar-row-danger">
-                        <span class="dbx-bar-label" title="Estado actual, no depende del periodo seleccionado arriba">Sin reenviar <small class="dbx-subtle">(actual)</small></span>
-                        <div class="dbx-bar-track"><div class="dbx-bar-fill danger" style="width: {{ (int) round(($failedNoRetryVal / $base) * 100) }}%"></div></div>
-                        <span class="dbx-bar-value">
-                            <span class="dbx-bar-value-number">{{ $failedNoRetryVal }}</span>
-                            <span class="dbx-bar-value-percent" style="display:none">{{ $failedNoRetryPct }}%</span>
-                        </span>
-                    </div>
-                </div>
-
-                <div class="dbx-section-divider">
-                    <div class="dbx-title-row dbx-title-row-center mb-2">
-                        <h3 class="dbx-title dbx-title-center dbx-title-sm">Resumen de entidades</h3>
-                    </div>
-                    <div class="dbx-summary-mini-grid">
-                        <div class="dbx-summary-mini">
-                            <span class="dbx-summary-mini-label">Tiendas</span>
-                            <strong class="dbx-summary-mini-value">{{ $storesTotalSummary }}</strong>
-                        </div>
-                        <div class="dbx-summary-mini">
-                            <span class="dbx-summary-mini-label">Impresoras</span>
-                            <strong class="dbx-summary-mini-value">{{ $printersTotalSummary }}</strong>
-                        </div>
-                        <div class="dbx-summary-mini">
-                            <span class="dbx-summary-mini-label">Usuarios</span>
-                            <strong class="dbx-summary-mini-value">{{ $usersTotalSummary }}</strong>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </article>
-
-        <article class="dbx-card dbx-store-status-card">
-            <div class="dbx-card-body">
-                @if($isAdminView)
-                    <div class="dbx-title-row">
-                        <h2 class="dbx-title">Estado de las tiendas</h2>
-                    </div>
-                    <div class="dbx-store-health-panel">
-                        <div
-                            class="dbx-health-ring"
-                            style="--healthy-end: {{ $healthyEnd }}%; --warning-end: {{ $warningEnd }}%;"
-                            aria-label="{{ $donutAriaLabel }}"
-                        >
-                            <div class="dbx-health-ring-core">
-                                <strong>{{ $donutStatusShare }}%</strong>
-                                <span>{{ $donutStatusLabel }}</span>
-                            </div>
-                        </div>
-                        <div class="dbx-health-legend" aria-label="Resumen de estado por tiendas">
-                            <div class="dbx-health-legend-row">
-                                <span class="dbx-health-dot success"></span>
-                                <span>Saludables</span>
-                                <strong>{{ $healthyCount }}</strong>
-                                <small>{{ $healthyShare }}%</small>
-                            </div>
-                            <div class="dbx-health-legend-row">
-                                <span class="dbx-health-dot warning"></span>
-                                <span>Warning</span>
-                                <strong>{{ $warningCount }}</strong>
-                                <small>{{ $warningShare }}%</small>
-                            </div>
-                            <div class="dbx-health-legend-row">
-                                <span class="dbx-health-dot danger"></span>
-                                <span>Cr&iacute;ticas</span>
-                                <strong>{{ $criticalCount }}</strong>
-                                <small>{{ $criticalShare }}%</small>
-                            </div>
-                        </div>
-                    </div>
-                @else
-                    <div class="dbx-title-row">
-                        <h2 class="dbx-title">Estado de mi tienda</h2>
-                        <span class="dbx-subtle">Informaci&oacute;n operativa ampliada</span>
-                    </div>
-                    <div class="dbx-store-focus">
-                        <div class="dbx-store-focus-item">
-                            <span>Estado actual</span>
-                            <strong class="dbx-store-health {{ $primaryHealth }}">{{ strtoupper($primaryHealth) }}</strong>
-                        </div>
-                        <div class="dbx-store-focus-item">
-                            <span>Impresoras conectadas</span>
-                            <strong>{{ $primaryConnectedPrinters }}</strong>
-                        </div>
-                        <div class="dbx-store-focus-item">
-                            <span>Cola sin asignar</span>
-                            <strong>{{ $primaryUnassignedQueue }}</strong>
-                        </div>
-                        <div class="dbx-store-focus-item">
-                            <span>Fallos sin reenviar</span>
-                            <strong>{{ $primaryFailedNoRetry }}</strong>
-                        </div>
-                    </div>
-                    <div class="dbx-store-reason-box">
-                        <span>Motivo de salud</span>
-                        <p>{{ $primaryReason }}</p>
-                    </div>
-                    <div class="dbx-store-reason-box">
-                        <span>Impresora m&aacute;s cargada</span>
-                        <p>{{ $topPrinterName }} (cola: {{ $topPrinterQueue }})</p>
-                    </div>
-                @endif
-            </div>
-        </article>
-    </section>
-
+    @include('dashboard.partials.operacion')
 @endif
 
 @if($isAdminUser)
-    <section class="dbx-card">
-        <div class="dbx-card-body">
-        <div class="dbx-title-row">
-            <h2 class="dbx-title">Alertas priorizadas</h2>
-            @if($generatedAtUtc)
-                <span class="dbx-subtle">Actualizado: {{ $generatedAtUtc }}</span>
-            @endif
-        </div>
-        @if(count($alerts) === 0)
-            <p class="dbx-subtle">Sin alertas activas para el ambito y periodo seleccionados.</p>
-        @else
-            <div class="dbx-table-wrap dbx-alerts-wrap table-alerts-wrap" style="--dbx-visible-rows: {{ $alertsVisibleRows }};">
-                <table class="dbx-table table-alerts">
-                    <thead>
-                        <tr>
-                            <th class="store-col">Tienda</th>
-                            <th>Salud</th>
-                            <th>Tipo</th>
-                            <th class="text-col">Motivo</th>
-                            <th>En cola</th>
-                            <th>Fallo sin reenviar (periodo)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @php
-                            $alertsGrouped = [];
-                            foreach ($alerts as $alertRow) {
-                                $sid = (string) ($alertRow['storeId'] ?? '-');
-                                if (!isset($alertsGrouped[$sid])) {
-                                    $alertsGrouped[$sid] = [
-                                        'storeId' => $alertRow['storeId'] ?? null,
-                                        'storeName' => $alertRow['storeName'] ?? 'Sin nombre',
-                                        'items' => [],
-                                    ];
-                                }
-                                $alertsGrouped[$sid]['items'][] = $alertRow;
-                            }
-                        @endphp
-
-                        @foreach($alertsGrouped as $group)
-                            @php
-                                $groupStoreId = $group['storeId'] ?? null;
-                                $groupItems = is_array($group['items'] ?? null) ? $group['items'] : [];
-                                $rowspan = max(1, count($groupItems));
-                            @endphp
-
-                            @foreach($groupItems as $idx => $alert)
-                                @php
-                                    $status = $alert['health'] ?? 'healthy';
-                                    $storeId = $alert['storeId'] ?? null;
-                                    $reason = (string) ($alert['healthReason'] ?? '');
-                                    $href = null;
-                                    $alertType = 'other';
-                                    $alertTypeLabel = 'Otro';
-
-                                    if ($storeId !== null && $storeId !== '') {
-                                        // Clasificación por tipo (y destino).
-                                        $mentionsNoActivePrinters =
-                                            stripos($reason, 'sin impresoras activas') !== false
-                                            || stripos($reason, 'no hay impresoras activas') !== false
-                                            || stripos($reason, 'hay cola pero no hay impresoras activas') !== false;
-
-                                        if ($mentionsNoActivePrinters) {
-                                            $alertType = 'printers_inactive';
-                                            $alertTypeLabel = 'Impresoras';
-                                            $href = '/impresoras?storeId=' . urlencode((string)$storeId) . '&isActive=false';
-                                        } elseif (stripos($reason, 'sin host') !== false) {
-                                            $alertType = 'missing_host';
-                                            $alertTypeLabel = 'Sin host';
-                                            $href = '/impresoras?storeId=' . urlencode((string)$storeId);
-                                        } elseif (stripos($reason, 'sin reenviar') !== false) {
-                                            $alertType = 'failed_no_retry';
-                                            $alertTypeLabel = 'Sin reenviar';
-                                            // failedWithoutRetry, no status=8: el KPI cuenta tambien
-                                            // los atascados con reintentos agotados, y con status=8
-                                            // el listado devolvia menos trabajos que el numero mostrado.
-                                            $href = '/cola?storeId=' . urlencode((string)$storeId) . '&failedWithoutRetry=1';
-                                        } elseif (stripos($reason, 'conectividad') !== false || stripos($reason, 'fallos de conexion') !== false) {
-                                            $alertType = 'connectivity';
-                                            $alertTypeLabel = 'Conectividad';
-                                            $href = '/impresoras?storeId=' . urlencode((string)$storeId) . '&isActive=true';
-                                        } elseif (stripos($reason, 'cola') !== false || stripos($reason, 'trabajos') !== false) {
-                                            $alertType = 'queue';
-                                            $alertTypeLabel = 'Cola';
-                                            // Por defecto, abrimos Pendiente (lo mas accionable); si quieres lo quitamos y dejamos "Todos".
-                                            $href = '/cola?storeId=' . urlencode((string)$storeId) . '&status=0';
-                                        }
-                                    }
-
-                                    $alertRowClass = match ($status) {
-                                        'critical' => 'alert-row-critical',
-                                        'warning' => 'alert-row-warning',
-                                        default => 'alert-row-ok',
-                                    };
-                                @endphp
-                                <tr class="{{ $idx === 0 ? 'dbx-alert-group-start' : 'dbx-alert-group-cont' }} dbx-alert-row-{{ $status }} {{ $alertRowClass }}" @if($href) data-alert-href="{{ $href }}" @endif>
-                                    @if($idx === 0)
-                                        <td class="store-col" rowspan="{{ $rowspan }}">{{ $formatStoreLabel($groupStoreId, $group['storeName'] ?? 'Sin nombre') }}</td>
-                                    @endif
-                                    <td><span class="dbx-pill {{ $status }}">{{ strtoupper($status) }}</span></td>
-                                    <td>
-                                        {{-- La columna "Tipo" usa el mismo color que la columna "Salud" para no confundir. --}}
-                                        <span class="dbx-pill {{ $status === 'healthy' ? 'healthy' : $status }}">{{ $alertTypeLabel }}</span>
-                                    </td>
-                                    <td class="text-col">{{ $reason !== '' ? $reason : '-' }}</td>
-                                    <td>{{ $alert['queuedCurrent'] ?? 0 }}</td>
-                                    <td>{{ $alert['failedWithoutRetryCurrent'] ?? 0 }}</td>
-                                </tr>
-                            @endforeach
-                        @endforeach
-                    </tbody>
-                </table>
-            </div>
-            <script>
-            (function() {
-                document.querySelectorAll('tr[data-alert-href]').forEach(tr => {
-                    let href = tr.getAttribute('data-alert-href');
-                    if (!href) return;
-                    // Defensa: si por cualquier motivo llega con comillas, las quitamos
-                    href = href.trim().replace(/^"+|"+$/g, '');
-                    tr.style.cursor = 'pointer';
-                    tr.addEventListener('click', function(e) {
-                        const el = e.target;
-                        if (el && el.closest && el.closest('a, button, form')) return;
-                        window.location.href = href;
-                    });
-                });
-            })();
-            </script>
-        @endif
-        <p class="text-xs muted-text mt-3">
-            Regla de salud configurable por umbrales de cola, fallos sin reenviar y conectividad.
-        </p>
-        </div>
-    </section>
 
     @php
         $storeViewParams = request()->except(['tab', 'storeView']);
-        $estadoUrl = route('dashboard', array_merge($storeViewParams, ['tab' => 'global', 'storeView' => 'estado']));
-        $detalleUrl = route('dashboard', array_merge($storeViewParams, ['tab' => 'global', 'storeView' => 'detalle']));
+        $resumenUrl = route('dashboard', array_merge($storeViewParams, ['tab' => 'global', 'storeView' => 'estado']));
     @endphp
-    <section class="dbx-card dbx-store-view-shell">
-        <div class="dbx-card-body">
-            <div class="dbx-title-row">
-                <h2 class="dbx-title">Tiendas</h2>
-                <span class="dbx-subtle">Alterna entre priorizaci&oacute;n y detalle operativo</span>
-            </div>
-            <div class="dbx-store-view-tabs" aria-label="Vista de tiendas">
-                <a href="{{ $estadoUrl }}" class="dbx-store-view-tab {{ $storeView === 'estado' ? 'is-active' : '' }}">Estado por tienda</a>
-                <a href="{{ $detalleUrl }}" class="dbx-store-view-tab {{ $storeView === 'detalle' ? 'is-active' : '' }}">Detalle compacto</a>
-            </div>
-        </div>
-    </section>
-
-    @if($storeView === 'estado')
-        <section class="dbx-card">
-            <div class="dbx-card-body">
-                <div class="dbx-title-row">
-                    <h2 class="dbx-title">{{ $hasStoreRisk ? 'Top tiendas por riesgo' : 'Estado por tienda' }}</h2>
-                    <span class="dbx-subtle">Ranking operativo para priorizar revisi&oacute;n</span>
-                </div>
-                @if(count($topStores) === 0)
-                    <p class="dbx-subtle mt-2">No hay tiendas para los filtros actuales.</p>
-                @else
-                    <div class="dbx-store-state-list mt-4">
-                        @foreach($topStores as $store)
-                            @php
-                                $status = $store['health'] ?? 'healthy';
-                                $healthClass = $status === 'critical'
-                                    ? 'critical'
-                                    : ($status === 'warning' ? 'warning' : 'healthy');
-                                $printerRows = is_array($store['printers'] ?? null) ? $store['printers'] : [];
-                                $storeIdText = (string)($store['storeId'] ?? '-');
-                                $storeTitle = $formatStoreLabel($storeIdText, $store['storeName'] ?? 'Sin nombre');
-                                $riskQueue = (int)($store['queuedCurrent'] ?? 0);
-                                $riskFailedNoRetry = (int)($store['failedWithoutRetryCurrent'] ?? 0);
-                                $riskUnassigned = (int)($store['unassignedQueueCurrent'] ?? 0);
-                                $riskReason = (string)($store['healthReason'] ?? 'Operacion normal');
-                                $riskReasonSource = strtolower(strip_tags(html_entity_decode($riskReason)));
-                                if ($healthClass === 'healthy') {
-                                    $riskReasonShort = 'Operaci&oacute;n normal';
-                                } elseif (count($printerRows) === 0 || str_contains($riskReasonSource, 'sin impresora')) {
-                                    $riskReasonShort = 'Sin impresoras';
-                                } elseif (str_contains($riskReasonSource, 'host') || str_contains($riskReasonSource, 'unc') || str_contains($riskReasonSource, 'conect')) {
-                                    $riskReasonShort = 'Conectividad';
-                                } elseif ($riskFailedNoRetry > 0 || str_contains($riskReasonSource, 'sin reenviar') || str_contains($riskReasonSource, 'fallo')) {
-                                    $riskReasonShort = 'Sin reenviar';
-                                } elseif ($riskUnassigned > 0 || str_contains($riskReasonSource, 'sin asignar')) {
-                                    $riskReasonShort = 'Sin asignar';
-                                } elseif ($riskQueue > 0 || str_contains($riskReasonSource, 'cola')) {
-                                    $riskReasonShort = 'Cola acumulada';
-                                } else {
-                                    $riskReasonShort = 'Operaci&oacute;n normal';
-                                }
-                                $detailHref = $detalleUrl . '#detalle-tienda-' . rawurlencode($storeIdText);
-                            @endphp
-                            <article class="dbx-risk-list-row dbx-risk-row-{{ $healthClass }}">
-                                <div class="dbx-risk-store-name">{{ $storeTitle }}</div>
-                                <span class="dbx-pill {{ $healthClass }}">{{ strtoupper($status) }}</span>
-                                <span class="dbx-risk-row-reason" title="{{ $riskReason }}">{!! $riskReasonShort !!}</span>
-                                <div class="dbx-risk-row-metrics">
-                                    <span>Cola <strong class="{{ $riskQueue > 0 ? 'is-warning' : '' }}">{{ $riskQueue }}</strong></span>
-                                    <span>Sin reenviar <strong class="{{ $riskFailedNoRetry > 0 ? 'is-danger' : '' }}">{{ $riskFailedNoRetry }}</strong></span>
-                                    <span>Sin asignar <strong class="{{ $riskUnassigned > 0 ? 'is-warning' : '' }}">{{ $riskUnassigned }}</strong></span>
-                                </div>
-                                <a href="{{ $detailHref }}" class="dbx-risk-detail-link">Ver detalle</a>
-                            </article>
-                        @endforeach
-                    </div>
-                @endif
-            </div>
-        </section>
-    @else
+    @if($storeView === 'detalle')
     <section class="dbx-card">
         <div class="dbx-card-body">
         <div class="dbx-title-row">
             <h2 class="dbx-title">Detalle compacto por tienda</h2>
-            <span class="dbx-subtle">Configurable por filtros superiores</span>
+            <a href="{{ $resumenUrl }}" class="dbx-subtle">&larr; Volver al resumen</a>
         </div>
         @if(count($stores) === 0)
             <p class="dbx-subtle">No hay tiendas para los filtros actuales.</p>
@@ -901,35 +447,6 @@
 })();
 
 (function() {
-    const toggle = document.getElementById('dbx-stats-toggle');
-    if (!toggle) return;
-
-    let mode = 'number';
-    const values = document.querySelectorAll('.dbx-bar-value');
-
-    function applyMode() {
-        values.forEach(function(v) {
-            const num = v.querySelector('.dbx-bar-value-number');
-            const pct = v.querySelector('.dbx-bar-value-percent');
-            if (!num || !pct) return;
-            if (mode === 'number') {
-                num.style.display = '';
-                pct.style.display = 'none';
-            } else {
-                num.style.display = 'none';
-                pct.style.display = '';
-            }
-        });
-        toggle.textContent = mode === 'number' ? '%' : 'N';
-    }
-
-    toggle.addEventListener('click', function() {
-        mode = mode === 'number' ? 'percent' : 'number';
-        applyMode();
-    });
-})();
-
-(function() {
     let dashboardAbortController = null;
     let dashboardRequestId = 0;
     let autoRefreshTimer = null;
@@ -1017,42 +534,12 @@
         el.textContent = 'Dashboard actualizado, ' + new Date().toLocaleTimeString();
     }
 
-    function initStatsToggle(root) {
-        const toggle = root.querySelector('#dbx-stats-toggle');
-        if (!toggle || toggle.dataset.dynamicBound === '1') return;
-
-        toggle.dataset.dynamicBound = '1';
-        let mode = 'number';
-
-        function applyMode() {
-            root.querySelectorAll('.dbx-bar-value').forEach(function(v) {
-                const num = v.querySelector('.dbx-bar-value-number');
-                const pct = v.querySelector('.dbx-bar-value-percent');
-                if (!num || !pct) return;
-                if (mode === 'number') {
-                    num.style.display = '';
-                    pct.style.display = 'none';
-                } else {
-                    num.style.display = 'none';
-                    pct.style.display = '';
-                }
-            });
-            toggle.textContent = mode === 'number' ? '%' : 'N';
-        }
-
-        toggle.addEventListener('click', function() {
-            mode = mode === 'number' ? 'percent' : 'number';
-            applyMode();
-        });
-    }
-
     function prepareDynamicDashboard(root) {
         const form = root.querySelector('form[data-dashboard-filter-form]');
         if (form) {
             form.dataset.dynamicOwned = '1';
         }
 
-        initStatsToggle(root);
         scheduleAutoRefresh(Number(root.querySelector('#autoRefresh')?.value || 0));
     }
 
@@ -1131,15 +618,8 @@
                 throw new Error('Dashboard no encontrado');
             }
 
-            const prevToggle = currentRoot.querySelector('#dbx-stats-toggle');
-            const wasPercent = prevToggle?.textContent === 'N';
-
             currentRoot.replaceWith(nextRoot);
             prepareDynamicDashboard(nextRoot);
-
-            if (wasPercent) {
-                nextRoot.querySelector('#dbx-stats-toggle')?.click();
-            }
 
             if (pushState) {
                 history.pushState({ dynamicPanel: 'dashboard' }, '', url);

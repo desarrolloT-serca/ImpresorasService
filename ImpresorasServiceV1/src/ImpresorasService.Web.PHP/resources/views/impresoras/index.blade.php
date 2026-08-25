@@ -91,6 +91,13 @@
             </div>
         </div>
 
+        @if($focusedPrinter ?? null)
+            <div class="dbx-printer-focus-note" role="status">
+                <span>Filtrado por <strong>{{ $focusedPrinter['printerName'] ?? $focusedPrinter['PrinterName'] ?? 'la impresora seleccionada' }}</strong>, la impresora que origina la incidencia.</span>
+                <a href="{{ url('/impresoras?' . http_build_query(request()->except(['printerId']))) }}" class="btn btn-ghost">Ver todas</a>
+            </div>
+        @endif
+
         @if(!$selectedStoreGroup)
             <div class="dbx-empty-state">No hay tienda seleccionada.</div>
         @elseif($selectedStorePrintersCount === 0)
@@ -250,6 +257,7 @@
     const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
     const pingInterval = {{ $pingIntervalSeconds ?? 30 }} * 1000;
     const isAdmin = {{ ($isAdmin ?? false) ? 'true' : 'false' }};
+    const canCheckConnection = {{ (($isAdmin ?? false) || ($isStoreManager ?? false)) ? 'true' : 'false' }};
 
     function classifyConnectionState(data) {
         const status = String(data?.connectivityStatus || '').toLowerCase();
@@ -402,7 +410,7 @@
         runBatch();
     }
 
-    if (pingInterval > 0) {
+    if (canCheckConnection && pingInterval > 0) {
         netConnectionAll();
         setInterval(netConnectionAll, pingInterval);
     }
@@ -474,7 +482,9 @@
                 history.pushState({ dynamicPanel: 'impresoras' }, '', url);
             }
 
-            netConnectionAll();
+            if (canCheckConnection) {
+                netConnectionAll();
+            }
         } catch (error) {
             if (error.name === 'AbortError') return;
             const panel = getDynamicPanel();

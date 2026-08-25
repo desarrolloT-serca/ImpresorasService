@@ -73,11 +73,6 @@
     text-align: justify;
     text-justify: inter-word;
 }
-.dbx-dual-panels {
-    display: grid;
-    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-    gap: 12px;
-}
 .dbx-chart-wrap {
     display: flex;
     flex-direction: column;
@@ -123,74 +118,14 @@
 .dbx-chart-legend strong { font-size: 12px; color: var(--ui-text); }
 .dbx-chart-legend span { text-align: justify; text-align-last: left; }
 .dbx-chart-legend .dot { width: 10px; height: 10px; border-radius: 50%; }
-.dbx-store-focus {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-    margin-bottom: 10px;
-}
-.dbx-store-focus-item {
-    border: 1px solid var(--ui-border);
-    border-radius: var(--ui-radius);
-    padding: 10px;
-    background: var(--ui-surface-soft);
-    display: grid;
-    gap: 4px;
-}
-.dbx-store-focus-item span {
-    font-size: 10px;
-    color: var(--ui-text-muted);
-}
-.dbx-store-focus-item strong {
-    font-size: 18px;
-    line-height: 1.1;
-    color: var(--ui-text);
-}
 .dbx-store-health.healthy { color: #166534; }
 .dbx-store-health.warning { color: #a16207; }
 .dbx-store-health.critical { color: #b91c1c; }
-.dbx-store-reason-box {
-    border: 1px solid var(--ui-border);
-    border-radius: var(--ui-radius);
-    background: var(--ui-surface);
-    padding: 10px;
-    margin-top: 8px;
-}
-.dbx-store-reason-box span {
-    display: block;
-    font-size: 10px;
-    color: var(--ui-text-muted);
-    margin-bottom: 4px;
-}
-.dbx-store-reason-box p {
-    margin: 0;
-    font-size: 12px;
-    color: var(--ui-text);
-}
 .dbx-title-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
 .dbx-title-row-center { justify-content: center; }
 .dbx-title-center { text-align: center; width: 100%; }
 .dbx-title { font-size: 20px; font-weight: 800; color: var(--ui-text); margin: 0; }
 .dbx-subtle { font-size: 11px; color: var(--ui-text-muted); text-align: justify; text-align-last: left; }
-.dbx-stats-meta {
-    position: absolute;
-    top: 10px;
-    right: 14px;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 8px;
-    margin-bottom: 8px;
-}
-.dbx-compact-toggle {
-    padding: 3px 8px;
-    font-size: 11px;
-}
-.dbx-section-divider {
-    border-top: 1px solid var(--ui-border);
-    margin-top: 18px;
-    padding-top: 16px;
-}
 .dbx-title-sm {
     font-size: 16px;
 }
@@ -207,30 +142,10 @@
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 10px;
 }
-.dbx-bars { display: grid; gap: 10px; }
-.dbx-bar-row {
-    display: grid;
-    grid-template-columns: 110px minmax(0, 1fr) 64px;
-    gap: 8px;
-    align-items: center;
-    font-size: 12px;
-    line-height: 1.5;
-}
-.dbx-bar-label { font-size: 13px; color: var(--ui-text-muted); font-weight: 700; text-align: justify; text-align-last: left; }
-.dbx-bar-track { height: 10px; background: var(--ui-surface-soft); border-radius: 999px; overflow: hidden; }
-.dbx-bar-fill { height: 100%; border-radius: inherit; }
-.dbx-bar-value { font-size: 14px; color: var(--ui-text); text-align: center; font-weight: 700; }
 .dbx-table-wrap { overflow: auto; border: 1px solid var(--ui-border); border-radius: var(--ui-radius); }
-.dbx-alerts-wrap {
-    /* Crece hasta N filas visibles y luego aplica scroll vertical */
-    max-height: min(72vh, calc(42px + (var(--dbx-visible-rows, 10) * 44px)));
-    overflow-y: auto;
-}
 .dbx-table { width: 100%; border-collapse: collapse; }
 .dbx-table th, .dbx-table td { padding: 10px 12px; font-size: 12px; border-top: 1px solid var(--ui-border); text-align: left; white-space: nowrap; }
 .dbx-table th { background: var(--ui-surface-soft); color: var(--ui-text-muted); text-transform: uppercase; letter-spacing: .04em; font-size: 10px; border-top: none; }
-.dbx-alert-group-cont td { border-top: none; }
-.dbx-alert-group-start td { border-top: 1px solid var(--ui-border); }
 .dbx-pill { display: inline-flex; align-items: center; border-radius: 999px; padding: 2px 8px; font-size: 10px; font-weight: 800; }
 .dbx-pill.critical { color: #b91c1c; background: #fee2e2; border: 1px solid #fecaca; }
 .dbx-pill.warning { color: #a16207; background: #fef3c7; border: 1px solid #fde68a; }
@@ -302,8 +217,7 @@
 .dbx-bulk-toolbar.dbx-form-actions > form > button { white-space: nowrap; }
 .dbx-empty { color: var(--ui-text-muted); font-size: 13px; padding: 14px; }
 .dbx-dashboard-page .dbx-tabs,
-.dbx-dashboard-page .dbx-kpis,
-.dbx-dashboard-page .dbx-dual-panels {
+.dbx-dashboard-page .dbx-kpis {
     width: 100%;
     margin-inline: auto;
 }
@@ -345,9 +259,7 @@
 
 @media (max-width: 760px) {
     .dbx-dashboard-page { max-width: 100%; }
-    .dbx-dual-panels { grid-template-columns: repeat(1, minmax(0, 1fr)); }
     .dbx-thresholds-grid { grid-template-columns: repeat(1, minmax(0, 1fr)); }
-    .dbx-store-focus { grid-template-columns: repeat(1, minmax(0, 1fr)); }
     .dbx-store-grid.cols-4,
     .dbx-store-grid.cols-3,
     .dbx-store-grid.cols-2 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
@@ -390,12 +302,6 @@
     .dbx-filter-item,
     .dbx-filters > div {
         min-width: min(100%, 220px);
-    }
-
-    .dbx-stats-meta {
-        position: static;
-        justify-content: flex-start;
-        margin-bottom: 12px;
     }
 
     .dbx-bulk-toolbar {
@@ -445,11 +351,9 @@ html.dark .dbx-kpi {
 
 html.dark .dbx-title,
 html.dark .dbx-store-title,
-html.dark .dbx-bar-value,
 html.dark .dbx-kpi-value,
 html.dark .dbx-donut strong,
 html.dark .dbx-chart-legend strong,
-html.dark .dbx-store-focus-item strong,
 html.dark .dbx-mini-kpis strong {
     color: var(--ui-text);
 }
@@ -459,7 +363,6 @@ html.dark .dbx-filter-label,
 html.dark .dbx-toggle,
 html.dark .dbx-kpi-label,
 html.dark .dbx-kpi-meta,
-html.dark .dbx-bar-label,
 html.dark .dbx-store-reason,
 html.dark .dbx-mini-kpis span,
 html.dark .dbx-printers-head,
@@ -511,14 +414,11 @@ html.dark .dbx-mini-kpis,
 html.dark .dbx-mini-kpis > div,
 html.dark .dbx-printer-row,
 html.dark .dbx-printers-head,
-html.dark .dbx-store-focus-item,
 html.dark .dbx-store-reason-box {
     border-color: var(--ui-border);
 }
 
-html.dark .dbx-mini-kpis,
-html.dark .dbx-store-focus-item,
-html.dark .dbx-bar-track {
+html.dark .dbx-mini-kpis {
     background: color-mix(in srgb, var(--ui-surface-soft) 86%, transparent);
 }
 
@@ -526,28 +426,6 @@ html.dark .dbx-mini-kpis > div,
 html.dark .dbx-store-reason-box,
 html.dark .dbx-donut::after {
     background: var(--ui-surface);
-}
-
-/* Mini widgets de resumen (dashboard global) */
-.dbx-summary-mini-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
-    margin-top: 4px;
-}
-.dbx-summary-mini {
-    border-radius: var(--ui-radius);
-    border: 1px solid var(--ui-border);
-    background: var(--ui-surface-soft);
-    padding: 8px 10px;
-    text-align: center;
-}
-.dbx-summary-mini-label {
-    display: block;
-    font-size: 10px;
-    letter-spacing: .04em;
-    color: var(--ui-text-muted);
-    margin-bottom: 4px;
 }
 
 /* Utilidad simple de centrado de texto para detalles de grafica */
@@ -828,10 +706,6 @@ html.dark .dbx-donut::after {
     border-color: var(--ui-border);
 }
 
-.dbx-dual-panels {
-    gap: 12px;
-}
-
 .dbx-chart-wrap {
     gap: 14px;
 }
@@ -854,19 +728,6 @@ html.dark .dbx-donut::after {
 }
 
 .dbx-chart-legend strong,
-.dbx-bar-value {
-    color: var(--ui-text);
-}
-
-.dbx-bar-label,
-.dbx-chart-legend span {
-    color: var(--ui-text-muted);
-}
-
-.dbx-bar-track {
-    height: 8px;
-    background: color-mix(in srgb, var(--ui-text-muted) 14%, transparent);
-}
 
 .dbx-store {
     border-radius: var(--ui-radius);
@@ -887,26 +748,6 @@ html.dark .dbx-donut::after {
 }
 
 .dbx-store-reason {
-    color: var(--ui-text-muted);
-}
-
-.dbx-store-focus-item,
-.dbx-store-reason-box,
-.dbx-mini-kpis > div {
-    border-color: var(--ui-border);
-    border-radius: var(--ui-radius-sm);
-    background: var(--ui-surface);
-}
-
-.dbx-store-focus-item strong,
-.dbx-mini-kpis strong {
-    color: var(--ui-text);
-}
-
-.dbx-store-focus-item span,
-.dbx-store-reason-box span,
-.dbx-mini-kpis span,
-.dbx-printers-head {
     color: var(--ui-text-muted);
 }
 
@@ -968,7 +809,6 @@ html.dark .dbx-store,
 html.dark .dbx-table-wrap,
 html.dark .dbx-table,
 html.dark .dbx-table td,
-html.dark .dbx-store-focus-item,
 html.dark .dbx-store-reason-box,
 html.dark .dbx-mini-kpis > div {
     background: var(--ui-surface);
@@ -1185,14 +1025,6 @@ html.dark .dbx-pill.neutral {
     border-radius: var(--ui-radius-sm);
     padding: 6px 8px;
     background: var(--ui-surface);
-}
-
-.dbx-store-focus-item,
-.dbx-store-reason-box,
-.dbx-summary-mini,
-.metric-tile,
-.kpi-card-compact {
-    box-shadow: var(--ui-shadow-soft);
 }
 
 .metric-value {
@@ -1449,13 +1281,6 @@ html.dark .dbx-table tbody tr:hover td {
 }
 
 .dbx-mini-kpis > div,
-.dbx-store-focus-item,
-.dbx-store-reason-box,
-.dbx-summary-mini,
-.metric-tile,
-.kpi-card-compact {
-    border-radius: 0;
-}
 
 .dbx-donut {
     border-radius: 0;
@@ -1751,8 +1576,7 @@ html.dark .dbx-kpi {
 
 html.dark .dbx-kpi-value,
 html.dark .metric-value,
-html.dark .dbx-mini-kpis strong,
-html.dark .dbx-summary-mini-value {
+html.dark .dbx-mini-kpis strong {
     color: #e9edff;
 }
 
@@ -1776,9 +1600,7 @@ html.dark .dbx-mini-kpis {
 }
 
 html.dark .dbx-mini-kpis > div,
-html.dark .dbx-store-focus-item,
-html.dark .dbx-store-reason-box,
-html.dark .dbx-summary-mini {
+html.dark .dbx-store-reason-box {
     background: #121c31;
     border-color: #2d3956;
 }
@@ -1793,7 +1615,6 @@ html.dark .dbx-printer-row {
 }
 
 html.dark .dbx-printer-row span:first-child,
-html.dark .dbx-bar-value,
 html.dark .dbx-chart-legend strong,
 html.dark .dbx-donut strong {
     color: var(--ui-text);
@@ -1808,10 +1629,6 @@ html.dark .dbx-donut::after,
 html.dark .dbx-chart-legend > div {
     background: #111a2e;
     border-color: #2d3956;
-}
-
-html.dark .dbx-bar-track {
-    background: #26334f;
 }
 
 html.dark .dbx-empty {
@@ -1934,140 +1751,6 @@ html.dark .dbx-printer-state.off {
     margin-left: auto;
 }
 
-.local-kpi-grid {
-    display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: 10px;
-}
-
-.local-kpi {
-    min-height: 96px;
-    border: 1px solid var(--ui-border);
-    border-left: 4px solid var(--ui-primary);
-    background: var(--ui-surface);
-    box-shadow: var(--ui-shadow-soft);
-    padding: 12px;
-}
-
-.local-kpi.is-warning {
-    border-left-color: var(--ui-warning);
-}
-
-.local-kpi.is-critical {
-    border-left-color: var(--ui-danger);
-}
-
-.local-kpi span,
-.local-kpi small {
-    display: block;
-    color: var(--ui-text-muted);
-    font-size: 11px;
-    font-weight: 750;
-}
-
-.local-kpi strong {
-    display: block;
-    margin: 8px 0 3px;
-    color: var(--ui-text);
-    font-size: 28px;
-    line-height: 1;
-}
-
-.local-main-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
-    gap: 14px;
-}
-
-.local-attention-list {
-    display: grid;
-    gap: 8px;
-}
-
-.local-attention-item {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 12px;
-    align-items: center;
-    border: 1px solid var(--ui-border);
-    border-left: 4px solid var(--ui-accent);
-    background: var(--ui-surface-soft);
-    padding: 10px 12px;
-}
-
-.local-attention-item.is-warning {
-    border-left-color: var(--ui-warning);
-}
-
-.local-attention-item.is-critical {
-    border-left-color: var(--ui-danger);
-}
-
-.local-attention-item strong,
-.local-attention-item span {
-    display: block;
-}
-
-.local-attention-item strong {
-    color: var(--ui-text);
-    font-size: 13px;
-}
-
-.local-attention-item span {
-    margin-top: 2px;
-    color: var(--ui-text-muted);
-    font-size: 12px;
-}
-
-.local-empty-state {
-    display: grid;
-    gap: 4px;
-    border: 1px solid color-mix(in srgb, var(--ui-success) 28%, var(--ui-border));
-    background: color-mix(in srgb, var(--ui-success) 9%, var(--ui-surface));
-    padding: 16px;
-}
-
-.local-empty-state strong {
-    color: var(--ui-success);
-}
-
-.local-empty-state span {
-    color: var(--ui-text-muted);
-}
-
-.local-flow-bars {
-    display: grid;
-    gap: 11px;
-}
-
-.local-flow-row {
-    display: grid;
-    grid-template-columns: 84px minmax(0, 1fr) 42px;
-    gap: 10px;
-    align-items: center;
-    font-size: 12px;
-}
-
-.local-flow-row span {
-    color: var(--ui-text-muted);
-    font-weight: 750;
-}
-
-.local-flow-row div {
-    height: 9px;
-    overflow: hidden;
-    background: color-mix(in srgb, var(--ui-text-muted) 14%, transparent);
-}
-
-.local-flow-row i {
-    display: block;
-    height: 100%;
-}
-
-.local-flow-row strong {
-    text-align: right;
-}
-
 .local-printer-table {
     border: 1px solid var(--ui-border);
     overflow-x: auto;
@@ -2107,21 +1790,8 @@ html.dark .dbx-printer-state.off {
     color: var(--ui-text-muted);
 }
 
-html.dark .local-attention-item {
-    background: var(--ui-surface-soft);
-}
-
-@media (max-width: 1200px) {
-    .local-kpi-grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-}
-
 @media (max-width: 900px) {
     .local-hero,
-    .local-main-grid {
-        grid-template-columns: 1fr;
-    }
 
     .local-health-panel {
         border-left: 0;
@@ -2129,19 +1799,9 @@ html.dark .local-attention-item {
         padding: 14px 0 0;
     }
 
-    .local-kpi-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
 }
 
 @media (max-width: 640px) {
-    .local-kpi-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .local-attention-item {
-        grid-template-columns: 1fr;
-    }
 
     .local-actions {
         width: 100%;
@@ -2149,11 +1809,443 @@ html.dark .local-attention-item {
     }
 }
 
-/* --- Estado de tiendas: health ring overrides de marca --- */
-.dbx-health-ring-core strong {
+/* ==========================================================================
+   Dashboard operativo (canvas "ImpresorasService Dashboard operativo", 6a).
+   El diseno se dibujo sobre la paleta AD Serca, asi que aqui no hay ningun
+   color literal: todo sale de los tokens de system.css y el modo oscuro
+   sigue funcionando sin una segunda hoja.
+   ========================================================================== */
+.dbx-op {
+    display: grid;
+    gap: 14px;
+}
+
+.dbx-op-card {
+    position: relative;
+    background: var(--ui-surface);
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius);
+    box-shadow: 0 9px 20px rgba(27, 47, 130, 0.08);
+    overflow: hidden;
+}
+
+.dbx-op-card::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 5px;
+    background: var(--ui-primary);
+}
+
+.dbx-op-card-alert::before {
+    background: var(--ui-accent);
+}
+
+.dbx-op-body {
+    padding: 15px;
+}
+
+.dbx-op-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding-bottom: 8px;
+    border-bottom: 1px solid color-mix(in srgb, var(--ui-primary) 18%, var(--ui-border));
+    margin-bottom: 12px;
+}
+
+.dbx-op-title {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: var(--ui-primary);
+    letter-spacing: 0.02em;
+}
+
+.dbx-op-title::before {
+    content: "";
+    display: inline-block;
+    width: 0.72rem;
+    height: 0.72rem;
+    margin-right: 0.5rem;
+    background: var(--ui-accent);
+    clip-path: polygon(0 0, 100% 50%, 0 100%);
+}
+
+.dbx-op-meta {
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: var(--ui-text-muted);
+}
+
+.dbx-op-meta-alert {
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    color: var(--ui-accent);
+}
+
+.dbx-op-meta-ok {
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    color: var(--ui-success);
+}
+
+/* --- Tiles --- */
+.dbx-op-tiles {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.dbx-op-tile {
+    border: 1px solid var(--ui-border);
+    border-left: 5px solid var(--ui-primary);
+    background: linear-gradient(180deg, var(--ui-surface) 0%, var(--ui-surface-soft) 100%);
+    box-shadow: var(--ui-shadow-soft);
+    padding: 13px 12px;
+    text-align: center;
+}
+
+.dbx-op-tile-alert {
+    border-color: color-mix(in srgb, var(--ui-accent) 30%, var(--ui-border));
+    border-left-color: var(--ui-accent);
+    background: linear-gradient(180deg, var(--ui-surface) 0%, color-mix(in srgb, var(--ui-accent) 7%, var(--ui-surface)) 100%);
+}
+
+.dbx-op-tile-alert .dbx-op-tile-value {
+    color: var(--ui-accent);
+}
+
+.dbx-op-tile-label {
+    display: block;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: var(--ui-text-muted);
+}
+
+.dbx-op-tile-value {
+    display: block;
+    margin: 7px 0 4px;
+    font-size: 2.1rem;
+    line-height: 1;
+    font-weight: 800;
     color: var(--ui-primary);
 }
 
-html.dark .dbx-health-ring-core strong {
-    color: #e9edff;
+.dbx-op-tile-note {
+    font-size: 11px;
+    color: var(--ui-text-muted);
+}
+
+/* Bloque "Rendimiento del periodo": mismo tile, cifra mayor y sin nota. El tile de tasa lleva
+   barra y los otros no, asi que sin centrado vertical la cifra queda descolgada arriba. */
+.dbx-op-tiles-kpi .dbx-op-tile {
+    padding: 18px 14px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 118px;
+}
+
+.dbx-op-tiles-kpi .dbx-op-tile-value {
+    margin: 10px 0 0;
+    font-size: 2.3rem;
+}
+
+.dbx-op-tiles-kpi .dbx-op-tile-rate .dbx-op-tile-value {
+    margin-bottom: 10px;
+}
+
+.dbx-op-rate-bar {
+    display: block;
+    height: 8px;
+    background: var(--ui-surface-soft);
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius-pill);
+    overflow: hidden;
+}
+
+.dbx-op-rate-bar > span {
+    display: block;
+    height: 100%;
+    background: var(--ui-primary);
+}
+
+/* --- Tablas --- */
+.dbx-op-table-wrap {
+    border: 1px solid color-mix(in srgb, var(--ui-primary) 18%, var(--ui-border));
+    border-radius: var(--ui-radius);
+    box-shadow: 0 5px 15px rgba(21, 32, 46, 0.06);
+    overflow-x: auto;
+}
+
+.dbx-op-table {
+    width: 100%;
+    min-width: 720px;
+    border-collapse: collapse;
+}
+
+.dbx-op-table th {
+    padding: 9px 12px;
+    background: var(--ui-primary);
+    color: #fff;
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.055em;
+    text-transform: uppercase;
+    text-align: center;
+}
+
+.dbx-op-table th:first-child {
+    border-left: 4px solid var(--ui-accent);
+}
+
+.dbx-op-table td {
+    padding: 12px;
+    border-top: 1px solid var(--ui-border);
+    text-align: center;
+    vertical-align: middle;
+}
+
+.dbx-op-table td:first-child {
+    border-left: 4px solid transparent;
+}
+
+.dbx-op-table tbody tr.is-critical td {
+    background: color-mix(in srgb, var(--ui-accent) 5%, var(--ui-surface));
+}
+
+.dbx-op-table tbody tr.is-critical td:first-child {
+    border-left-color: var(--ui-accent);
+}
+
+.dbx-op-table tbody tr.is-warning td:first-child {
+    border-left-color: var(--ui-warning);
+}
+
+.dbx-op-table tbody tr.is-info td:first-child,
+.dbx-op-table tbody tr.is-healthy td:first-child {
+    border-left-color: var(--ui-success);
+}
+
+.dbx-op-store {
+    font-size: 0.84rem;
+    font-weight: 800;
+}
+
+.dbx-op-sev {
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+}
+
+.dbx-op-sev-critical {
+    color: var(--ui-accent);
+}
+
+.dbx-op-sev-warning {
+    color: var(--ui-warning);
+}
+
+.dbx-op-sev-info,
+.dbx-op-sev-healthy {
+    color: var(--ui-text-muted);
+}
+
+/* La incidencia y el motivo son texto corrido: alineados a la izquierda para poder leerse. */
+.dbx-op-table td.dbx-op-cell-text {
+    text-align: left;
+}
+
+.dbx-op-kicker {
+    display: block;
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    color: color-mix(in srgb, var(--ui-text-muted) 72%, var(--ui-surface));
+}
+
+.dbx-op-text {
+    display: block;
+    margin-top: 3px;
+    font-size: 0.82rem;
+}
+
+.dbx-op-since {
+    font-size: 0.78rem;
+    color: var(--ui-text-muted);
+}
+
+.dbx-op-num {
+    font-size: 0.88rem;
+    font-weight: 800;
+}
+
+.dbx-op-num-queue {
+    color: var(--ui-warning);
+}
+
+.dbx-op-num-failed {
+    color: var(--ui-accent);
+}
+
+.dbx-op-num-muted {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--ui-text-muted);
+}
+
+.dbx-op-num-bad {
+    color: var(--ui-accent);
+}
+
+/* "Salud por tienda": el nombre de tienda se lee en columna, alineado a la izquierda como el
+   resto de texto corrido, y toda la tabla va un punto mas grande que la de incidencias — es la
+   que se consulta de un vistazo desde lejos. */
+.dbx-op-table-stores th:first-child,
+.dbx-op-table-stores td:first-child {
+    text-align: left;
+}
+
+.dbx-op-table-stores th {
+    font-size: 0.72rem;
+}
+
+.dbx-op-table-stores .dbx-op-store {
+    font-size: 0.92rem;
+}
+
+.dbx-op-table-stores .dbx-op-sev {
+    font-size: 0.78rem;
+}
+
+.dbx-op-table-stores .dbx-op-since {
+    font-size: 0.86rem;
+}
+
+.dbx-op-table-stores .dbx-op-num {
+    font-size: 0.96rem;
+}
+
+.dbx-op-table-stores .dbx-op-num-muted {
+    font-size: 0.88rem;
+}
+
+.dbx-op-table-stores .dbx-op-links a {
+    font-size: 0.82rem;
+}
+
+/* --- Acciones --- */
+.dbx-op-action {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 32px;
+    padding: 0 10px;
+    border: 1px solid var(--ui-primary);
+    border-radius: var(--ui-radius-sm);
+    background: var(--ui-primary);
+    color: #fff;
+    font-size: 0.74rem;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.dbx-op-action:hover {
+    background: var(--ui-primary-strong);
+    border-color: var(--ui-primary-strong);
+    color: #fff;
+}
+
+.dbx-op-action-critical {
+    border-color: var(--ui-accent);
+    background: var(--ui-accent);
+}
+
+.dbx-op-action-critical:hover {
+    background: color-mix(in srgb, var(--ui-accent) 82%, #000);
+    border-color: color-mix(in srgb, var(--ui-accent) 82%, #000);
+}
+
+.dbx-op-action-link {
+    display: inline-block;
+    margin-top: 7px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--ui-primary);
+}
+
+.dbx-op-links {
+    display: inline-flex;
+    gap: 14px;
+}
+
+.dbx-op-links a {
+    font-size: 0.74rem;
+    font-weight: 700;
+    color: var(--ui-primary);
+}
+
+.dbx-op-foot {
+    margin: 12px 0 0;
+    font-size: 0.75rem;
+    color: var(--ui-text-muted);
+}
+
+.dbx-op-more {
+    margin-top: 12px;
+}
+
+.dbx-op-more a {
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: var(--ui-primary);
+}
+
+.dbx-op-empty {
+    padding: 18px 12px;
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--ui-text-muted);
+}
+
+@media (max-width: 1024px) {
+    .dbx-op-tiles {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 560px) {
+    .dbx-op-tiles {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* En oscuro --ui-primary/--ui-accent son tonos claros: el texto blanco sobre ellos se queda
+   por debajo de AA. Se invierte el contraste usando el fondo de pagina como color de texto. */
+html.dark .dbx-op-table th,
+html.dark .dbx-op-action,
+html.dark .dbx-op-action:hover {
+    color: var(--ui-bg);
+}
+
+/* Aviso de listado acotado a una impresora (enlace desde una incidencia del dashboard). */
+.dbx-printer-focus-note {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+    padding: 10px 14px;
+    border: 1px solid color-mix(in srgb, var(--ui-primary) 30%, var(--ui-border));
+    border-left: 4px solid var(--ui-primary);
+    border-radius: var(--ui-radius-sm);
+    background: color-mix(in srgb, var(--ui-primary) 6%, var(--ui-surface));
+    font-size: 0.85rem;
 }

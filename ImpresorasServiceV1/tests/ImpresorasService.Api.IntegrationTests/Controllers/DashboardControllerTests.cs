@@ -1,4 +1,4 @@
-using System.Net.Http.Json;
+﻿using System.Net.Http.Json;
 using System.Reflection;
 using ImpresorasService.Api.Controllers;
 using ImpresorasService.Application.Services;
@@ -101,6 +101,82 @@ public sealed class DashboardControllerTests : IntegrationTestBase
     }
 
     /// <summary>
+    /// "Desde" de las incidencias priorizadas del dashboard: la antiguedad sale del trabajo en cola
+    /// mas viejo (CreatedAtUtc) y del fallo sin reenviar mas viejo (UpdatedAtUtc), sin ventana —
+    /// una incidencia abierta hace tres dias sigue abierta hoy. Null cuando no hay incidencia.
+    /// </summary>
+    [Fact]
+    public async Task GetOverview_ReturnsOldestQueuedAndFailedTimestamps()
+    {
+        const int storeId = 986;
+        var now = DateTimeOffset.UtcNow;
+        var oldestQueued = now.AddMinutes(-90);
+        var oldestFailed = now.AddMinutes(-45);
+
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
+
+            if (!await db.Stores.AnyAsync(s => s.StoreId == storeId))
+            {
+                db.Stores.Add(new Store { StoreId = storeId, Name = "Oldest Timestamps Store", IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now });
+            }
+            db.PrintJobs.RemoveRange(await db.PrintJobs.Where(j => j.StoreId == storeId).ToListAsync());
+
+            var queuedOld = MakeJob(now, PrintJobStatus.Pending, storeId: storeId, printerId: null);
+            queuedOld.CreatedAtUtc = oldestQueued;
+            var queuedNew = MakeJob(now, PrintJobStatus.Pending, storeId: storeId, printerId: null);
+            queuedNew.CreatedAtUtc = now.AddMinutes(-10);
+            var failedOld = MakeJob(now, PrintJobStatus.ErrorFinal, storeId: storeId, printerId: null, attemptCount: 2);
+            failedOld.UpdatedAtUtc = oldestFailed;
+            var failedNew = MakeJob(now, PrintJobStatus.ErrorFinal, storeId: storeId, printerId: null, attemptCount: 2);
+            failedNew.UpdatedAtUtc = now.AddMinutes(-5);
+
+            AddJobWithEvent(db, queuedOld);
+            AddJobWithEvent(db, queuedNew);
+            AddJobWithEvent(db, failedOld);
+            AddJobWithEvent(db, failedNew);
+            await db.SaveChangesAsync();
+        }
+
+        var response = await Client.GetAsync($"/api/dashboard/overview?window=today&storeId={storeId}");
+
+        response.EnsureSuccessStatusCode();
+        var store = Assert.Single((await ReadAsJsonAsync<DashboardOverviewResponse>(response))!.Stores!);
+        Assert.NotNull(store.OldestQueuedAtUtc);
+        Assert.NotNull(store.OldestFailedWithoutRetryAtUtc);
+        Assert.True((store.OldestQueuedAtUtc!.Value - oldestQueued).Duration() < TimeSpan.FromSeconds(1));
+        Assert.True((store.OldestFailedWithoutRetryAtUtc!.Value - oldestFailed).Duration() < TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public async Task GetOverview_ReturnsNullTimestampsWhenTheStoreHasNoIncident()
+    {
+        const int storeId = 987;
+        var now = DateTimeOffset.UtcNow;
+
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
+
+            if (!await db.Stores.AnyAsync(s => s.StoreId == storeId))
+            {
+                db.Stores.Add(new Store { StoreId = storeId, Name = "No Incident Store", IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now });
+            }
+            db.PrintJobs.RemoveRange(await db.PrintJobs.Where(j => j.StoreId == storeId).ToListAsync());
+            AddJobWithEvent(db, MakeJob(now, PrintJobStatus.PrintedConfirmed, storeId: storeId, printerId: null));
+            await db.SaveChangesAsync();
+        }
+
+        var response = await Client.GetAsync($"/api/dashboard/overview?window=today&storeId={storeId}");
+
+        response.EnsureSuccessStatusCode();
+        var store = Assert.Single((await ReadAsJsonAsync<DashboardOverviewResponse>(response))!.Stores!);
+        Assert.Null(store.OldestQueuedAtUtc);
+        Assert.Null(store.OldestFailedWithoutRetryAtUtc);
+    }
+
+    /// <summary>
     /// El KPI "sin reenviar" y el listado de cola que abre el operador al pulsarlo deben devolver
     /// exactamente el mismo conjunto. Antes el dashboard enlazaba a `status=8` (solo ErrorFinal),
     /// que es un subconjunto: el número mostrado no cuadraba con la lista y no había forma de
@@ -149,6 +225,51 @@ public sealed class DashboardControllerTests : IntegrationTestBase
         var page = await ReadAsJsonAsync<PagedJobs>(queueResponse);
         Assert.Equal(store.FailedWithoutRetryCurrent, page!.Count);
         Assert.DoesNotContain(page.Value!, j => j.JobId == cancelledJobId);
+    }
+
+    /// <summary>
+    /// Igual que "sin reenviar": el KPI `unassignedQueueCurrent` que el dashboard enlaza tiene que
+    /// poder listarse con el mismo conjunto exacto. `unassigned=true` fija sus propios estados (los
+    /// de cola), asi que un trabajo sin impresora ya cerrado no cuenta ni aqui ni en el KPI.
+    /// </summary>
+    [Fact]
+    public async Task GetQueue_UnassignedFilter_MatchesUnassignedQueueCurrentKpi()
+    {
+        const int storeId = 988;
+        const int printerId = 5988;
+        var now = DateTimeOffset.UtcNow;
+
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
+
+            if (!await db.Stores.AnyAsync(s => s.StoreId == storeId))
+            {
+                db.Stores.Add(new Store { StoreId = storeId, Name = "Unassigned Store", IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now });
+            }
+            if (!await db.Printers.AnyAsync(p => p.PrinterId == printerId))
+            {
+                db.Printers.Add(new Printer { PrinterId = printerId, StoreId = storeId, PrinterName = "Unassigned Printer", SpoolQueue = @"\\host\q988", Host = "host", IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now });
+            }
+            db.PrintJobs.RemoveRange(await db.PrintJobs.Where(j => j.StoreId == storeId).ToListAsync());
+
+            AddJobWithEvent(db, MakeJob(now, PrintJobStatus.Pending, storeId: storeId, printerId: null));
+            AddJobWithEvent(db, MakeJob(now, PrintJobStatus.Pending, storeId: storeId, printerId: null));
+            AddJobWithEvent(db, MakeJob(now, PrintJobStatus.Pending, storeId: storeId, printerId: printerId));
+            // Sin impresora pero ya cerrado: no esta en cola, no cuenta.
+            AddJobWithEvent(db, MakeJob(now, PrintJobStatus.ErrorFinal, storeId: storeId, printerId: null));
+            await db.SaveChangesAsync();
+        }
+
+        var overviewResponse = await Client.GetAsync($"/api/dashboard/overview?window=today&storeId={storeId}");
+        overviewResponse.EnsureSuccessStatusCode();
+        var store = Assert.Single((await ReadAsJsonAsync<DashboardOverviewResponse>(overviewResponse))!.Stores!);
+        Assert.Equal(2, store.UnassignedQueueCurrent);
+
+        var queueResponse = await Client.GetAsync($"/api/printjobs?storeId={storeId}&unassigned=true&includeTotal=true");
+        queueResponse.EnsureSuccessStatusCode();
+        var page = await ReadAsJsonAsync<PagedJobs>(queueResponse);
+        Assert.Equal(store.UnassignedQueueCurrent, page!.Count);
     }
 
     [Fact]
@@ -380,6 +501,8 @@ public sealed class DashboardControllerTests : IntegrationTestBase
         public int QueuedCurrent { get; set; }
         public int FailedWithoutRetryCurrent { get; set; }
         public int UnassignedQueueCurrent { get; set; }
+        public DateTimeOffset? OldestQueuedAtUtc { get; set; }
+        public DateTimeOffset? OldestFailedWithoutRetryAtUtc { get; set; }
         public List<PrinterRow>? Printers { get; set; }
     }
 
