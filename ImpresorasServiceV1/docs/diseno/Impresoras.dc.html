@@ -1,0 +1,161 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;450;500;600&display=swap">
+  <style>
+    body { margin: 0; background: #f7f8fa; color: #1a1f2b; font-family: "IBM Plex Sans", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #1b2f82; } a:hover { color: #102368; }
+    .mono { font-family: "IBM Plex Mono", monospace; }
+    .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex: none; }
+    .btn { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px; border-radius: 4px; font-size: 13px; font-weight: 500; border: 1px solid transparent; }
+    table { width: 100%; border-collapse: collapse; }
+    th { background: #f7f8fa; color: #616b7c; font-size: 12px; font-weight: 500; padding: 9px 16px; text-align: left; border-bottom: 1px solid #e3e7ee; }
+    th.r { text-align: right; }
+    td { border-bottom: 1px solid #eef0f4; padding: 0 16px; height: 44px; font-size: 13px; vertical-align: middle; }
+    td.r { text-align: right; }
+    tr:last-child td { border-bottom: none; }
+    .rail { display: grid; gap: 3px; height: 100%; align-content: start; }
+    .store { display: grid; gap: 3px; padding: 10px 12px; border-radius: 4px; }
+    .sline { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+    .scode { font-size: 13px; font-weight: 500; }
+    .smeta { font-size: 12px; color: #8a94a6; }
+  </style>
+</helmet>
+
+<div style="display:grid;grid-template-columns:248px 300px 1fr;min-height:820px">
+
+  <aside style="background:#fff;border-right:1px solid #e3e7ee;padding:16px 10px;display:grid;gap:2px;align-content:start">
+    <div style="display:flex;align-items:center;gap:9px;padding:4px 10px 18px">
+      <div style="width:26px;height:26px;border-radius:4px;background:#1b2f82;display:grid;place-items:center">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      </div>
+      <span style="font-size:14px;font-weight:600;letter-spacing:-0.01em">ImpresorasService</span>
+    </div>
+    <span style="font-size:11px;font-weight:600;letter-spacing:0.09em;text-transform:uppercase;color:#8a94a6;padding:8px 10px 4px">Operaci&oacute;n</span>
+    <span style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:4px;font-size:13px;font-weight:450;color:#3c4557">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      Dashboard
+    </span>
+    <span style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:4px;font-size:13px;font-weight:450;color:#3c4557">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      Cola
+    </span>
+    <span style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:4px;font-size:13px;font-weight:500;background:#eef1fb;color:#1b2f82;box-shadow:inset 2px 0 0 #1b2f82">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      Impresoras
+    </span>
+  </aside>
+
+  <nav style="background:#fff;border-right:1px solid #e3e7ee;padding:16px 10px;display:grid;gap:10px;align-content:start">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;padding:0 6px">
+      <span style="font-size:12px;font-weight:600;letter-spacing:0.09em;text-transform:uppercase;color:#8a94a6">Tiendas</span>
+      <span style="font-size:12px;color:#8a94a6">34</span>
+    </div>
+    <span style="display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border:1px solid #d5dae4;border-radius:4px;background:#fff;color:#8a94a6;font-size:13px;margin:0 2px">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      Buscar tienda
+    </span>
+
+    <div class="rail">
+      <div class="store" style="background:#eef1fb;box-shadow:inset 2px 0 0 #1b2f82">
+        <div class="sline"><span class="scode" style="color:#1b2f82">0412 Getafe Norte</span><span class="dot" style="background:#c8283c;align-self:center"></span></div>
+        <span class="smeta">3 impresoras &middot; 2 activas</span>
+      </div>
+      <div class="store">
+        <div class="sline"><span class="scode">2044 Legan&eacute;s Este</span><span class="dot" style="background:#c8283c;align-self:center"></span></div>
+        <span class="smeta">2 impresoras &middot; 0 activas</span>
+      </div>
+      <div class="store">
+        <div class="sline"><span class="scode">0731 Alcal&aacute; Centro</span><span class="dot" style="background:#b06a00;align-self:center"></span></div>
+        <span class="smeta">2 impresoras &middot; 1 activa</span>
+      </div>
+      <div class="store">
+        <div class="sline"><span class="scode">1180 Torrej&oacute;n Sur</span><span class="dot" style="background:#1a7f5a;align-self:center"></span></div>
+        <span class="smeta">3 impresoras &middot; 3 activas</span>
+      </div>
+      <div class="store">
+        <div class="sline"><span class="scode">0208 Vallecas</span><span class="dot" style="background:#1a7f5a;align-self:center"></span></div>
+        <span class="smeta">3 impresoras &middot; 3 activas</span>
+      </div>
+      <div class="store">
+        <div class="sline"><span class="scode">0955 M&oacute;stoles</span><span class="dot" style="background:#1a7f5a;align-self:center"></span></div>
+        <span class="smeta">2 impresoras &middot; 2 activas</span>
+      </div>
+    </div>
+  </nav>
+
+  <main style="display:grid;align-content:start">
+    <header style="display:flex;align-items:flex-end;justify-content:space-between;gap:18px;padding:22px 28px 18px;border-bottom:1px solid #e3e7ee;background:#fff">
+      <div style="display:grid;gap:3px">
+        <h1 style="margin:0;font-size:22px;font-weight:600;letter-spacing:-0.01em">Getafe Norte</h1>
+        <span style="font-size:12px;color:#616b7c">0412 &middot; 3 impresoras &middot; 1 con incidencia</span>
+      </div>
+      <span class="btn" style="background:#1b2f82;color:#fff">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Nueva impresora
+      </span>
+    </header>
+
+    <div style="padding:24px 28px 32px;display:grid;gap:18px">
+      <div style="background:#fff;border:1px solid #e3e7ee;border-radius:6px;overflow:hidden">
+        <table>
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Cola de spool</th>
+              <th>Host</th>
+              <th>Conectividad</th>
+              <th class="r">En cola</th>
+              <th class="r">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="font-weight:500">TICKET-01</td>
+              <td class="mono" style="color:#616b7c;font-size:12px">\\SRV-PRINT\TICKET-01</td>
+              <td class="mono" style="color:#616b7c;font-size:12px">192.168.12.24</td>
+              <td><span class="dot" style="background:#1a7f5a"></span> Operativa</td>
+              <td class="r" style="font-variant-numeric:tabular-nums">12</td>
+              <td class="r"><a href="#editar" style="font-size:13px;font-weight:500;text-decoration:none">Editar</a></td>
+            </tr>
+            <tr style="background:#fdf6f7">
+              <td style="font-weight:500">TICKET-02</td>
+              <td class="mono" style="color:#616b7c;font-size:12px">\\SRV-PRINT\TICKET-02</td>
+              <td class="mono" style="color:#616b7c;font-size:12px">192.168.12.25</td>
+              <td><span class="dot" style="background:#c8283c"></span> Sin conexi&oacute;n &middot; <span style="color:#8a94a6">6 fallos, IPP</span></td>
+              <td class="r" style="font-variant-numeric:tabular-nums">22</td>
+              <td class="r"><a href="#probar" style="font-size:13px;font-weight:500;text-decoration:none">Probar</a></td>
+            </tr>
+            <tr>
+              <td style="font-weight:500">ALBARAN-01</td>
+              <td class="mono" style="color:#616b7c;font-size:12px">\\SRV-PRINT\ALBARAN-01</td>
+              <td class="mono" style="color:#616b7c;font-size:12px">192.168.12.26</td>
+              <td><span class="dot" style="background:#1a7f5a"></span> Operativa</td>
+              <td class="r" style="font-variant-numeric:tabular-nums">0</td>
+              <td class="r"><a href="#editar" style="font-size:13px;font-weight:500;text-decoration:none">Editar</a></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="margin:0;max-width:80ch;font-size:12px;line-height:1.55;color:#8a94a6">El rail de tiendas deja de ser una colecci&oacute;n de tarjetas y pasa a ser navegaci&oacute;n: una l&iacute;nea por tienda, el punto de estado a la derecha y la seleccionada te&ntilde;ida en azul suave. La cola de spool y el host van en monoespaciada porque son identificadores que se comparan car&aacute;cter a car&aacute;cter.</p>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":820}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

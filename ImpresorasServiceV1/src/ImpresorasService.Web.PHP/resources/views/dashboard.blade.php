@@ -535,6 +535,11 @@
             form.dataset.dynamicOwned = '1';
         }
 
+        // La grafica se re-renderiza en la serie por defecto: se le devuelve la que estaba elegida.
+        if (window.dbxRestoreChartSerie) {
+            window.dbxRestoreChartSerie(root);
+        }
+
         scheduleAutoRefresh(AUTO_REFRESH_SECONDS);
     }
 
@@ -553,9 +558,11 @@
         const url = new URL(form.action || window.location.href, window.location.href);
         url.search = '';
 
+        // set y no append: showHealthy va como hidden 0 + checkbox 1 para poder enviar el "no", y
+        // con append la URL acumulaba showHealthy=0&showHealthy=1 en cada navegacion.
         formData.forEach(function(value, key) {
             if (value !== null && value !== '') {
-                url.searchParams.append(key, value);
+                url.searchParams.set(key, value);
             }
         });
 

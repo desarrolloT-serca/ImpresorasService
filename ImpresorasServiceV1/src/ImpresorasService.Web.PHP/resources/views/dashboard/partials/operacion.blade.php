@@ -184,8 +184,8 @@
                         'lead' => 'Sin impresoras activas',
                         'tail' => $queued > 0 ? $queued . ' trabajo(s) en cola sin salida posible' : 'la tienda no puede imprimir',
                         'since' => $store['oldestQueuedAtUtc'] ?? null,
-                        'action' => ['Ver impresoras', '/impresoras?storeId=' . $sidParam],
-                        'link' => ['Ver en cola', '/cola?storeId=' . $sidParam . '&status=0'],
+                        'action' => ['Ver impresoras', '/impresoras?storeId=' . $sidParam . '&connectivity=problem'],
+                        'link' => ['Ver los trabajos parados', '/cola?storeId=' . $sidParam . '&status=0'],
                     ];
                 } elseif (str_contains($lower, 'sin host')) {
                     $printer = $findPrinter($sid, 'no_host');
@@ -197,8 +197,8 @@
                         'since' => $printer['lastConnectionCheckAtUtc'] ?? null,
                         'action' => ['Configurar host', $printer !== null
                             ? '/impresoras?storeId=' . $sidParam . '&printerId=' . (int) $printer['printerId']
-                            : '/impresoras?storeId=' . $sidParam],
-                        'link' => ['Ver todas las impresoras', '/impresoras?storeId=' . $sidParam],
+                            : '/impresoras?storeId=' . $sidParam . '&connectivity=no_host'],
+                        'link' => ['Ver las sin host', '/impresoras?storeId=' . $sidParam . '&connectivity=no_host'],
                     ];
                 } elseif (str_contains($lower, 'sin reenviar')) {
                     $opIncidents[] = [
@@ -207,16 +207,23 @@
                         'lead' => $noRetry . ' ' . ($noRetry === 1 ? 'trabajo sin reenviar' : 'trabajos sin reenviar'),
                         'tail' => 'reintentos agotados y nadie los ha reenviado',
                         'since' => $store['oldestFailedWithoutRetryAtUtc'] ?? null,
-                        // Navega al listado ya filtrado: el reenvio se confirma alli, no a ciegas.
-                        'action' => ['Reenviar ' . $noRetry, '/cola?storeId=' . $sidParam . '&failedWithoutRetry=1'],
-                        'link' => ['Ver toda la cola', '/cola?storeId=' . $sidParam],
+                        // Navega al listado ya filtrado: el reenvio se confirma alli, no a ciegas. La
+                        // etiqueta no lleva el numero — ya esta en el detalle de la fila y con cifras
+                        // altas el boton quedaba raro.
+                        'action' => ['Reenviar todos', '/cola?storeId=' . $sidParam . '&failedWithoutRetry=1'],
+                        'link' => ['Ver los fallidos', '/cola?storeId=' . $sidParam . '&failedWithoutRetry=1'],
                     ];
                 } elseif (str_contains($lower, 'conectividad') || str_contains($lower, 'conexion')) {
                     $printer = $findPrinter($sid, 'error');
                     $streak = (int) ($printer['connectionFailuresStreak'] ?? 0);
                     $transport = trim((string) ($printer['lastConnectionTransport'] ?? ''));
+                    // El contador se sondea cada 30 s: una impresora caida desde ayer acumula miles y
+                    // el numero exacto deja de aportar. A partir de 100 basta con "muchos".
+                    $streakLabel = $streak > 100
+                        ? '+100 fallos consecutivos'
+                        : $streak . ' ' . ($streak === 1 ? 'fallo consecutivo' : 'fallos consecutivos');
                     $detail = array_filter([
-                        $streak > 0 ? $streak . ' ' . ($streak === 1 ? 'fallo consecutivo' : 'fallos consecutivos') : null,
+                        $streak > 0 ? $streakLabel : null,
                         $transport !== '' ? 'transporte ' . $transport : null,
                     ]);
                     $opIncidents[] = [
@@ -229,8 +236,8 @@
                         'since' => $printer['lastConnectionCheckAtUtc'] ?? null,
                         'action' => ['Probar conexión', $printer !== null
                             ? '/impresoras?storeId=' . $sidParam . '&printerId=' . (int) $printer['printerId']
-                            : '/impresoras?storeId=' . $sidParam],
-                        'link' => ['Ver todas las impresoras', '/impresoras?storeId=' . $sidParam],
+                            : '/impresoras?storeId=' . $sidParam . '&connectivity=error'],
+                        'link' => ['Ver las sin conexión', '/impresoras?storeId=' . $sidParam . '&connectivity=error'],
                     ];
                 } elseif (str_contains($lower, 'cola') || str_contains($lower, 'trabajos')) {
                     $umbral = $severity === 'critical' ? $criticalQueueMin : $warningQueueMin;
@@ -241,7 +248,7 @@
                         'tail' => 'por encima del umbral ' . ($severity === 'critical' ? 'crítico' : 'de aviso') . ' (' . $umbral . ')',
                         'since' => $store['oldestQueuedAtUtc'] ?? null,
                         'action' => ['Ver en cola', '/cola?storeId=' . $sidParam . '&status=0'],
-                        'link' => ['Ver impresoras', '/impresoras?storeId=' . $sidParam],
+                        'link' => ['Ver impresoras con problema', '/impresoras?storeId=' . $sidParam . '&connectivity=problem'],
                     ];
                 } else {
                     $opIncidents[] = [
@@ -250,8 +257,10 @@
                         'lead' => $reason !== '' ? $reason : 'Incidencia sin clasificar',
                         'tail' => '',
                         'since' => null,
-                        'action' => ['Ver en cola', '/cola?storeId=' . $sidParam],
-                        'link' => ['Ver impresoras', '/impresoras?storeId=' . $sidParam],
+                        'action' => $noRetry > 0
+                            ? ['Ver los fallidos', '/cola?storeId=' . $sidParam . '&failedWithoutRetry=1']
+                            : ['Ver la cola parada', '/cola?storeId=' . $sidParam . '&status=0'],
+                        'link' => ['Ver impresoras con problema', '/impresoras?storeId=' . $sidParam . '&connectivity=problem'],
                     ];
                 }
             }
@@ -294,14 +303,18 @@
                     <p class="dbx-op-empty">Sin incidencias abiertas para el &aacute;mbito seleccionado.</p>
                 @else
                     <div class="dbx-op-table-wrap">
-                        <table class="dbx-op-table">
+                        <table class="dbx-op-table dbx-op-table-incidents">
                             <thead>
                                 <tr>
-                                    <th style="width:172px">Tienda</th>
-                                    <th style="width:104px">Severidad</th>
-                                    <th>Incidencia</th>
-                                    <th style="width:112px">Desde</th>
-                                    <th style="width:196px">Acci&oacute;n</th>
+                                    <th style="width:168px">Tienda</th>
+                                    <th style="width:96px">Severidad</th>
+                                    <th style="width:168px">Tipo</th>
+                                    <th>Detalle</th>
+                                    <th style="width:104px">Desde</th>
+                                    {{-- Enlace y boton en columnas propias: compartiendo celda, los
+                                         enlaces de distinto largo descuadraban los botones. --}}
+                                    <th style="width:170px">Ir a</th>
+                                    <th style="width:170px">Acci&oacute;n</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -309,15 +322,14 @@
                                     <tr class="is-{{ $incident['severity'] }}">
                                         <td class="dbx-op-store">{{ $formatStoreLabel($incident['storeId'], $incident['storeName']) }}</td>
                                         <td><span class="dbx-op-sev dbx-op-sev-{{ $incident['severity'] }}">{{ ['critical' => 'CRÍTICO', 'warning' => 'AVISO', 'info' => 'INFO'][$incident['severity']] ?? 'AVISO' }}</span></td>
-                                        <td class="dbx-op-cell-text">
-                                            <span class="dbx-op-kicker">{{ $incident['kicker'] }}</span>
-                                            <span class="dbx-op-text"><b>{{ $incident['lead'] }}</b>@if($incident['tail'] !== '') &mdash; {{ $incident['tail'] }}@endif</span>
-                                        </td>
+                                        {{-- Tipo y detalle en columnas separadas: el tipo se escanea en vertical, el detalle
+                                             se lee. Una sola linea cada uno; el title lleva el texto integro si se recorta. --}}
+                                        <td><span class="dbx-op-kicker">{{ $incident['kicker'] }}</span></td>
+                                        <td class="dbx-op-cell-text dbx-op-text" title="{{ $incident['lead'] }}@if($incident['tail'] !== '') — {{ $incident['tail'] }}@endif"><b>{{ $incident['lead'] }}</b>@if($incident['tail'] !== '') &mdash; {{ $incident['tail'] }}@endif</td>
                                         <td class="dbx-op-since" title="{{ $incident['since'] ?? 'Sin dato de inicio' }}">{{ $sinceLabel($incident['since']) }}</td>
-                                        <td>
-                                            <a href="{{ url($incident['action'][1]) }}" class="dbx-op-action {{ $incident['severity'] === 'critical' ? 'dbx-op-action-critical' : '' }}">{{ $incident['action'][0] }}</a>
-                                            <a href="{{ url($incident['link'][1]) }}" class="dbx-op-action-link">{{ $incident['link'][0] }}</a>
-                                        </td>
+                                        {{-- Enlace antes que boton: se lee de menor a mayor compromiso. --}}
+                                        <td><a href="{{ url($incident['link'][1]) }}" title="{{ $incident['link'][0] }}" class="dbx-op-action-link">{{ $incident['link'][0] }}</a></td>
+                                        <td><a href="{{ url($incident['action'][1]) }}" title="{{ $incident['action'][0] }}" class="dbx-op-action {{ $incident['severity'] === 'critical' ? 'dbx-op-action-critical' : '' }}">{{ $incident['action'][0] }}</a></td>
                                     </tr>
                                 @endforeach
                             </tbody>
@@ -376,13 +388,13 @@
                     <table class="dbx-op-table dbx-op-table-stores">
                         <thead>
                             <tr>
-                                <th>Tienda</th>
-                                <th style="width:92px">Salud</th>
-                                <th style="width:224px">Motivo</th>
-                                <th style="width:78px">Cola</th>
+                                <th style="width:210px">Tienda</th>
+                                <th style="width:100px">Salud</th>
+                                <th>Motivo</th>
+                                <th style="width:68px">Cola</th>
                                 <th style="width:110px">Sin reenviar</th>
-                                <th style="width:112px">Impresoras</th>
-                                <th style="width:186px">Ir a</th>
+                                <th style="width:104px">Impresoras</th>
+                                <th style="width:150px">Ir a</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -410,14 +422,17 @@
                                 <tr class="is-{{ $sHealth }}">
                                     <td class="dbx-op-store">{{ $formatStoreLabel($opStore['storeId'] ?? null, $opStore['storeName'] ?? null) }}</td>
                                     <td><span class="dbx-op-sev dbx-op-sev-{{ $sHealth }}">{{ $sLabel }}</span></td>
-                                    <td class="dbx-op-cell-text dbx-op-since">{{ $opStore['healthReason'] ?? 'Operacion dentro de umbrales' }}</td>
+                                    <td class="dbx-op-cell-text dbx-op-since" title="{{ $opStore['healthReason'] ?? 'Operacion dentro de umbrales' }}">{{ $opStore['healthReason'] ?? 'Operacion dentro de umbrales' }}</td>
                                     <td><span class="dbx-op-num {{ $sQueue > 0 ? 'dbx-op-num-queue' : '' }}">{{ $fmtNum($sQueue) }}</span></td>
                                     <td><span class="dbx-op-num {{ $sFailed > 0 ? 'dbx-op-num-failed' : '' }}">{{ $fmtNum($sFailed) }}</span></td>
                                     <td><span class="dbx-op-num-muted {{ $sTotal > 0 && $sOk < $sTotal ? 'dbx-op-num-bad' : '' }}">{{ $sOk }} / {{ $sTotal }} OK</span></td>
+                                    {{-- Cada enlace aterriza ya acotado a lo que rompe esta tienda: si hay
+                                         fallos sin reenviar, la cola llega filtrada por ellos; si alguna
+                                         impresora no responde, el listado llega filtrado por las que fallan. --}}
                                     <td>
                                         <span class="dbx-op-links">
-                                            <a href="{{ url('/cola?storeId=' . $sParam) }}">Cola</a>
-                                            <a href="{{ url('/impresoras?storeId=' . $sParam) }}">Impresoras</a>
+                                            <a href="{{ url('/cola?storeId=' . $sParam . ($sFailed > 0 ? '&failedWithoutRetry=1' : ($sQueue > 0 ? '&status=0' : ''))) }}">Cola</a>
+                                            <a href="{{ url('/impresoras?storeId=' . $sParam . ($sTotal > 0 && $sOk < $sTotal ? '&connectivity=problem' : '')) }}">Impresoras</a>
                                         </span>
                                     </td>
                                 </tr>

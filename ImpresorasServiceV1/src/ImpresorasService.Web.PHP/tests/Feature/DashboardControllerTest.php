@@ -502,9 +502,53 @@ class DashboardControllerTest extends TestCase
     }
 
     /**
+     * La grafica del periodo cubre los cuatro KPI del bloque de rendimiento, no solo la cola: las
+     * cuatro series se pre-renderizan y el selector solo conmuta visibilidad. Si una dejara de
+     * pintarse, su pestana se quedaria sin nada que ensenar y el fallo seria mudo.
+     */
+    public function test_the_period_chart_renders_one_series_per_kpi(): void
+    {
+        $api = $this->makeOverviewApiClient(
+            jobs: [],
+            printers: [],
+            overviewKpis: [
+                'received' => 12, 'printed' => 9, 'failed' => 3, 'queueCurrent' => 4,
+                'failedWithoutRetryCurrent' => 0, 'activePrinters' => 1, 'activeStores' => 1,
+            ],
+            timeseriesPoints: [
+                ['startUtc' => '2026-01-01T06:00:00Z', 'received' => 5, 'printed' => 4, 'failed' => 1, 'queueDepth' => 2],
+                ['startUtc' => '2026-01-01T07:00:00Z', 'received' => 7, 'printed' => 5, 'failed' => 2, 'queueDepth' => 4],
+            ],
+        );
+
+        $this->app->instance(ApiClient::class, $api);
+
+        $response = $this
+            ->withSession([
+                'impresoras_token' => 'token',
+                'impresoras_user' => ['role' => 'Admin', 'login' => 'admin'],
+            ])
+            ->get('/');
+
+        $response->assertOk();
+        $html = $response->getContent();
+
+        foreach (['queue', 'received', 'printed', 'failed'] as $serie) {
+            $this->assertStringContainsString('data-serie-tab="' . $serie . '"', $html);
+            $this->assertStringContainsString('data-serie="' . $serie . '"', $html);
+        }
+
+        // Arranca en cola: es la unica serie con umbral, la que dice si hay que actuar ahora.
+        $this->assertMatchesRegularExpression('/<g data-serie="queue"\s*>/', $html);
+        $this->assertMatchesRegularExpression('/<g data-serie="failed"\s+hidden\s*>/', $html);
+        $this->assertStringContainsString('Umbral cr&iacute;tico', $html);
+    }
+
+    /**
      * @param list<array<string, mixed>> $jobs
      * @param list<array<string, mixed>> $printers
      * @param array<string, int> $overviewKpis
+     * @param list<array<string, mixed>> $timeseriesPoints
      */
     private function makeOverviewApiClient(
         array $jobs,
@@ -512,8 +556,9 @@ class DashboardControllerTest extends TestCase
         array $overviewKpis,
         array $overviewAlerts = [],
         array $overviewStoreExtra = [],
+        array $timeseriesPoints = [],
     ): ApiClient {
-        return new class($jobs, $printers, $overviewKpis, $overviewAlerts, $overviewStoreExtra) extends ApiClient
+        return new class($jobs, $printers, $overviewKpis, $overviewAlerts, $overviewStoreExtra, $timeseriesPoints) extends ApiClient
         {
             public function __construct(
                 private readonly array $jobs,
@@ -521,6 +566,7 @@ class DashboardControllerTest extends TestCase
                 private readonly array $overviewKpis,
                 private readonly array $overviewAlerts,
                 private readonly array $overviewStoreExtra,
+                private readonly array $timeseriesPoints,
             ) {
                 parent::__construct(new Client(['base_uri' => 'http://api.test/']), 'http://api.test');
             }
@@ -571,6 +617,7 @@ class DashboardControllerTest extends TestCase
                         ],
                         'alerts' => $this->overviewAlerts,
                     ],
+                    'api/dashboard/timeseries?window=today' => ['points' => $this->timeseriesPoints],
                     default => [],
                 };
             }

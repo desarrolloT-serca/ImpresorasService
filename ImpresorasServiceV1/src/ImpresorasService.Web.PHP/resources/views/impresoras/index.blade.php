@@ -96,6 +96,11 @@
                 <span>Filtrado por <strong>{{ $focusedPrinter['printerName'] ?? $focusedPrinter['PrinterName'] ?? 'la impresora seleccionada' }}</strong>, la impresora que origina la incidencia.</span>
                 <a href="{{ url('/impresoras?' . http_build_query(request()->except(['printerId']))) }}" class="btn btn-ghost">Ver todas</a>
             </div>
+        @elseif(($connectivityFilter ?? '') !== '')
+            <div class="dbx-printer-focus-note" role="status">
+                <span>Filtrado por <strong>{{ ['problem' => 'impresoras con problema', 'error' => 'impresoras sin conexión', 'no_host' => 'impresoras sin host configurado', 'unchecked' => 'impresoras sin comprobar'][$connectivityFilter] ?? 'estado de conexión' }}</strong>, el motivo de la incidencia.</span>
+                <a href="{{ url('/impresoras?' . http_build_query(request()->except(['connectivity']))) }}" class="btn btn-ghost">Ver todas</a>
+            </div>
         @endif
 
         @if(!$selectedStoreGroup)

@@ -1,0 +1,127 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;450;500;600;700&family=Instrument+Sans:wght@400;500;600;700&family=Public+Sans:wght@400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; background: #f7f8fa; color: #1a1f2b; font-family: "IBM Plex Sans", system-ui, sans-serif; }
+    a { color: #1b2f82; } a:hover { color: #102368; }
+    .col { background: #fff; border: 1px solid #e3e7ee; border-radius: 6px; padding: 22px 22px 26px; display: grid; gap: 18px; align-content: start; }
+    .name { display: grid; gap: 3px; }
+    .nm { font-size: 15px; font-weight: 600; }
+    .why { font-size: 12px; line-height: 1.5; color: #616b7c; }
+    .frag { display: grid; gap: 10px; padding-top: 16px; border-top: 1px solid #eef0f4; }
+    .kpi { font-size: 30px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+    .lbl { font-size: 12px; color: #616b7c; }
+    .trow { display: grid; grid-template-columns: 1fr 62px 54px; gap: 10px; align-items: center; font-size: 13px; padding: 7px 0; border-top: 1px solid #eef0f4; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .tradeoff { font-size: 12px; line-height: 1.5; color: #8a94a6; padding-top: 14px; border-top: 1px solid #eef0f4; }
+  </style>
+</helmet>
+
+<div style="padding:40px 44px 48px;display:grid;gap:26px">
+
+  <div style="display:grid;gap:8px">
+    <h1 style="margin:0;font-size:24px;font-weight:600;letter-spacing:-0.01em">Tres candidatas</h1>
+    <p style="margin:0;max-width:78ch;font-size:14px;line-height:1.55;color:#3c4557">El CSS pide Futura, pero Futura no viene en Windows y Futura PT es de Adobe: en un puesto normal la cadena cae en Trebuchet MS. Sea cual sea la elegida, hay que cargarla como fuente web. Mismo fragmento real en las tres.</p>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(3, minmax(0,1fr));gap:22px">
+
+    <div class="col" style="font-family:'IBM Plex Sans', system-ui, sans-serif">
+      <div class="name">
+        <span class="nm">IBM Plex Sans</span>
+        <span class="why">Dise&ntilde;ada para producto t&eacute;cnico. Tiene mono hermana, que resuelve las columnas de cifras y los nombres de cola sin traer una segunda familia ajena.</span>
+      </div>
+      <div class="frag">
+        <span class="kpi">1 284</span>
+        <span class="lbl">Recibidos hoy</span>
+      </div>
+      <div>
+        <div class="trow" style="border-top:none;color:#616b7c;font-size:12px"><span>Tienda</span><span class="num">Cola</span><span class="num">Sin rev.</span></div>
+        <div class="trow"><span>0412 Getafe Norte</span><span class="num">34</span><span class="num">7</span></div>
+        <div class="trow"><span>0731 Alcal&aacute; Centro</span><span class="num">18</span><span class="num">0</span></div>
+        <div class="trow"><span>1180 Torrej&oacute;n Sur</span><span class="num">6</span><span class="num">0</span></div>
+      </div>
+      <span class="tradeoff">A cambio: es la m&aacute;s neutra de las tres. No aporta car&aacute;cter, solo lo quita de en medio.</span>
+    </div>
+
+    <div class="col" style="font-family:'Instrument Sans', system-ui, sans-serif">
+      <div class="name">
+        <span class="nm">Instrument Sans</span>
+        <span class="why">Ligeramente condensada, as&iacute; que cabe m&aacute;s dato por fila sin bajar el tama&ntilde;o. Es la que m&aacute;s se parece a lo que hoy llaman software moderno.</span>
+      </div>
+      <div class="frag">
+        <span class="kpi">1 284</span>
+        <span class="lbl">Recibidos hoy</span>
+      </div>
+      <div>
+        <div class="trow" style="border-top:none;color:#616b7c;font-size:12px"><span>Tienda</span><span class="num">Cola</span><span class="num">Sin rev.</span></div>
+        <div class="trow"><span>0412 Getafe Norte</span><span class="num">34</span><span class="num">7</span></div>
+        <div class="trow"><span>0731 Alcal&aacute; Centro</span><span class="num">18</span><span class="num">0</span></div>
+        <div class="trow"><span>1180 Torrej&oacute;n Sur</span><span class="num">6</span><span class="num">0</span></div>
+      </div>
+      <span class="tradeoff">A cambio: ese aire de SaaS actual envejece m&aacute;s r&aacute;pido, y no trae mono a juego.</span>
+    </div>
+
+    <div class="col" style="font-family:'Public Sans', system-ui, sans-serif">
+      <div class="name">
+        <span class="nm">Public Sans</span>
+        <span class="why">Del sistema de dise&ntilde;o del gobierno de EE. UU. Pensada para leerse en pantallas malas y a tama&ntilde;os peque&ntilde;os, que es la mitad del problema actual.</span>
+      </div>
+      <div class="frag">
+        <span class="kpi">1 284</span>
+        <span class="lbl">Recibidos hoy</span>
+      </div>
+      <div>
+        <div class="trow" style="border-top:none;color:#616b7c;font-size:12px"><span>Tienda</span><span class="num">Cola</span><span class="num">Sin rev.</span></div>
+        <div class="trow"><span>0412 Getafe Norte</span><span class="num">34</span><span class="num">7</span></div>
+        <div class="trow"><span>0731 Alcal&aacute; Centro</span><span class="num">18</span><span class="num">0</span></div>
+        <div class="trow"><span>1180 Torrej&oacute;n Sur</span><span class="num">6</span><span class="num">0</span></div>
+      </div>
+      <span class="tradeoff">A cambio: es deliberadamente sosa. Cumple, pero nadie la recuerda.</span>
+    </div>
+
+  </div>
+
+  <div style="background:#fff;border:1px solid #e3e7ee;border-radius:6px;padding:20px 22px;display:grid;gap:10px">
+    <span style="font-size:12px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#616b7c">Lo que cambia sin tocar la fuente</span>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:start">
+      <div style="display:grid;gap:8px">
+        <span style="font-size:12px;color:#8a94a6">Ahora &mdash; todo en negrita</span>
+        <div style="background:#fff;border:1px solid #e3e7ee;border-radius:4px;padding:12px 14px;display:grid;gap:5px;font-family:'Trebuchet MS',sans-serif">
+          <span style="font-size:11px;font-weight:800;letter-spacing:0.05em;color:#5f6b7a">SIN REENVIAR</span>
+          <span style="font-size:34px;font-weight:800;color:#1b2f82">12</span>
+          <span style="font-size:11px;font-weight:700;color:#5f6b7a">NECESITAN SEGUIMIENTO</span>
+        </div>
+      </div>
+      <div style="display:grid;gap:8px">
+        <span style="font-size:12px;color:#8a94a6">Propuesta &mdash; jerarqu&iacute;a por tama&ntilde;o</span>
+        <div style="background:#fff;border:1px solid #e3e7ee;border-radius:4px;padding:12px 14px;display:grid;gap:5px">
+          <span style="font-size:12px;font-weight:500;color:#616b7c">Sin reenviar</span>
+          <span style="font-size:34px;font-weight:650;letter-spacing:-0.02em;color:#1a1f2b;font-variant-numeric:tabular-nums">12</span>
+          <span style="font-size:12px;color:#8a94a6">necesitan seguimiento</span>
+        </div>
+      </div>
+    </div>
+    <p style="margin:2px 0 0;font-size:12px;line-height:1.55;color:#8a94a6">La cifra manda porque es la mayor, no porque sea la m&aacute;s negra ni la m&aacute;s azul. El azul se libera para lo que se pulsa.</p>
+  </div>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1240,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
