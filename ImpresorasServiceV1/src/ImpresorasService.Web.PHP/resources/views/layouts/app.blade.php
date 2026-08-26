@@ -220,7 +220,11 @@
                         form.classList.contains('dbx-filters')
                         || form.classList.contains('filters-row')
                         || form.querySelector('.dbx-filters, .filters-row')
-                    );
+                    )
+                    // El dashboard trae su propio auto-submit (carga por fetch, sin recargar la
+                    // pagina). Si tambien lo engancha este, un solo change dispara dos submit y dos
+                    // peticiones concurrentes que se pisan al reemplazar el DOM.
+                    .filter(form => !form.hasAttribute('data-dashboard-filter-form'));
                 const debounceMs = 400;
                 const FOCUS_KEY = 'dbx-filter-focus';
 
