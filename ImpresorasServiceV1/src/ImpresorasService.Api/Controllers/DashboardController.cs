@@ -182,8 +182,18 @@ public class DashboardController : ControllerBase
 
         // Salidas de cola: primer evento a un estado que ya no cuenta como "en cola". RetryScheduled
         // sigue dentro de QueueStatuses, asi que un reintento no cuenta como salida.
+        //
+        // El complemento se calcula aqui y no con `!QueueStatuses.Contains(...)`: el provider de HANA
+        // no sabe traducir un NOT IN dentro de un AND y revienta con NullReferenceException en
+        // HanaQuerySqlGenerator.VisitSqlUnary, tumbando el endpoint entero con un 500. El IN positivo
+        // si traduce — es la forma que ya usa `overview`. PrintJobStatus es un enum cerrado, asi que
+        // el complemento es equivalente y no puede quedarse obsoleto en silencio.
+        var departureStatuses = Enum.GetValues<PrintJobStatus>()
+            .Where(s => !DashboardPrintJobPredicates.QueueStatuses.Contains(s))
+            .ToArray();
+
         var departures = await _dbContext.PrintJobEvents
-            .Where(e => e.NewStatus != null && !DashboardPrintJobPredicates.QueueStatuses.Contains(e.NewStatus.Value))
+            .Where(e => e.NewStatus != null && departureStatuses.Contains(e.NewStatus.Value))
             .Join(jobs, e => e.JobId, j => j.JobId, (e, j) => new { e.JobId, e.OccurredAtUtc })
             .GroupBy(x => x.JobId)
             .Select(g => g.Min(x => x.OccurredAtUtc))
