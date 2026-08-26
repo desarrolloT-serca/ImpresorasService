@@ -164,12 +164,34 @@ class ImpresorasController extends Controller
             }
         }
 
+        // Acotado por estado de conectividad, para que una incidencia del dashboard aterrice sobre
+        // las impresoras que la provocan y no sobre el listado entero de la tienda. "problem" es
+        // todo lo que no responde bien; el resto son los estados concretos que ya distingue
+        // printerConnectivityStatus(). Un filtro que no deja nada no se aplica: mejor el listado
+        // completo que una pagina vacia (misma regla que printerId).
+        $connectivityFilter = strtolower(trim((string) $request->query('connectivity', '')));
+        if ($focusedPrinter === null && in_array($connectivityFilter, ['problem', 'error', 'no_host', 'unchecked'], true)) {
+            $match = array_values(array_filter($selectedPrinters, function (array $printer) use ($connectivityFilter): bool {
+                $status = $this->printerConnectivityStatus($printer);
+
+                return $connectivityFilter === 'problem' ? $status !== 'ok' : $status === $connectivityFilter;
+            }));
+            if ($match === []) {
+                $connectivityFilter = '';
+            } else {
+                $selectedPrinters = $match;
+            }
+        } else {
+            $connectivityFilter = '';
+        }
+
         $view = view('impresoras.index', [
             'printers' => $selectedPrinters,
             'printersByStore' => array_values($printersByStore),
             'selectedStoreGroup' => $selectedStoreGroup,
             'selectedStoreId' => $selectedStoreGroup['storeId'] ?? null,
             'focusedPrinter' => $focusedPrinter,
+            'connectivityFilter' => $connectivityFilter,
             'hasAnyPrinters' => count($printers) > 0,
             'pingIntervalSeconds' => config('impresoras.ping_interval_seconds', 30),
         ]);
