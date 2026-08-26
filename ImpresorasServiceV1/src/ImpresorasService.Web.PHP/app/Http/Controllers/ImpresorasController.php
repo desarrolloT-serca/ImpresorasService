@@ -28,8 +28,13 @@ class ImpresorasController extends Controller
             $params['storeId'] = $effectiveStore;
         }
         $path = 'api/printers' . (empty($params) ? '' : '?' . http_build_query($params));
-        $printers = $this->api->get($path) ?? [];
-        $stores = $this->api->get('api/stores?isActive=true') ?? [];
+
+        // En paralelo: son independientes y en secuencia se pagan dos idas y vueltas a la Api.
+        ['printers' => $printers, 'stores' => $stores] =
+            \GuzzleHttp\Promise\Utils::unwrap([
+                'printers' => $this->api->getAsync($path),
+                'stores'   => $this->api->getAsync('api/stores?isActive=true'),
+            ]);
 
         $printers = is_array($printers) ? $printers : [];
         $stores = is_array($stores) ? $stores : [];
