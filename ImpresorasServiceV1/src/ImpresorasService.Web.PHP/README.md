@@ -12,7 +12,7 @@ Consume la API .NET (`ImpresorasService.Api`) para operar cola, impresoras, regl
 
 ## Requisitos
 
-- PHP 8.2+
+- PHP 8.5 (8.5.12 o superior)
 - Composer
 - Node.js + npm
 

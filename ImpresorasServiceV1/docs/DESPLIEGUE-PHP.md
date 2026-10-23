@@ -42,7 +42,7 @@ server {
         root /var/www/impresoras-service/src/ImpresorasService.Web.PHP/public;
         try_files $uri $uri/ /index.php?$query_string;
         location ~ \.php$ {
-            fastcgi_pass unix:/var/run/php/php8.2-fpm.sock;
+            fastcgi_pass unix:/var/run/php/php8.5-fpm.sock;
             fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
             include fastcgi_params;
         }
@@ -102,6 +102,6 @@ Evidencias sugeridas para auditoría:
 
 ## Requisitos
 
-- PHP 8.2+
+- PHP 8.5 (8.5.12 o superior: corrige PHP2Shell, CVE-2026-109618/109619)
 - Composer
 - Extensión PHP: curl, json, mbstring, openssl, pdo, tokenizer, xml

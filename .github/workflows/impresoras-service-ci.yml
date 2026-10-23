@@ -47,7 +47,7 @@ jobs:
         run: dotnet test tests/ImpresorasService.Api.IntegrationTests/ImpresorasService.Api.IntegrationTests.csproj --no-build --configuration Release --verbosity normal
 
   php:
-    name: Test (Laravel / PHP 8.2)
+    name: Test (Laravel / PHP 8.5)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -60,7 +60,7 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: "8.2"
+          php-version: "8.5"
           extensions: mbstring, xml, curl, sqlite3
           coverage: none
 
