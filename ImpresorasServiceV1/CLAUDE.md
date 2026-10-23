@@ -12,6 +12,7 @@ Sistema de cola de impresión para tiendas de retail. Ingesta trabajos (albarane
 | `ImpresorasService.Api` | ASP.NET Core 8 | 5105 | REST API con JWT; consume Core |
 | `ImpresorasService.Worker` | .NET 8 Host Service | — | Servicios de fondo (ingesta, ejecución, watchdog, alertas) |
 | `ImpresorasService.Web.PHP` | Laravel 12, PHP 8.5 | 8000 | Frontend web (Blade + CSS glass-effect) |
+| `ImpresorasService.Web` | React 19, Vite (stack del ERP nuevo) | 5173 (dev) | Frontend que sustituirá al PHP; en construcción (`docs/PLAN.md` B7) |
 | PostgreSQL | Npgsql EF provider | 5433 | Base de datos única (`10.110.46.121`, BD `serca`, usuario `pb8_xp57`, esquema **`admon` provisional**, ver `docs/PLAN.md` B0.5). Servidor 19beta4 |
 | Telegram Bot API | HTTP | — | Notificaciones de alertas de tienda |
 
@@ -224,6 +225,8 @@ src/ImpresorasService.Web.PHP/
   app/Http/Controllers/               → controladores Laravel
   resources/views/                    → Blade templates
   resources/css/dbx.css               → estilos del sistema
+
+src/ImpresorasService.Web/            → frontend React nuevo; modules/impresion es un módulo del ERP (ver su README)
 
 tests/ImpresorasService.Api.IntegrationTests/  → xUnit + SQLite en memoria
 

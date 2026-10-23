@@ -2,7 +2,7 @@
 
 **Fuente de verdad única del trabajo pendiente.**
 
-**Estado a 2026-10-23**, rama `feat/postgres`. `dotnet test` 181/181.
+**Estado a 2026-10-23**, rama `feat/postgres`. `dotnet test` 185/185.
 
 El 23/10/2026 la cola pasó de SAP HANA a PostgreSQL y el origen de los trabajos pasó de SAP al ERP
 propio. La documentación y los scripts de la etapa HANA se retiraron del repositorio; siguen en el
@@ -17,7 +17,7 @@ historial de git (hasta el commit `602018f`).
 | **`PLAN.md`** (este) | Qué hacer y en qué orden |
 | `contrato-kpi-dashboard.md` | Contrato de los KPI del dashboard |
 | `gate-i1-ipp-por-trabajo.md` | Medición del parque: por qué no se puede confirmar la impresión por trabajo |
-| `ejecutable.md`, `DESPLIEGUE-PHP.md`, `SMOKE-TESTS-PHP.md`, `GUIA-ESTILO-DBX-UI.md`, `FRONTEND-WEB-PHP-GIT.md` | Guías operativas |
+| `ejecutable.md`, `DESPLIEGUE-PHP.md`, `DESPLIEGUE-WEB.md`, `SMOKE-TESTS-PHP.md`, `GUIA-ESTILO-DBX-UI.md`, `FRONTEND-WEB-PHP-GIT.md` | Guías operativas |
 | `RESUMEN-PROYECTO.md` | Orientación rápida en el código |
 
 ---
@@ -71,6 +71,46 @@ etiqueta «Impreso» y el KPI `printed` incluye además `SpoolAccepted` y `Print
 | Lanzamiento real del proceso de impresión e IPP sin tests | Necesitan spooler o impresora reales. `WindowsPrintSpooler.ClassifyFailedExit` sí está cubierto |
 | Reclamar entre la lectura y el UPDATE (409 de `cancel`) sin test | Exige interponerse en el comando SQL |
 | Ruido en el registro de eventos | Cada `dotnet test` escribe avisos y errores en el Event Log de Windows: el entorno `Testing` no debería registrar ese proveedor |
+
+### B7 · Frontend React con las piezas del ERP
+
+Decidido el 23/10/2026. Sustituye al PHP por fases. El módulo se escribe como uno del ERP nuevo,
+para poder abrirlo en un iframe o copiarlo dentro del ERP el día que se decida
+(`src/ImpresorasService.Web/README.md`).
+
+| # | Fase | Estado |
+|---|---|---|
+| B7.0 | Base: app, piezas del ERP copiadas (commit `064b912`), contenedor con pestañas, `api()` | ✅ 23/10/2026, rama `feat/web-erp` |
+| B7.1 | Sesión: la API .NET deja el token en una cookie `httpOnly` (como el ERP); se entra con los usuarios actuales | ✅ 23/10/2026: `login` abre la sesión, `me` y `logout` nuevos, sin límite de intentos en esos dos |
+| B7.2 | Cola e impresoras; las tiendas pasan a la app nueva y el PHP queda para administración | 🟡 Pantallas hechas el 23/10/2026 y despliegue preparado (`DESPLIEGUE-WEB.md`, `nginx/impresion-web.conf`, sin probar contra un nginx). Falta desplegarlo en el servidor |
+| B7.3 | Dashboard y administración; se retira el PHP (y con él B0.6) | 🟡 Pantallas hechas el 23/10/2026: dashboard, alta/edición/baja de impresoras, reglas, umbrales, Telegram y pruebas, todas en el grupo «Impresión» del menú; Tiendas y Usuarios, aparte y solo para la transición (`src/app/transicion`). Falta retirar el PHP (B7.3a), después de desplegar B7.2 |
+| B7.4 | Paso al ERP: iframe o integración, con un pase de entrada firmado por el ERP | ⏳ Decisión con el equipo del ERP. Lado .NET: la identidad pasa a ser el operador (`fdopera`) y las tiendas, los almacenes (`fdalmacen`, por vista o sincronización de `printer_store`); con eso sobran `printer_user`, `POST /api/auth/login` y las pantallas Tiendas y Usuarios |
+
+**B7.3a · Retirar el PHP.** Solo con la web nueva desplegada y comprobada en producción, y las
+tiendas avisadas de la dirección nueva: hasta entonces el PHP es lo que funciona, y borrarlo de
+`main` impediría volver a desplegarlo.
+
+1. Borrar `src/ImpresorasService.Web.PHP/` (134 ficheros versionados).
+2. Borrar `DESPLIEGUE-PHP.md`, `SMOKE-TESTS-PHP.md`, `FRONTEND-WEB-PHP-GIT.md`, `GUIA-ESTILO-DBX-UI.md` y
+   `nginx/impresoras-service.conf`; quitar las menciones de `README.md`, `RESUMEN-PROYECTO.md`,
+   `ejecutable.md` (`-FrontendOrigin`) y `CLAUDE.md`; quitar B0.6 y las entradas de Laravel del `.gitignore`.
+3. API: quitar `POST /api/auth/token` (solo lo usa el PHP) y su test, y los orígenes `:8000` de
+   `Cors:AllowedOrigins`. La web nueva va en el mismo origen y no necesita CORS, pero la API exige la
+   lista fuera de Development: decidir si se deja vacía con esa comprobación quitada.
+4. Servidor: quitar php-fpm y el `server` de nginx del PHP.
+
+Diferencias con el PHP que quedan a propósito: Pruebas guarda los escenarios en el navegador y pide
+el PDF en cada prueba (el PHP los guardaba en su disco); la cola ya no deja ocultar columnas.
+
+Reglas de acceso para cuando la identidad sea el operador del ERP (propuesta del usuario, no
+final), por `fdopera.cod_dep`:
+
+- Admin: 200 INFORMATICA. Jefe de su tienda: 10 RESPONSABLE TIENDA. Empleado: 1, 2, 3, 5, 11,
+  106, 108, 113 y 114. El resto, sin acceso.
+- Rol (qué hace) y tiendas (qué ve) van por separado: el call center (113) es empleado pero ve
+  todas las tiendas. Sin tienda válida no se ve ninguna, nunca todas.
+- Varias tiendas por operador: se diseña junto con la decisión D1 del ERP. Imprimir fuera del
+  almacén propio pide confirmación.
 
 ---
 
