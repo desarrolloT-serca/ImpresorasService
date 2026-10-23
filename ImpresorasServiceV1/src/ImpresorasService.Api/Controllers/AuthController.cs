@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Text;
 using ImpresorasService.Api.Security;
 using ImpresorasService.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -15,18 +16,27 @@ namespace ImpresorasService.Api.Controllers;
 [EnableRateLimiting("auth")]
 public class AuthController : ControllerBase
 {
+    /// <summary>
+    /// Sesión del frontend React (src/ImpresorasService.Web): el mismo JWT que <c>token</c>, pero en
+    /// una cookie que el navegador no deja leer, como la sesión del ERP. Program.cs la lee si la
+    /// petición no trae cabecera Authorization (la que usa el PHP).
+    /// </summary>
+    public const string SessionCookie = "impresoras_sesion";
+
     private readonly ImpresorasDbContext _db;
     private readonly IConfiguration _config;
+    private readonly IWebHostEnvironment _env;
 
-    public AuthController(ImpresorasDbContext db, IConfiguration config)
+    public AuthController(ImpresorasDbContext db, IConfiguration config, IWebHostEnvironment env)
     {
         _db = db;
         _config = config;
+        _env = env;
     }
 
     /// <summary>
-    /// Login con usuario y contraseña. Valida contra la tabla Users.
-    /// Devuelve datos del usuario si las credenciales son correctas.
+    /// Login con usuario y contraseña. Valida contra la tabla Users, abre la sesión del frontend
+    /// React (cookie) y devuelve los datos del usuario, sin el token.
     /// </summary>
     [HttpPost("login")]
     public async Task<IActionResult> Login(
@@ -37,12 +47,35 @@ public class AuthController : ControllerBase
         if (user == null)
             return Unauthorized(new { error = error ?? "Credenciales inválidas" });
 
-        return Ok(new LoginResponse(
-            user.UserId,
-            user.Login,
-            user.DisplayName ?? user.Login,
-            RoleCatalog.Normalize(user.Role),
-            user.StoreId));
+        Response.Cookies.Append(SessionCookie, GenerateJwt(user), SessionCookieOptions(DateTimeOffset.UtcNow.AddHours(8)));
+        return Ok(ToLoginResponse(user));
+    }
+
+    /// <summary>
+    /// Usuario de la sesión. El frontend lo pide al cargar y cada minuto: sin límite de intentos
+    /// (detrás de Nginx el límite es global y lo agotarían entre todas las tiendas).
+    /// </summary>
+    [HttpGet("me")]
+    [Authorize(Policy = "EmployeeOrAbove")]
+    [DisableRateLimiting]
+    public async Task<IActionResult> Me(CancellationToken cancellationToken)
+    {
+        var user = int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId)
+            ? await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserId == userId, cancellationToken)
+            : null;
+        return user == null ? Unauthorized() : Ok(ToLoginResponse(user));
+    }
+
+    /// <summary>
+    /// Cierra la sesión del frontend React borrando su cookie. No sube <c>TokenVersion</c>: las
+    /// cuentas son de tienda y eso echaría también a los compañeros.
+    /// </summary>
+    [HttpPost("logout")]
+    [DisableRateLimiting]
+    public IActionResult Logout()
+    {
+        Response.Cookies.Delete(SessionCookie, SessionCookieOptions(null));
+        return NoContent();
     }
 
     /// <summary>
@@ -71,6 +104,24 @@ public class AuthController : ControllerBase
                 RoleCatalog.Normalize(user.Role),
                 user.StoreId)));
     }
+
+    private static LoginResponse ToLoginResponse(ImpresorasService.Domain.Entities.User user) => new(
+        user.UserId,
+        user.Login,
+        user.DisplayName ?? user.Login,
+        RoleCatalog.Normalize(user.Role),
+        user.StoreId);
+
+    private CookieOptions SessionCookieOptions(DateTimeOffset? expires) => new()
+    {
+        HttpOnly = true,
+        // Strict: otro sitio no puede hacer peticiones con esta sesión (CSRF). Igual que el ERP.
+        SameSite = SameSiteMode.Strict,
+        // En desarrollo se sirve por http://localhost.
+        Secure = !_env.IsDevelopment(),
+        Path = "/api",
+        Expires = expires,
+    };
 
     private async Task<(ImpresorasService.Domain.Entities.User? user, string? error)> ValidateCredentialsAsync(
         string? login, string? password, CancellationToken ct)

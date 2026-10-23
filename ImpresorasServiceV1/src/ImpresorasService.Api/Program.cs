@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Threading.RateLimiting;
+using ImpresorasService.Api.Controllers;
 using ImpresorasService.Api.HealthChecks;
 using ImpresorasService.Api.Security;
 using ImpresorasService.Application;
@@ -144,6 +145,14 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         // cambiado su contraseña después de emitirse este token (Fase 5).
         options.Events = new JwtBearerEvents
         {
+            // El frontend React no ve el token: llega en la cookie de sesión. Con cabecera
+            // Authorization (el PHP) manda la cabecera.
+            OnMessageReceived = context =>
+            {
+                if (!context.Request.Headers.ContainsKey("Authorization"))
+                    context.Token = context.Request.Cookies[AuthController.SessionCookie];
+                return Task.CompletedTask;
+            },
             OnTokenValidated = UserRevocationValidator.ValidateAsync
         };
     });
