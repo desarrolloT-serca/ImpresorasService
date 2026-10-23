@@ -43,8 +43,11 @@ src/ImpresorasService.Web.PHP/node_modules/
 src/ImpresorasService.Web.PHP/.env
 src/ImpresorasService.Web.PHP/.env.*
 !src/ImpresorasService.Web.PHP/.env.example
-src/ImpresorasService.Web.PHP/storage/logs/
-src/ImpresorasService.Web.PHP/bootstrap/cache/
+# Contenido ignorado, carpeta no: Laravel exige que existan (composer install falla sin bootstrap/cache).
+src/ImpresorasService.Web.PHP/storage/logs/*
+!src/ImpresorasService.Web.PHP/storage/logs/.gitignore
+src/ImpresorasService.Web.PHP/bootstrap/cache/*
+!src/ImpresorasService.Web.PHP/bootstrap/cache/.gitignore
 src/ImpresorasService.Web.PHP/public/build/
 src/ImpresorasService.Web.PHP/public/hot/
 src/ImpresorasService.Web.PHP/.phpunit.result.cache
