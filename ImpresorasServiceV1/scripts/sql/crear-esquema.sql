@@ -7,11 +7,8 @@
 -- A mano:  psql ... -v ON_ERROR_STOP=1 -1 -c "SET search_path TO impresoras" -f crear-esquema.sql
 --
 -- Tipos:
---   Fechas -> varchar(26). herencia-hana: el modelo EF convierte TODO DateTimeOffset a texto
---   "yyyy-MM-dd HH:mm:ss" (ver ImpresorasDbContext) y Npgsql no deja meter texto
---   en una columna timestamp. Es el mismo formato que ya ejercitan los tests en SQLite, y al ser
---   ISO de ancho fijo en UTC ordena y compara bien como texto. Pasar a timestamptz exige quitar
---   esos converters y revisar que todo DateTimeOffset llegue con offset 0.
+--   Fechas -> timestamptz. La aplicacion escribe siempre en UTC (ImpresorasDbContext normaliza
+--   cualquier DateTimeOffset con otro offset antes de enviarlo).
 --   IDENTITY en las 5 claves que genera la base de datos (EF las espera: ValueGeneratedOnAdd).
 --
 -- Usuarios: no se siembran aqui (el hash es BCrypt). El primero se crea con POST /bootstrap/first-admin,
@@ -23,8 +20,8 @@ CREATE TABLE printer_store (
     store_id integer NOT NULL,
     name varchar(120) NOT NULL,
     is_active boolean NOT NULL DEFAULT TRUE,
-    created_at_utc varchar(26) NOT NULL,
-    updated_at_utc varchar(26) NOT NULL,
+    created_at_utc timestamptz NOT NULL,
+    updated_at_utc timestamptz NOT NULL,
     PRIMARY KEY (store_id)
 );
 CREATE INDEX ix_printer_store_name ON printer_store (name);
@@ -37,11 +34,11 @@ CREATE TABLE printer_printer (
     store_id integer NOT NULL,
     is_active boolean NOT NULL DEFAULT TRUE,
     capabilities_json text,
-    created_at_utc varchar(26) NOT NULL,
-    updated_at_utc varchar(26) NOT NULL,
+    created_at_utc timestamptz NOT NULL,
+    updated_at_utc timestamptz NOT NULL,
     connection_failures_streak integer NOT NULL DEFAULT 0,
     last_connection_ok boolean,
-    last_connection_check_at_utc varchar(26),
+    last_connection_check_at_utc timestamptz,
     last_connection_transport varchar(40),
     last_connection_error varchar(400),
     ipp_supported boolean,
@@ -57,11 +54,11 @@ CREATE TABLE printer_routing_rule (
     channel varchar(40),
     printer_id integer NOT NULL,
     is_active boolean NOT NULL DEFAULT TRUE,
-    valid_from_utc varchar(26) NOT NULL,
-    valid_to_utc varchar(26),
+    valid_from_utc timestamptz NOT NULL,
+    valid_to_utc timestamptz,
     created_by varchar(120) NOT NULL,
-    created_at_utc varchar(26) NOT NULL,
-    updated_at_utc varchar(26) NOT NULL,
+    created_at_utc timestamptz NOT NULL,
+    updated_at_utc timestamptz NOT NULL,
     PRIMARY KEY (rule_id)
 );
 CREATE INDEX ix_printer_routing_rule_resolve ON printer_routing_rule (is_active, priority, store_id, document_type, channel);
@@ -78,10 +75,10 @@ CREATE TABLE printer_source_print_job (
     document_type varchar(80) NOT NULL,
     channel varchar(40),
     pdf_blob bytea,
-    created_at_utc varchar(26) NOT NULL DEFAULT to_char(now() AT TIME ZONE 'utc', 'YYYY-MM-DD HH24:MI:SS'),
+    created_at_utc timestamptz NOT NULL DEFAULT now(),
     is_processed boolean NOT NULL DEFAULT FALSE,
     claimed_by varchar(200),
-    claimed_until_utc varchar(26),
+    claimed_until_utc timestamptz,
     claim_token varchar(64),
     PRIMARY KEY (id)
 );
@@ -100,12 +97,12 @@ CREATE TABLE printer_print_job (
     status varchar(40) NOT NULL,
     printer_id integer,
     attempt_count integer NOT NULL DEFAULT 0,
-    next_retry_at_utc varchar(26),
+    next_retry_at_utc timestamptz,
     last_error_code varchar(60),
     last_error_message varchar(1000),
     correlation_id bytea NOT NULL,
-    created_at_utc varchar(26) NOT NULL,
-    updated_at_utc varchar(26) NOT NULL,
+    created_at_utc timestamptz NOT NULL,
+    updated_at_utc timestamptz NOT NULL,
     row_version bytea,
     PRIMARY KEY (job_id)
 );
@@ -123,7 +120,7 @@ CREATE TABLE printer_print_job_event (
     actor_type varchar(30) NOT NULL,
     actor_id varchar(120),
     metadata_json text,
-    occurred_at_utc varchar(26) NOT NULL,
+    occurred_at_utc timestamptz NOT NULL,
     PRIMARY KEY (event_id)
 );
 CREATE INDEX ix_printer_print_job_event_job_occurred ON printer_print_job_event (job_id, occurred_at_utc);
@@ -157,7 +154,7 @@ CREATE TABLE printer_dashboard_threshold (
     conn_critical_failures_min integer NOT NULL DEFAULT 3,
     conn_warning_severity varchar(32) NOT NULL DEFAULT 'warning',
     conn_critical_severity varchar(32) NOT NULL DEFAULT 'critical',
-    updated_at_utc varchar(26) NOT NULL,
+    updated_at_utc timestamptz NOT NULL,
     PRIMARY KEY (id)
 );
 
@@ -166,7 +163,7 @@ CREATE TABLE printer_telegram_config (
     min_severity varchar(20) NOT NULL DEFAULT 'critical',
     notify_on_recovery boolean NOT NULL DEFAULT TRUE,
     check_interval_minutes integer NOT NULL DEFAULT 5,
-    updated_at_utc varchar(26) NOT NULL,
+    updated_at_utc timestamptz NOT NULL,
     PRIMARY KEY (id)
 );
 
@@ -174,7 +171,7 @@ CREATE TABLE printer_telegram_chat (
     chat_id bigint NOT NULL,
     description varchar(120),
     is_active boolean NOT NULL DEFAULT TRUE,
-    created_at_utc varchar(26) NOT NULL,
+    created_at_utc timestamptz NOT NULL,
     store_id integer,
     PRIMARY KEY (chat_id)
 );
@@ -183,15 +180,15 @@ CREATE TABLE printer_alert_state (
     store_id integer NOT NULL,
     last_health varchar(20) NOT NULL DEFAULT 'healthy',
     notified_health varchar(20),
-    notified_at_utc varchar(26),
-    checked_at_utc varchar(26) NOT NULL,
+    notified_at_utc timestamptz,
+    checked_at_utc timestamptz NOT NULL,
     PRIMARY KEY (store_id)
 );
 
 CREATE TABLE printer_worker_lock (
     id integer NOT NULL,
     holder varchar(200),
-    heartbeat_utc varchar(26) NOT NULL,
+    heartbeat_utc timestamptz NOT NULL,
     PRIMARY KEY (id)
 );
-INSERT INTO printer_worker_lock (id, holder, heartbeat_utc) VALUES (1, NULL, '1970-01-01 00:00:00');
+INSERT INTO printer_worker_lock (id, holder, heartbeat_utc) VALUES (1, NULL, '1970-01-01 00:00:00+00');

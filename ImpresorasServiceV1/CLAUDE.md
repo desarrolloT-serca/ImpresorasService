@@ -139,9 +139,11 @@ vía `Search Path`); Api, Worker y `scripts/crear-esquema.ps1` la leen de ahí. 
 raíz (fuera de git, lo carga `Infrastructure/DotEnv.cs`; contraseña en `PGPASSWORD`). No poner nombres de
 esquema en código, config ni DDL. La sección `Source` (`SourceSystem=ERP`, `LeaseSeconds`) describe el origen.
 
-**Fechas como texto**: el modelo EF convierte todo `DateTimeOffset` a `"yyyy-MM-dd HH:mm:ss"` y las
-columnas de fecha son `varchar(26)`, igual que en los tests SQLite. No poner `timestamp` en el DDL sin
-quitar antes esos converters de `ImpresorasDbContext`: Npgsql rechaza texto en columnas `timestamp`.
+**Fechas**: en PostgreSQL son `timestamptz` y siempre UTC (`ImpresorasDbContext` normaliza cualquier
+`DateTimeOffset` con otro offset; Npgsql rechaza offsets distintos de 0). Solo en los tests (SQLite) se
+guardan como texto ISO, porque SQLite no compara fechas en SQL: el modelo depende del proveedor y se
+cachea por proveedor. Las fechas en PostgreSQL las cubre `PostgresQueryTranslationTests` y la prueba
+contra un PostgreSQL real.
 
 **`herencia-hana:`** marca en el código los rodeos que solo existían por el proveedor de HANA (la BD
 hasta el 23/10/2026). Son el bloque B6 de `docs/PLAN.md`: al simplificar uno, quitar su marca.

@@ -53,6 +53,37 @@ public sealed class PostgresQueryTranslationTests
         Assert.Contains("GROUP BY", sql, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Dates_AreNativeOnPostgres_AndTextOnSqlite_InTheSameProcess()
+    {
+        using var pg = PostgresContext();
+        using var sqlite = new ImpresorasDbContext(new DbContextOptionsBuilder<ImpresorasDbContext>()
+            .UseSqlite("Data Source=:memory:")
+            .Options);
+
+        static string ColumnType(ImpresorasDbContext db) => db.Model
+            .FindEntityType(typeof(ImpresorasService.Domain.Entities.PrintJob))!
+            .FindProperty(nameof(ImpresorasService.Domain.Entities.PrintJob.CreatedAtUtc))!
+            .GetRelationalTypeMapping().StoreType;
+
+        // Si el modelo se cachease solo por tipo de contexto, los dos verían el mismo.
+        Assert.Equal("timestamp with time zone", ColumnType(pg));
+        Assert.Equal("TEXT", ColumnType(sqlite));
+    }
+
+    [Fact]
+    public void DateRangeFilter_TranslatesOnPostgres()
+    {
+        using var db = PostgresContext();
+        var from = new DateTimeOffset(2026, 10, 23, 10, 0, 0, TimeSpan.FromHours(2));
+
+        var sql = db.PrintJobs.Where(x => x.CreatedAtUtc >= from && x.NextRetryAtUtc != null).ToQueryString();
+
+        Assert.Contains("created_at_utc >=", sql, StringComparison.OrdinalIgnoreCase);
+        // 10:00 +02:00 llega a la BD como 08:00 UTC: Npgsql rechaza offsets distintos de 0.
+        Assert.Contains("2026-10-23T08:00:00", sql);
+    }
+
     private static readonly List<int> ActiveStoreIds = [1, 2, 3];
 
     internal static ImpresorasDbContext PostgresContext() =>

@@ -131,8 +131,8 @@ public class DashboardController : ControllerBase
     /// caminando hacia atras desde la foto de ahora: depth[n-1] = depth[n] - llegadas[n] + salidas[n].
     /// Sale exacta y ahorra la consulta de sembrado que haria falta yendo hacia delante.
     ///
-    /// Los tramos se agrupan en memoria y no en SQL: las fechas se guardan como texto (ver
-    /// ImpresorasDbContext) y el volumen de una ventana de dashboard no justifica truncarlas en SQL.
+    /// herencia-hana: los tramos se agrupan en memoria; con fechas nativas podría hacerse en SQL
+    /// (docs/PLAN.md, B6.3). El volumen de una ventana de dashboard es pequeño.
     /// </summary>
     [HttpGet("timeseries")]
     public async Task<IActionResult> GetTimeseries(

@@ -2,6 +2,7 @@ using System.Globalization;
 using ImpresorasService.Domain;
 using ImpresorasService.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Microsoft.Extensions.Logging;
 
@@ -14,42 +15,29 @@ public class ImpresorasDbContext : DbContext
     // ponytail: heurística por tiempo, no una unicidad real — un reintento legítimo muy rápido
     // (backoff corto) podría dar un falso positivo; subir el umbral si eso genera ruido.
     private static readonly TimeSpan DuplicateEventDetectionWindow = TimeSpan.FromSeconds(5);
-    /// <summary>
-    /// herencia-hana: las ISO son las que escribe el propio converter (toDb); las de día primero
-    /// ("17/6/2026 6:58:40") las devolvía el driver anterior, que formateaba con la cultura es-ES.
-    /// En PostgreSQL solo hay ISO: los formatos d/M sobran (docs/PLAN.md, B6).
-    ///
-    /// Todas son día-primero a propósito: NO añadir aquí ni en el fallback nada que interprete
-    /// mes primero. Un "5/8/2026" leído como MM/dd da el 8 de mayo donde el driver dijo 5 de agosto,
-    /// y como el error solo aparece con día &lt;= 12 pasa desapercibido meses.
-    /// </summary>
-    private static readonly string[] SupportedDateFormats =
-    {
-        "yyyy-MM-dd HH:mm:ss",
-        "yyyy-MM-dd HH:mm:ss.fff",
-        "yyyy-MM-dd HH:mm:ss.fffffff",
-        "yyyy-MM-ddTHH:mm:ss",
-        "yyyy-MM-ddTHH:mm:ss.fff",
-        "yyyy-MM-ddTHH:mm:ss.fffffff",
-        "O",
-        "d/M/yyyy H:mm:ss",
-        "d/M/yyyy H:mm:ss.fff",
-        "d/M/yyyy H:mm:ss.fffffff",
-        "d/M/yyyy H:mm",
-        "d/M/yyyy"
-    };
+    // Fechas. En PostgreSQL son timestamptz nativos; Npgsql solo acepta DateTimeOffset con offset 0,
+    // así que se normaliza a UTC al escribir (una fecha con +02:00 de la Api llegaría tal cual).
+    private static readonly ValueConverter<DateTimeOffset, DateTimeOffset> ToUtcConverter =
+        new(toDb => toDb.ToUniversalTime(), fromDb => fromDb);
+
+    private static readonly ValueConverter<DateTimeOffset?, DateTimeOffset?> NullableToUtcConverter =
+        new(toDb => toDb.HasValue ? toDb.Value.ToUniversalTime() : null, fromDb => fromDb);
+
+    // Los tests usan SQLite, que no compara ni ordena DateTimeOffset en SQL: ahí se guardan como texto
+    // ISO de ancho fijo en UTC, que ordena y compara igual. Solo para SQLite (ver ProviderModelCacheKey).
+    private const string SqliteDateFormat = "yyyy-MM-dd HH:mm:ss";
 
     private static readonly ValueConverter<DateTimeOffset, string> DateTimeOffsetToStringConverter =
         new(
-            toDb => toDb.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
-            fromDb => ParseDateTimeOffset(fromDb));
+            toDb => toDb.UtcDateTime.ToString(SqliteDateFormat, CultureInfo.InvariantCulture),
+            fromDb => ParseSqliteDate(fromDb));
 
     private static readonly ValueConverter<DateTimeOffset?, string?> NullableDateTimeOffsetToStringConverter =
         new(
             toDb => toDb.HasValue
-                ? toDb.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
+                ? toDb.Value.UtcDateTime.ToString(SqliteDateFormat, CultureInfo.InvariantCulture)
                 : null,
-            fromDb => string.IsNullOrWhiteSpace(fromDb) ? null : ParseDateTimeOffset(fromDb));
+            fromDb => string.IsNullOrWhiteSpace(fromDb) ? null : ParseSqliteDate(fromDb));
 
     private static readonly ValueConverter<Guid, byte[]> GuidToBytesConverter =
         new(
@@ -68,27 +56,19 @@ public class ImpresorasDbContext : DbContext
         _logger = logger;
     }
 
-    private static DateTimeOffset ParseDateTimeOffset(string value)
+    private static DateTimeOffset ParseSqliteDate(string value) =>
+        DateTimeOffset.ParseExact(value.Trim(), SqliteDateFormat, CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+
+    // El modelo depende del proveedor (fechas nativas o texto). EF cachea un modelo por tipo de
+    // contexto; sin esto, un proceso que use los dos (los tests) reutilizaría el del primero.
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
+        optionsBuilder.ReplaceService<IModelCacheKeyFactory, ProviderModelCacheKey>();
+
+    private sealed class ProviderModelCacheKey : IModelCacheKeyFactory
     {
-        var trimmed = value.Trim();
-        var styles = DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal;
-
-        if (DateTimeOffset.TryParseExact(
-                trimmed,
-                SupportedDateFormats,
-                CultureInfo.InvariantCulture,
-                styles,
-                out var parsedInvariant))
-            return parsedInvariant;
-
-        // Último recurso en es-ES (día primero), la misma cultura con la que formatea el driver.
-        // Aquí había un TryParse con InvariantCulture que corría ANTES que este: al ser mes-primero
-        // convertía "5/8/2026" en el 8 de mayo, y solo fallaba —cayendo en este es-ES correcto—
-        // cuando el día era > 12. Ese era el origen real del baile de fechas del dashboard.
-        if (DateTimeOffset.TryParse(trimmed, CultureInfo.GetCultureInfo("es-ES"), styles, out var fallbackEs))
-            return fallbackEs;
-
-        throw new FormatException($"No se pudo interpretar la fecha '{value}'.");
+        public object Create(DbContext context, bool designTime) =>
+            (context.GetType(), context.Database.ProviderName, designTime);
     }
 
     public override int SaveChanges()
@@ -461,16 +441,15 @@ public class ImpresorasDbContext : DbContext
             entity.Property(x => x.HeartbeatAtUtc).HasColumnName("heartbeat_utc").IsRequired();
         });
 
-        // herencia-hana: todo DateTimeOffset se guarda como texto "yyyy-MM-dd HH:mm:ss" y por eso las
-        // columnas de fecha son varchar. Pasar a timestamptz = quitar estos converters + DDL (docs/PLAN.md, B6).
+        var nativeDates = Database.IsNpgsql();
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {
             foreach (var property in entityType.GetProperties())
             {
                 if (property.ClrType == typeof(DateTimeOffset))
-                    property.SetValueConverter(DateTimeOffsetToStringConverter);
+                    property.SetValueConverter(nativeDates ? ToUtcConverter : DateTimeOffsetToStringConverter);
                 else if (property.ClrType == typeof(DateTimeOffset?))
-                    property.SetValueConverter(NullableDateTimeOffsetToStringConverter);
+                    property.SetValueConverter(nativeDates ? NullableToUtcConverter : NullableDateTimeOffsetToStringConverter);
                 else if (property.ClrType == typeof(Guid))
                     property.SetValueConverter(GuidToBytesConverter);
                 else if (property.ClrType == typeof(Guid?))
