@@ -30,7 +30,7 @@ public static class DashboardPrintJobPredicates
     /// Estados que cuentan como "impreso" para el KPI `printed` (dashboard). Antes vivía como
     /// copia privada en DashboardController; centralizado aquí para que cualquier futuro
     /// consumidor (Worker, otro controller) no tenga que mantener una segunda copia sincronizada —
-    /// A-ARCH-03, docs/auditoria-integral-2026-07-21.md.
+    /// A-ARCH-03.
     /// </summary>
     public static readonly PrintJobStatus[] PrintedStatuses =
     [
@@ -42,7 +42,7 @@ public static class DashboardPrintJobPredicates
     /// <summary>
     /// Estados que cuentan como "en cola" (queueCurrent). Antes vivía duplicado, con comentario
     /// "debe mantenerse idéntico", en DashboardController y StoreHealthAlertBackgroundService —
-    /// A-ARCH-03, docs/auditoria-integral-2026-07-21.md.
+    /// A-ARCH-03.
     /// </summary>
     public static readonly PrintJobStatus[] QueueStatuses =
     [

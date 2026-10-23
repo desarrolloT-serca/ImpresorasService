@@ -63,7 +63,7 @@ public sealed class RoutingServiceFlowTests
         db.PrintJobs.Add(new PrintJob
         {
             JobId = jobId,
-            SourceSystem = "SAP-TEST",
+            SourceSystem = "ERP-TEST",
             ExternalJobId = "EXT-1",
             StoreId = 1,
             DocumentType = "FACTURA",
@@ -164,7 +164,7 @@ public sealed class RoutingServiceFlowTests
         db.PrintJobs.Add(new PrintJob
         {
             JobId = jobId,
-            SourceSystem = "SAP-TEST",
+            SourceSystem = "ERP-TEST",
             ExternalJobId = "EXT-4",
             StoreId = 1,
             DocumentType = "TIPO_INVENTADO",
@@ -229,7 +229,7 @@ public sealed class RoutingServiceFlowTests
         db.PrintJobs.Add(new PrintJob
         {
             JobId = jobId,
-            SourceSystem = "SAP-TEST",
+            SourceSystem = "ERP-TEST",
             ExternalJobId = "EXT-2",
             StoreId = 1,
             DocumentType = "FACTURA",
@@ -291,7 +291,7 @@ public sealed class RoutingServiceFlowTests
         db.PrintJobs.Add(new PrintJob
         {
             JobId = jobId,
-            SourceSystem = "SAP-TEST",
+            SourceSystem = "ERP-TEST",
             ExternalJobId = "EXT-3",
             StoreId = 1,
             DocumentType = "FACTURA",

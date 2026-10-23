@@ -75,7 +75,7 @@ public class SourcePrintJobsController : ControllerBase
         [FromBody] CreateSourcePrintJobRequest request,
         CancellationToken cancellationToken)
     {
-        string sourceSystem = string.IsNullOrWhiteSpace(request.SourceSystem) ? "SAP-TEST" : request.SourceSystem;
+        string sourceSystem = string.IsNullOrWhiteSpace(request.SourceSystem) ? "ERP-TEST" : request.SourceSystem;
         string externalJobId = string.IsNullOrWhiteSpace(request.ExternalJobId)
             ? $"JOB-{Guid.NewGuid():N}"
             : request.ExternalJobId;
@@ -83,16 +83,12 @@ public class SourcePrintJobsController : ControllerBase
         bool existsInSource = await _dbContext.SourcePrintJobs
             .AsNoTracking()
             .Where(x => x.SourceSystem == sourceSystem && x.ExternalJobId == externalJobId)
-            .Select(x => x.Id)
-            .Take(1)
-            .CountAsync(cancellationToken) > 0;
+            .AnyAsync(cancellationToken);
 
         bool existsInQueue = await _dbContext.PrintJobs
             .AsNoTracking()
             .Where(x => x.SourceSystem == sourceSystem && x.ExternalJobId == externalJobId)
-            .Select(x => x.JobId)
-            .Take(1)
-            .CountAsync(cancellationToken) > 0;
+            .AnyAsync(cancellationToken);
 
         if (existsInSource || existsInQueue)
         {

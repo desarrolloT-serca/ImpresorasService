@@ -1,5 +1,5 @@
 # CI ImpresorasServiceV1 (.NET + Laravel).
-# Ampliar con E2E y smoke HANA cuando crezca la batería de pruebas.
+# Ampliar con E2E y con pruebas contra PostgreSQL real cuando crezca la batería de pruebas.
 name: ImpresorasService CI
 
 on:
@@ -17,7 +17,7 @@ on:
 jobs:
   dotnet:
     name: Build and test (.NET 8)
-    # H-11 (docs/auditoria/revision-garantias-2026-08-12.md): en ubuntu,
+    # H-11: en ubuntu,
     # RuntimeInformation.IsOSPlatform(OSPlatform.Windows) es false y TODO el CI corria con
     # NoOpPrintSpooler — la rama de produccion de AddInfrastructure no se ejercitaba nunca, y
     # tampoco el fail-fast que exige spooler real fuera de desarrollo. En windows-latest se
@@ -75,7 +75,7 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
-      # A-UI-05 (docs/auditoria-integral-2026-07-21.md): antes del fix, el CI nunca ejecutaba
+      # A-UI-05: antes del fix, el CI nunca ejecutaba
       # `vite build` — un error en dbx.css/system.css/app.js solo se descubría en producción,
       # degradando silenciosamente al fallback inline documentado en layouts/app.blade.php.
       - name: Build frontend assets (Vite)

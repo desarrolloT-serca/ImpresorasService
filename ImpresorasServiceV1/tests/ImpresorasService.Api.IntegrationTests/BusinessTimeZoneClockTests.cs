@@ -4,7 +4,7 @@ using Xunit;
 namespace ImpresorasService.Api.IntegrationTests;
 
 /// <summary>
-/// KPI-P2-004 (docs/prompt-roadmap-kpi-dashboard.md, Fase 3): dashboard y alertas de tienda deben
+/// KPI-P2-004 (Fase 3): dashboard y alertas de tienda deben
 /// compartir el mismo reloj de negocio. Ambos llaman a <see cref="BusinessTimeZoneClock.TodayStartUtc"/>
 /// — probar la función compartida cubre a los dos llamadores (DashboardController y
 /// StoreHealthAlertBackgroundService) sin necesitar levantar el host del Worker.
@@ -50,7 +50,7 @@ public sealed class BusinessTimeZoneClockTests
     }
 
     /// <summary>
-    /// A-KPI-07 (docs/auditoria-integral-2026-07-21.md): un id de timezone inválido en
+    /// A-KPI-07: un id de timezone inválido en
     /// Dashboard:BusinessTimeZone no debe tumbar el dashboard/Worker con una excepción sin capturar
     /// desde el constructor del controller — debe degradar a UTC.
     /// </summary>

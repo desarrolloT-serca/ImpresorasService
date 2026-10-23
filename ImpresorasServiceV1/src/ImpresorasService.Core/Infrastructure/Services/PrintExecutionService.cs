@@ -16,11 +16,8 @@ namespace ImpresorasService.Infrastructure.Services;
 /// servicio se aplican con un UPDATE condicionado al estado esperado (<see cref="TryTransitionAsync"/>):
 /// leer y escribir son el mismo statement, así que de dos procesos que lleguen a la vez uno afecta a
 /// 1 fila y el otro a 0. La que importa de verdad es el paso a <c>Printing</c>: es lo único que
-/// impide que dos Workers manden el mismo documento al spooler y salga el papel dos veces.</para>
-///
-/// <para>Antes esto era leer-comprobar-escribir con un snapshot de <c>RowVersion</c>, que dejaba
-/// abierta la ventana entre la lectura y el guardado. <c>RowVersion</c> además nunca fue un token de
-/// concurrencia de EF: en HANA es un BLOB y no se puede comparar en un WHERE.</para>
+/// impide que dos Workers manden el mismo documento al spooler y salga el papel dos veces.
+/// Leer-comprobar-escribir en memoria dejaría abierta la ventana entre la lectura y el guardado.</para>
 /// </summary>
 public sealed class PrintExecutionService : IPrintExecutionService
 {
@@ -349,8 +346,7 @@ public sealed class PrintExecutionService : IPrintExecutionService
     ///
     /// <para>El estado en el WHERE es lo que da la exclusión mutua entre procesos: la lectura y la
     /// escritura ocurren en el mismo statement, así que no hay ventana en la que otro Worker pueda
-    /// colarse. Sustituye al antiguo chequeo de <c>RowVersion</c>, que comparaba en memoria un valor
-    /// leído antes y por tanto no excluía nada.</para>
+    /// colarse.</para>
     /// </summary>
     private async Task<bool> TryTransitionAsync(
         Guid jobId,

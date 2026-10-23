@@ -1,7 +1,7 @@
 namespace ImpresorasService.Application.Abstractions;
 
 /// <summary>
-/// Lock de instancia única del Worker (G4.1, docs/roadmapimpresoras.md Fase 2.1).
+/// Lock de instancia única del Worker (G4.1 Fase 2.1).
 /// </summary>
 public interface IWorkerLockCoordinator
 {

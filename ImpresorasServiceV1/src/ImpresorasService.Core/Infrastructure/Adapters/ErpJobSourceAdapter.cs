@@ -9,12 +9,11 @@ using System.Diagnostics;
 
 namespace ImpresorasService.Infrastructure.Adapters;
 
-public class SapHanaJobSourceAdapter : IJobSourceAdapter
+public class ErpJobSourceAdapter : IJobSourceAdapter
 {
     private readonly SourceOptions _options;
-    private readonly SapHanaOptions _hanaOptions;
     private readonly ImpresorasDbContext _dbContext;
-    private readonly ILogger<SapHanaJobSourceAdapter> _logger;
+    private readonly ILogger<ErpJobSourceAdapter> _logger;
     private readonly string _workerId;
     private readonly string _sourceSystem;
 
@@ -24,40 +23,33 @@ public class SapHanaJobSourceAdapter : IJobSourceAdapter
     private string? _lastClaimToken;
     private readonly TimeProvider _timeProvider;
 
-    public SapHanaJobSourceAdapter(
+    public ErpJobSourceAdapter(
         IOptions<SourceOptions> options,
-        IOptions<SapHanaOptions> hanaOptions,
         ImpresorasDbContext dbContext,
-        ILogger<SapHanaJobSourceAdapter> logger,
+        ILogger<ErpJobSourceAdapter> logger,
         TimeProvider timeProvider)
     {
         _timeProvider = timeProvider;
         _options = options.Value;
-        _hanaOptions = hanaOptions.Value;
         _dbContext = dbContext;
         _logger = logger;
         _workerId = $"{Environment.MachineName}-{Process.GetCurrentProcess().Id}";
-        _sourceSystem = string.IsNullOrWhiteSpace(_hanaOptions.SourceSystem) ? "SAP-HANA" : _hanaOptions.SourceSystem.Trim();
+        _sourceSystem = string.IsNullOrWhiteSpace(_options.SourceSystem) ? "ERP" : _options.SourceSystem.Trim();
     }
 
     public async Task<IReadOnlyList<IncomingPrintJob>> FetchPendingJobsAsync(
         int batchSize,
         CancellationToken cancellationToken)
     {
-        if (!string.Equals(_options.Mode, "SapHana", StringComparison.OrdinalIgnoreCase))
-            return Array.Empty<IncomingPrintJob>();
-
         if (batchSize <= 0)
             return Array.Empty<IncomingPrintJob>();
 
         var claimToken = Guid.NewGuid().ToString("N");
         var now = _timeProvider.GetUtcNow();
-        var leaseSeconds = Math.Max(15, _hanaOptions.LeaseSeconds);
+        var leaseSeconds = Math.Max(15, _options.LeaseSeconds);
         var leaseEnd = now.AddSeconds(leaseSeconds);
 
         await using var tx = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
-
-        var pendingOnly = false;
 
         // Selección de candidatos: proyección escalar sin PdfBlob (Fase 1.3) y filtro de
         // disponibilidad de claim + orden empujados a SQL antes del Take (Fase 1.2). Antes,
@@ -65,7 +57,7 @@ public class SapHanaJobSourceAdapter : IJobSourceAdapter
         // estaban reclamadas por otro worker, se perdía el ciclo aunque hubiera libres después,
         // y además se cargaba el blob completo de filas que ni siquiera se iban a reclamar.
         var candidateIds = await _dbContext.SourcePrintJobs
-            .Where(x => x.IsProcessed == pendingOnly
+            .Where(x => !x.IsProcessed
                 && (x.ClaimedUntilUtc == null || x.ClaimedUntilUtc <= now))
             .OrderBy(x => x.CreatedAtUtc)
             .ThenBy(x => x.Id)
@@ -82,7 +74,7 @@ public class SapHanaJobSourceAdapter : IJobSourceAdapter
         // Recarga con entidad completa (incluye PdfBlob) solo de las filas ya seleccionadas,
         // y re-verifica disponibilidad para reducir la ventana de carrera con otro worker.
         var claimedRows = (await _dbContext.SourcePrintJobs
-            .Where(x => candidateIds.Contains(x.Id) && x.IsProcessed == pendingOnly)
+            .Where(x => candidateIds.Contains(x.Id) && !x.IsProcessed)
             .ToListAsync(cancellationToken))
             .Where(x => x.ClaimedUntilUtc == null || x.ClaimedUntilUtc <= now)
             .ToList();
@@ -128,7 +120,7 @@ public class SapHanaJobSourceAdapter : IJobSourceAdapter
                 CreatedAtUtc: row.CreatedAtUtc))
             .ToList();
 
-        _logger.LogInformation("SapHana adapter reclamó {Count} trabajos pendientes.", jobs.Count);
+        _logger.LogInformation("Ingesta ERP: reclamados {Count} trabajos pendientes.", jobs.Count);
         return jobs;
     }
 
@@ -136,9 +128,6 @@ public class SapHanaJobSourceAdapter : IJobSourceAdapter
         IReadOnlyList<long> sourceJobIds,
         CancellationToken cancellationToken)
     {
-        if (!string.Equals(_options.Mode, "SapHana", StringComparison.OrdinalIgnoreCase))
-            return;
-
         if (sourceJobIds is null || sourceJobIds.Count == 0)
             return;
 
@@ -164,7 +153,7 @@ public class SapHanaJobSourceAdapter : IJobSourceAdapter
         if (rows.Count < sourceJobIds.Count)
         {
             _logger.LogWarning(
-                "SapHana ack parcial: solicitados={Expected}, actualizados={Rows}, affected={Affected}, worker={WorkerId}",
+                "Ingesta ERP: ack parcial: solicitados={Expected}, actualizados={Rows}, affected={Affected}, worker={WorkerId}",
                 sourceJobIds.Count,
                 rows.Count,
                 affected,
@@ -174,9 +163,6 @@ public class SapHanaJobSourceAdapter : IJobSourceAdapter
 
     public async Task RenewJobLeasesAsync(IReadOnlyList<long> sourceJobIds, CancellationToken cancellationToken)
     {
-        if (!string.Equals(_options.Mode, "SapHana", StringComparison.OrdinalIgnoreCase))
-            return;
-
         if (sourceJobIds is null || sourceJobIds.Count == 0)
             return;
 
@@ -184,7 +170,7 @@ public class SapHanaJobSourceAdapter : IJobSourceAdapter
         if (_lastClaimToken is null)
             return;
 
-        var leaseSeconds = Math.Max(15, _hanaOptions.LeaseSeconds);
+        var leaseSeconds = Math.Max(15, _options.LeaseSeconds);
         var newExpiry = _timeProvider.GetUtcNow().AddSeconds(leaseSeconds);
         var ids = sourceJobIds.Distinct().ToArray();
         var expectedToken = _lastClaimToken;

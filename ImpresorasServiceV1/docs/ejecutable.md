@@ -4,7 +4,7 @@ Guía de uso de `scripts/install-windows-services.ps1`: publica `ImpresorasServi
 `ImpresorasService.Worker` como ejecutables self-contained y los instala/actualiza como
 servicios Windows (`ImpresorasServiceApi`, `ImpresorasServiceWorker`).
 
-No cubre el frontend Laravel (`ImpresorasService.Web.PHP`) ni SAP HANA/impresoras en sí — ver
+No cubre el frontend Laravel (`ImpresorasService.Web.PHP`) ni PostgreSQL/impresoras en sí — ver
 `docs/DESPLIEGUE-PHP.md` para el frontend.
 
 ---
@@ -14,19 +14,14 @@ No cubre el frontend Laravel (`ImpresorasService.Web.PHP`) ni SAP HANA/impresora
 | Requisito | Por qué | Cómo verificar |
 |---|---|---|
 | Windows 10/Server 2016+ | Necesario para `sc`/SCM, `New-Service`, `Print Operators` | — |
-| **Driver SAP HANA ODBC (HDBODBC)** | `SapHana:ConnectionString` usa `Driver=HDBODBC`; sin él, la Api/Worker no arrancan | `Get-OdbcDriver \| Where-Object Name -like "*HDBODBC*"` |
-| Resolución de `hanab1` (o el host HANA real) | Api/Worker conectan a HANA en el arranque | `Resolve-DnsName hanab1` (o usa `-HanaIp` al lanzar el script) |
+| Acceso de red al PostgreSQL (`-DbHost`/`-DbPort`) | Api/Worker conectan a la BD en el arranque | `Test-NetConnection 10.110.46.121 -Port 5433` |
+| Esquema creado (`scripts\crear-esquema.ps1`) | Las tablas no las crea la aplicación | Desde cualquier equipo con `psql` (viene con PostgreSQL) |
 | **SumatraPDF** en `C:\Program Files\SumatraPDF\SumatraPDF.exe` | El Worker lo invoca para imprimir (`PrintExecution:PdfPrinterExecutablePath`) | Comprobar que el .exe existe en esa ruta, o cambiar la ruta en `C:\ImpresorasService\Worker\appsettings.json` |
 | `C:\ImpresorasService\dashboard-threshold-rules.json` (G5.3) | Reglas de severidad de dashboard (1-3 niveles), compartidas por Api y Worker (`Dashboard:ThresholdRulesFilePath` en ambos `appsettings.json`) — si falta, se usan valores por defecto embebidos, no hace falta crearlo a mano | Se crea solo al guardar umbrales desde `/ajustes`; para verificar que Api y Worker comparten el mismo fichero, confirma que ambos `appsettings.json` apuntan a la misma ruta |
 | Impresoras instaladas en Windows con el mismo nombre que `spool_queue` (tabla `printer_printer`) | El Worker imprime contra la cola de Windows por nombre exacto | `Get-Printer \| Select Name` |
 | Cuenta de servicio en el grupo local **Print Operators** (si usas `-ServiceAccount`) | Necesario para que el proceso pueda hablar con el spooler de Windows | El script lo intenta automáticamente vía `Add-LocalGroupMember` |
 | .NET Runtime | **No hace falta** — el publish es self-contained (incluye su propio runtime) | — |
 
-> No uses `-p:PublishSingleFile` ni `-p:PublishTrimmed` si algún día tocas el publish a mano.
-> El driver `Sap.Data.Hana` localiza su DLL nativa (`libadonetHDB.dll`) vía `Assembly.Location`,
-> que con single-file queda vacío y revienta con `ArgumentNullException` al primer intento de
-> conexión. El trimming rompe la carga por reflection de `ImpresorasService.Core/Infrastructure/DependencyInjection.cs`
-> (`ConfigureHanaProvider`). El script ya publica sin ninguna de las dos.
 
 ---
 
@@ -37,10 +32,10 @@ Siempre en **PowerShell como Administrador**, desde la raíz del repo (`Impresor
 ### Primera vez en una máquina nueva
 
 ```powershell
-.\scripts\install-windows-services.ps1 -HanaUser IMPRESION
+.\scripts\install-windows-services.ps1 -DbHost 10.110.46.121 -DbPort 5433 -DbName serca -DbUser pb8_xp57
 ```
 
-Te pedirá el **password de HANA** de forma interactiva (input oculto, no queda en el historial
+Te pedirá el **password de PostgreSQL** de forma interactiva (input oculto, no queda en el historial
 de comandos ni en ningún archivo de texto). Con eso:
 
 1. Publica Api y Worker en `C:\ImpresorasService\Api` y `\Worker`.
@@ -58,12 +53,6 @@ de comandos ni en ningún archivo de texto). Con eso:
 No pide nada — reutiliza las credenciales ya guardadas, para los servicios, republica y los
 vuelve a arrancar.
 
-### Si `hanab1` no resuelve por DNS en esa red
-
-```powershell
-.\scripts\install-windows-services.ps1 -HanaUser IMPRESION -HanaIp 192.168.1.20
-```
-
 ### Si el frontend PHP corre en otra máquina (necesita CORS)
 
 ```powershell
@@ -73,7 +62,7 @@ vuelve a arrancar.
 ### Cambiar credenciales ya guardadas
 
 ```powershell
-.\scripts\install-windows-services.ps1 -Reconfigure -HanaUser IMPRESION
+.\scripts\install-windows-services.ps1 -Reconfigure -DbHost 10.110.46.121 -DbPort 5433 -DbName serca -DbUser pb8_xp57
 ```
 
 ### Activar alertas de Telegram (opcional)
@@ -100,14 +89,14 @@ Pide la password de esa cuenta con `Get-Credential` y la mete en el grupo local 
 | Flag | Tipo | Default | Para qué |
 |---|---|---|---|
 | `-InstallDir` | string | `C:\ImpresorasService` | Carpeta de publish/instalación |
-| `-HanaHost` | string | `hanab1` | Host del servidor HANA |
-| `-HanaPort` | int | `30015` | Puerto HANA |
-| `-HanaSchema` | string | `ZTEST_VICENTE_2` | Schema HANA |
-| `-HanaUser` | string | (vacío, pide) | Usuario HANA (UID) |
-| `-HanaIp` | string | (vacío) | Si se indica, añade `IP hanab1` a `hosts` (solo si no existe ya) |
+| `-DbHost` | string | (vacío, pide) | Host o IP del PostgreSQL |
+| `-DbPort` | int | `5432` | Puerto PostgreSQL |
+| `-DbName` | string | (vacío, pide) | Base de datos |
+| `-DbSchema` | string | `admon` (provisional, ver `docs/PLAN.md` B0.5) | Esquema (`Search Path`) |
+| `-DbUser` | string | (vacío, pide) | Usuario PostgreSQL |
 | `-FrontendOrigin` | string | (vacío) | Origen a añadir a `Cors:AllowedOrigins` de la Api publicada |
 | `-ServiceAccount` | string | (vacío = LocalSystem) | Cuenta bajo la que corren los servicios, ej. `.\svc_impresoras` |
-| `-Reconfigure` | switch | off | Fuerza volver a pedir/regenerar HANA + Jwt secret aunque ya existan |
+| `-Reconfigure` | switch | off | Fuerza volver a pedir/regenerar la conexión a la BD + Jwt secret aunque ya existan |
 | `-SkipPublish` | switch | off | No recompila/republica, solo (re)instala/arranca servicios con los binarios ya presentes |
 | `-ConfigureTelegram` | switch | off | Pide/actualiza el Bot Token de Telegram |
 
@@ -132,8 +121,7 @@ Variables que gestiona el script:
 
 | Variable | Servicios | Contenido |
 |---|---|---|
-| `ConnectionStrings__PrintQueue` | Api + Worker | Cadena EF hacia HANA |
-| `SapHana__ConnectionString` | Api + Worker | Cadena ODBC cruda (usada también por `/diagnostics/hana`) |
+| `ConnectionStrings__PrintQueue` | Api + Worker | Cadena Npgsql; única fuente de servidor, BD, usuario y esquema (`Search Path`) |
 | `Jwt__Secret` | Api | Generado aleatoriamente (48 bytes, base64) si no existe |
 | `ASPNETCORE_URLS` | Api | Fijo a `http://+:5105` — sin esto, Kestrel cae al puerto 5000 por defecto, que en muchos equipos ya está ocupado (en las pruebas, por un servicio de VPN preexistente) |
 | `Telegram__BotToken` | Api + Worker | Vacío si no se usó `-ConfigureTelegram` |
@@ -144,10 +132,7 @@ Para verlas manualmente (necesita admin):
 (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\ImpresorasServiceApi" -Name Environment).Environment
 ```
 
-> `src/ImpresorasService.Api/Properties/launchSettings.json` (y el del Worker) llevan
-> credenciales HANA reales en texto plano — son **solo para `dotnet run` en local** y están
-> commiteadas en el repo; no las usa el servicio publicado ni este script, pero son un secreto
-> expuesto en git que conviene rotar en algún momento (fuera del alcance de este documento).
+> En local la conexión va en el `.env` de la raíz del repo (fuera de git), no en `launchSettings.json`.
 
 ---
 
@@ -166,7 +151,7 @@ Get-WinEvent -LogName Application -MaxEvents 20 | Format-Table TimeCreated, Prov
 ```
 
 Si un servicio queda en `Stopped` justo después de arrancar, casi siempre es una excepción no
-capturada en el arranque (falta de conectividad a HANA, credenciales mal escritas, puerto
+capturada en el arranque (falta de conectividad a PostgreSQL, credenciales mal escritas, puerto
 ocupado...) — revisa el Visor de eventos, ahí aparece el stack trace completo.
 
 Reiniciar uno solo:
@@ -187,7 +172,6 @@ sc.exe delete ImpresorasServiceWorker
 # Solo si además configuraste variables de entorno de MAQUINA en pruebas antiguas del script
 # (versiones nuevas ya no las usan; las credenciales por servicio desaparecen solas con el servicio)
 [Environment]::SetEnvironmentVariable("ConnectionStrings__PrintQueue", $null, "Machine")
-[Environment]::SetEnvironmentVariable("SapHana__ConnectionString", $null, "Machine")
 [Environment]::SetEnvironmentVariable("Jwt__Secret", $null, "Machine")
 
 Remove-Item -Recurse -Force "C:\ImpresorasService"

@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Globalization;
 using System.Net.Sockets;
 using System.Security.Claims;
 using System.Text.Json;
@@ -122,11 +121,7 @@ public class PrintersController : ControllerBase
     [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdatePrinterRequest request, CancellationToken cancellationToken)
     {
-        // AsNoTracking: no necesitamos change-tracking; la escritura es por SQL directo
-        // para eludir el bug del proveedor HANA que genera WHERE sin parametrizar strings.
-        var printer = await _dbContext.Printers
-            .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.PrinterId == id, cancellationToken);
+        var printer = await _dbContext.Printers.FirstOrDefaultAsync(x => x.PrinterId == id, cancellationToken);
 
         if (printer is null)
             return NotFound();
@@ -145,69 +140,30 @@ public class PrintersController : ControllerBase
         if (!await ActiveStoreExistsAsync(request.StoreId, cancellationToken))
             return BadRequest(new { error = "La tienda especificada no existe o esta inactiva." });
 
-        var now = DateTimeOffset.UtcNow;
-        var nowStr = now.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
-        var hostChanged = !string.Equals(printer.Host, input.Host, StringComparison.OrdinalIgnoreCase);
+        // Con host nuevo, el Worker vuelve a descubrir el soporte IPP en el siguiente ciclo.
+        if (!string.Equals(printer.Host, input.Host, StringComparison.OrdinalIgnoreCase))
+            printer.IppSupported = null;
 
+        printer.PrinterName = input.PrinterName;
+        printer.SpoolQueue = input.SpoolQueue;
+        printer.Host = input.Host;
+        printer.StoreId = request.StoreId;
+        printer.IsActive = request.IsActive;
+        printer.CapabilitiesJson = input.CapabilitiesJson;
+        printer.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        // EF solo escribe las columnas que cambian: la telemetría de conectividad que actualiza el
+        // Worker en paralelo no se pisa.
         try
         {
-            // Raw SQL garantiza parametrizado real — el proveedor HANA EF Core falla al
-            // generar WHERE con strings que contienen paréntesis cuando usa LINQ.
-            // Cuando el host cambia, reseteamos ipp_supported a NULL para que el Worker
-            // vuelva a descubrir el soporte IPP del nuevo host en el siguiente ciclo.
-            var sql = hostChanged
-                ? "UPDATE \"printer_printer\" SET " +
-                  "\"printer_name\" = {0}, \"spool_queue\" = {1}, \"host\" = {2}, " +
-                  "\"store_id\" = {3}, \"is_active\" = {4}, \"capabilities_json\" = {5}, " +
-                  "\"ipp_supported\" = NULL, \"updated_at_utc\" = {6} " +
-                  "WHERE \"printer_id\" = {7}"
-                : "UPDATE \"printer_printer\" SET " +
-                  "\"printer_name\" = {0}, \"spool_queue\" = {1}, \"host\" = {2}, " +
-                  "\"store_id\" = {3}, \"is_active\" = {4}, \"capabilities_json\" = {5}, " +
-                  "\"updated_at_utc\" = {6} " +
-                  "WHERE \"printer_id\" = {7}";
-
-            // Host/CapabilitiesJson son columnas nullable; ExecuteSqlRawAsync traduce null a
-            // DBNull sin problema — el `!` solo silencia el warning de nullabilidad del array
-            // `params object[]` (no-nullable), no cambia el comportamiento.
-            await _dbContext.Database.ExecuteSqlRawAsync(
-                sql,
-                input.PrinterName,
-                input.SpoolQueue,
-                input.Host!,
-                request.StoreId,
-                request.IsActive ? 1 : 0,
-                input.CapabilitiesJson!,
-                nowStr,
-                id);
+            await _dbContext.SaveChangesAsync(cancellationToken);
         }
-        catch (Exception ex) when (
-            ex.Message.Contains("unique", StringComparison.OrdinalIgnoreCase) ||
-            ex.Message.Contains("duplicate", StringComparison.OrdinalIgnoreCase) ||
-            ex.Message.Contains("constraint", StringComparison.OrdinalIgnoreCase))
+        catch (DbUpdateException)
         {
             return Conflict(new { error = "Ya existe otra impresora con el mismo StoreId y SpoolQueue." });
         }
 
-        var updated = new Printer
-        {
-            PrinterId = id,
-            PrinterName = input.PrinterName,
-            SpoolQueue = input.SpoolQueue,
-            Host = input.Host,
-            StoreId = request.StoreId,
-            IsActive = request.IsActive,
-            CapabilitiesJson = input.CapabilitiesJson,
-            CreatedAtUtc = printer.CreatedAtUtc,
-            UpdatedAtUtc = now,
-            ConnectionFailuresStreak = printer.ConnectionFailuresStreak,
-            LastConnectionOk = printer.LastConnectionOk,
-            LastConnectionCheckAtUtc = printer.LastConnectionCheckAtUtc,
-            LastConnectionTransport = printer.LastConnectionTransport,
-            LastConnectionError = printer.LastConnectionError,
-            IppSupported = hostChanged ? null : printer.IppSupported,
-        };
-        return Ok(ToPrinterDto(updated));
+        return Ok(ToPrinterDto(printer));
     }
 
     /// <summary>
@@ -434,14 +390,10 @@ public class PrintersController : ControllerBase
         if (storeId < 0)
             return false;
 
-        var activeStoreOnly = true;
-        return (await _dbContext.Stores
+        return await _dbContext.Stores
             .AsNoTracking()
-            .Where(x => x.StoreId == storeId && x.IsActive == activeStoreOnly)
-            .Select(x => x.StoreId)
-            .Take(1)
-            .ToListAsync(cancellationToken))
-            .Count > 0;
+            .Where(x => x.StoreId == storeId && x.IsActive)
+            .AnyAsync(cancellationToken);
     }
 
     private static (NormalizedPrinterInput? Input, string? Error) NormalizePrinterInput(

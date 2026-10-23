@@ -19,13 +19,9 @@ public class PrintJobRepository : IPrintJobRepository
         string externalJobId,
         CancellationToken cancellationToken)
     {
-        // Workaround para SAP EF provider (HANA): AnyAsync puede lanzar
-        // "Sequence contains no elements" en consultas EXISTS.
         return await _dbContext.PrintJobs
             .Where(x => x.SourceSystem == sourceSystem && x.ExternalJobId == externalJobId)
-            .Select(x => x.JobId)
-            .Take(1)
-            .CountAsync(cancellationToken) > 0;
+            .AnyAsync(cancellationToken);
     }
 
     public async Task AddAsync(PrintJob printJob, CancellationToken cancellationToken)

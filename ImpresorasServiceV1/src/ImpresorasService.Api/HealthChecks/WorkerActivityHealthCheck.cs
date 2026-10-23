@@ -48,13 +48,11 @@ public sealed class WorkerActivityHealthCheck : IHealthCheck
             return HealthCheckResult.Healthy(
                 "PrinterConnectivity:Enabled=false: sin sondeo periodico no hay huella con la que vigilar al Worker.");
 
-        var activeOnly = true;
-
         // MIN ignora los NULL en SQL: una impresora recién dada de alta y aún no sondeada no
         // dispara el check (evita un falso positivo durante su primer ciclo).
         var oldestCheck = await _dbContext.Printers
             .AsNoTracking()
-            .Where(p => p.IsActive == activeOnly)
+            .Where(p => p.IsActive)
             .MinAsync(p => (DateTimeOffset?)p.LastConnectionCheckAtUtc, cancellationToken);
 
         if (oldestCheck is null)
