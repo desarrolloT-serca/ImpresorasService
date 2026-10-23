@@ -19,7 +19,7 @@ public sealed class SourcePrintJobsControllerTests : IntegrationTestBase
     {
         var request = new
         {
-            sourceSystem = "SAP-TEST",
+            sourceSystem = "ERP-TEST",
             externalJobId = $"JOB-{Guid.NewGuid():N}",
             storeId = 1,
             documentType = "FACTURA",
@@ -42,7 +42,7 @@ public sealed class SourcePrintJobsControllerTests : IntegrationTestBase
         var externalId = $"JOB-{Guid.NewGuid():N}";
         var request = new
         {
-            sourceSystem = "SAP-TEST",
+            sourceSystem = "ERP-TEST",
             externalJobId = externalId,
             storeId = 1,
             documentType = "FACTURA",

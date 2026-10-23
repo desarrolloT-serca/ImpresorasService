@@ -15,10 +15,9 @@ public class ImpresorasDbContext : DbContext
     // (backoff corto) podría dar un falso positivo; subir el umbral si eso genera ruido.
     private static readonly TimeSpan DuplicateEventDetectionWindow = TimeSpan.FromSeconds(5);
     /// <summary>
-    /// Dos familias de formato conviven en estas columnas:
-    /// las ISO son las que escribe el propio converter (toDb), y las de día primero son las que
-    /// devuelve el driver de HANA, que formatea con la cultura del proceso (es-ES, ver Program.cs)
-    /// y sin relleno de ceros: "17/6/2026 6:58:40". "d/M" cubre también la variante con ceros.
+    /// herencia-hana: las ISO son las que escribe el propio converter (toDb); las de día primero
+    /// ("17/6/2026 6:58:40") las devolvía el driver anterior, que formateaba con la cultura es-ES.
+    /// En PostgreSQL solo hay ISO: los formatos d/M sobran (docs/PLAN.md, B6).
     ///
     /// Todas son día-primero a propósito: NO añadir aquí ni en el fallback nada que interprete
     /// mes primero. Un "5/8/2026" leído como MM/dd da el 8 de mayo donde el driver dijo 5 de agosto,
@@ -204,8 +203,8 @@ public class ImpresorasDbContext : DbContext
             entity.Property(x => x.CorrelationId).HasConversion(GuidToBytesConverter);
             entity.Property(x => x.CreatedAtUtc).HasColumnName("created_at_utc");
             entity.Property(x => x.UpdatedAtUtc).HasColumnName("updated_at_utc");
-            // row_version se conserva porque la columna existe en HANA, pero NO participa en la
-            // concurrencia: es un BLOB y no se puede comparar en un WHERE. Hasta el 19/08/2026 se le
+            // herencia-hana: row_version existe en el esquema pero NO participa en la concurrencia
+            // (en la BD anterior era un BLOB no comparable). Candidata a borrar (docs/PLAN.md, B6). Hasta el 19/08/2026 se le
             // escribían 8 bytes aleatorios en cada guardado con la idea de usarlo como token, y no lo
             // leía nadie. La exclusión entre procesos la da el estado en el WHERE del UPDATE
             // (PrintExecutionService.TryTransitionAsync). No reintroducir aquí IsConcurrencyToken.
@@ -462,8 +461,8 @@ public class ImpresorasDbContext : DbContext
             entity.Property(x => x.HeartbeatAtUtc).HasColumnName("heartbeat_utc").IsRequired();
         });
 
-        // HANA está persistiendo fechas históricas en formato string no homogéneo (legacy).
-        // Forzamos conversión robusta para evitar fallos de materialización en listados y CRUD.
+        // herencia-hana: todo DateTimeOffset se guarda como texto "yyyy-MM-dd HH:mm:ss" y por eso las
+        // columnas de fecha son varchar. Pasar a timestamptz = quitar estos converters + DDL (docs/PLAN.md, B6).
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {
             foreach (var property in entityType.GetProperties())

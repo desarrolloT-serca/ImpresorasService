@@ -202,7 +202,7 @@ public class PrintJobsController : ControllerBase
             PrintJobStatus.ErrorFinal,
             // Estados de incertidumbre: el watchdog los produce de forma rutinaria (una impresora
             // sin IPP manda ahí todos sus trabajos) y sin esto quedaban sin ninguna acción posible
-            // desde la interfaz — la única salida era un UPDATE manual en HANA.
+            // desde la interfaz — la única salida era un UPDATE manual en la BD.
             PrintJobStatus.PrintedUnknown,
             PrintJobStatus.PrinterBlocked
         };

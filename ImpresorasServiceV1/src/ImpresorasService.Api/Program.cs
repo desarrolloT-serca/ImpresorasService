@@ -227,15 +227,9 @@ var app = builder.Build();
 await using (var scope = app.Services.CreateAsyncScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
-    var applyMigrations = app.Configuration.GetValue<bool>("Database:ApplyMigrations");
+    // El esquema lo crea scripts/crear-esquema.ps1; solo los tests lo generan desde el modelo.
     if (app.Environment.IsEnvironment("Testing"))
-    {
         await dbContext.Database.EnsureCreatedAsync();
-    }
-    else if (applyMigrations)
-    {
-        await dbContext.Database.MigrateAsync();
-    }
     await NormalizeLegacyUserRolesAsync(dbContext);
 
     var seedDefaultUsers = app.Configuration.GetValue<bool>("Bootstrap:SeedDefaultUsers");
@@ -328,8 +322,8 @@ app.MapPost("/bootstrap/first-admin", async (
     if (password.Length < 6)
         return Results.BadRequest(new { error = "La password debe tener al menos 6 caracteres." });
 
-    // Workaround para SAP EF provider: AnyAsync puede fallar con "Sequence contains no elements"
-    // en ciertos modelos, por eso usamos un Count acotado a 1 fila.
+    // herencia-hana: Count acotado a 1 fila en vez de AnyAsync, que fallaba con el provider anterior.
+    // Simplificable a AnyAsync (docs/PLAN.md, B6).
     var anyUsers = await db.Users
         .Select(u => u.UserId)
         .Take(1)

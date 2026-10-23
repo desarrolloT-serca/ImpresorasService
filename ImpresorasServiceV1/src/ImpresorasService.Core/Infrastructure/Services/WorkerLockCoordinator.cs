@@ -49,7 +49,7 @@ public sealed class WorkerLockCoordinator : IWorkerLockCoordinator
 
         var staleThreshold = now - TimeSpan.FromSeconds(_options.Value.LeaseSeconds);
 
-        // UPDATE condicional (mismo patrón que SapHanaJobSourceAdapter.RenewJobLeasesAsync):
+        // UPDATE condicional (mismo patrón que ErpJobSourceAdapter.RenewJobLeasesAsync):
         // solo afecta la fila si nadie más la posee o si el lease expiró. rowcount=1 => lock obtenido/renovado.
         var rows = await _db.WorkerLocks
             .Where(x => x.Id == 1 && (x.Holder == holder || x.HeartbeatAtUtc <= staleThreshold))

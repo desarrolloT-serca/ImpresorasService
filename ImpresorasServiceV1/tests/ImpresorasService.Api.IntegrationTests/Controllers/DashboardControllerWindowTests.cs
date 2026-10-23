@@ -10,7 +10,7 @@ using Xunit;
 namespace ImpresorasService.Api.IntegrationTests.Controllers;
 
 /// <summary>
-/// Fixtures de F1.4 (docs/roadmap-kpi-dashboard.md): validan la semántica de ventana temporal
+/// Fixtures de F1.4: validan la semántica de ventana temporal
 /// del overview (F1.1 evento vs cohorte, F1.2 timezone de negocio, F1.3 tiendas inactivas)
 /// con un reloj controlado, tal como se especificó en el Reporte de Validación (§5).
 /// </summary>
@@ -86,7 +86,7 @@ public sealed class DashboardControllerWindowTests : IClassFixture<WindowClockAp
     }
 
     /// <summary>
-    /// A-KPI-01 (docs/auditoria-integral-2026-07-21.md): FailedWithoutRetryCurrent es una foto de
+    /// A-KPI-01: FailedWithoutRetryCurrent es una foto de
     /// estado, no un evento — un ErrorFinal es terminal y su UpdatedAtUtc no vuelve a moverse, así
     /// que filtrarlo por ventana lo hacía "desaparecer" al cruzar medianoche aunque el job siguiera
     /// roto (con el efecto de disparar una falsa alerta "RECUPERADA" en el Worker). Debe contar
@@ -141,7 +141,7 @@ public sealed class DashboardControllerWindowTests : IClassFixture<WindowClockAp
     }
 
     /// <summary>
-    /// KPI-P1-001 (docs/prompt-roadmap-kpi-dashboard.md, Fase 0): "printed" hoy cuenta por
+    /// KPI-P1-001 (Fase 0): "printed" hoy cuenta por
     /// UpdatedAtUtc + estado actual, no por evento de negocio. Un job que entra en SpoolAccepted
     /// el día 1 y el watchdog lo confirma el día 2 (misma transición física, dos actualizaciones
     /// de fila) se cuenta como "impreso" en AMBOS días. Este test reproduce el escenario completo

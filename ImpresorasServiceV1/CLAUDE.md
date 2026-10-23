@@ -1,6 +1,6 @@
 # ImpresorasService — Contexto del proyecto
 
-Sistema de cola de impresión para tiendas de retail. Ingesta trabajos (albaranes) que el ERP propio deja en la tabla `printer_source_print_job` de PostgreSQL (hasta el 23/10/2026 el origen era SAP), los enruta a la impresora correcta según reglas configurables, los ejecuta con reintentos, y monitorea el estado en tiempo real. Incluye alertas por Telegram y confirmación de impresión vía protocolo IPP.
+Sistema de cola de impresión para tiendas de retail. Ingesta trabajos (albaranes) que el ERP propio deja en la tabla `printer_source_print_job` de PostgreSQL, los enruta a la impresora correcta según reglas configurables, los ejecuta con reintentos, y monitorea el estado en tiempo real. Incluye alertas por Telegram y confirmación de impresión vía protocolo IPP.
 
 ---
 
@@ -12,7 +12,7 @@ Sistema de cola de impresión para tiendas de retail. Ingesta trabajos (albarane
 | `ImpresorasService.Api` | ASP.NET Core 8 | 5105 | REST API con JWT; consume Core |
 | `ImpresorasService.Worker` | .NET 8 Host Service | — | Servicios de fondo (ingesta, ejecución, watchdog, alertas) |
 | `ImpresorasService.Web.PHP` | Laravel 11, PHP 8.2 | 8000 | Frontend web (Blade + CSS glass-effect) |
-| PostgreSQL | Npgsql EF provider | 5433 | Base de datos única (`10.110.46.121`, BD `serca`, usuario `pb8_xp57`, esquema **`admon` provisional**, ver `docs/PLAN.md` B0.5). Servidor 19beta4. Hasta el 23/10/2026 era SAP HANA |
+| PostgreSQL | Npgsql EF provider | 5433 | Base de datos única (`10.110.46.121`, BD `serca`, usuario `pb8_xp57`, esquema **`admon` provisional**, ver `docs/PLAN.md` B0.5). Servidor 19beta4 |
 | Telegram Bot API | HTTP | — | Notificaciones de alertas de tienda |
 
 > **No hay Docker**. En producción: Nginx hace reverse proxy al frontend PHP, la API .NET corre en Kestrel, el Worker como servicio de sistema.
@@ -100,7 +100,7 @@ Pending → Routed → SpoolAccepted → PrintedConfirmed
 | Frontend | Laravel 11 (Blade, PHP 8.2), CSS custom glass-effect |
 | CI/CD | GitHub Actions |
 
-> **DDL externo**: EF Migrations son solo referencia histórica. El DBA aplica el DDL manualmente desde `scripts/sql/`. No ejecutar `dotnet ef database update` en producción.
+> **DDL externo**: no hay migraciones EF. El esquema vive en `scripts/sql/crear-esquema.sql` y se aplica con `scripts/crear-esquema.ps1`; la aplicación nunca lo crea ni lo altera (solo los tests, con `EnsureCreated` sobre SQLite).
 
 ---
 
@@ -136,17 +136,19 @@ Variables de entorno que sobreescriben appsettings (patrón `Section__Key`):
 
 `ConnectionStrings:PrintQueue` es la **única** configuración de BD (host, puerto, BD, usuario y esquema
 vía `Search Path`); Api, Worker y `scripts/crear-esquema.ps1` la leen de ahí. En local va en el `.env` de la
-raíz (fuera de git, lo carga `Infrastructure/DotEnv.cs`; contraseña en `PGPASSWORD`). No reintroducir
-`SapHana:ConnectionString`/`Schema`/`Table` ni nombres de esquema en código, config o DDL.
-`Source:Mode=SapHana` y la sección `SapHana` son nombres heredados: el origen es el ERP (`SapHana:SourceSystem=ERP`) y la BD es PostgreSQL.
+raíz (fuera de git, lo carga `Infrastructure/DotEnv.cs`; contraseña en `PGPASSWORD`). No poner nombres de
+esquema en código, config ni DDL. La sección `Source` (`SourceSystem=ERP`, `LeaseSeconds`) describe el origen.
 
 **Fechas como texto**: el modelo EF convierte todo `DateTimeOffset` a `"yyyy-MM-dd HH:mm:ss"` y las
 columnas de fecha son `varchar(26)`, igual que en los tests SQLite. No poner `timestamp` en el DDL sin
 quitar antes esos converters de `ImpresorasDbContext`: Npgsql rechaza texto en columnas `timestamp`.
 
+**`herencia-hana:`** marca en el código los rodeos que solo existían por el proveedor de HANA (la BD
+hasta el 23/10/2026). Son el bloque B6 de `docs/PLAN.md`: al simplificar uno, quitar su marca.
+
 ---
 
-## Estado actual (rama `main` — 2026-08-19)
+## Estado actual (2026-10-23)
 
 ### Implementado y en producción
 - Ingesta desde el ERP con claim/ack (solo se acusa recibo de lo realmente persistido)
@@ -158,23 +160,19 @@ quitar antes esos converters de `ImpresorasDbContext`: Npgsql rechaza texto en c
 - Dashboard con umbrales configurables en BD, KPIs por periodo (contrato en `docs/contrato-kpi-dashboard.md`) y timezone de negocio configurable (`Dashboard:BusinessTimeZone`)
 - **IPP**: `IIppConfirmationService`/`IppConfirmationService`, `IppSupported` en `Printer`, sondeo desde `PrinterConnectivityMonitorService`, filtro en el watchdog, badge en UI PHP (`resources/views/impresoras/index.blade.php`)
 - **Telegram**: `TelegramNotifierService`, `StoreHealthAlertBackgroundService`, `TelegramController` (API). `Telegram:Enabled=false` por defecto en `Worker/appsettings.json`; activar en producción con `BotToken` real. **La página PHP de alertas se retiró** (commit `fcd05d7`): la configuración se toca por API.
-- **Lock de instancia única** (`WorkerLockCoordinator` + `WorkerLockBackgroundService`): DDL aplicado y verificado el 19/08/2026 con dos procesos Worker reales contra `ZTEST_VICENTE_2`
+- **Lock de instancia única** (`WorkerLockCoordinator` + `WorkerLockBackgroundService`): relevo verificado con dos procesos Worker reales; la hora del lease la da la BD (`now()`)
 - **Health check `worker`** en la Api (`WorkerActivityHealthCheck`): delata un Worker inerte usando la huella del monitor de conectividad. Reporta `Degraded`, sin tag `ready`.
-- **Retención de PDF** (`PdfRetentionBackgroundService`): **activa, 90 días** (decisión del 19/08/2026). Libera el blob de los trabajos en estado terminal y de las filas de origen ya procesadas, conservando fila, `pdf_sha256` y metadatos. **No libera nada hasta que se aplique su DDL.**
-- **Revocación de acceso**: `User.IsActive` y `User.TokenVersion` comprobados en cada petición (`UserRevocationValidator`, enganchado a `OnTokenValidated`). Desactivar, borrar o cambiar la contraseña corta el acceso en la siguiente petición; el frontend ya redirige al login ante un 401. Requiere su DDL.
+- **Retención de PDF** (`PdfRetentionBackgroundService`): **activa, 90 días** (decisión del 19/08/2026). Libera el blob de los trabajos en estado terminal y de las filas de origen ya procesadas, conservando fila, `pdf_sha256` y metadatos.
+- **Revocación de acceso**: `User.IsActive` y `User.TokenVersion` comprobados en cada petición (`UserRevocationValidator`, enganchado a `OnTokenValidated`). Desactivar, borrar o cambiar la contraseña corta el acceso en la siguiente petición; el frontend ya redirige al login ante un 401.
 
 ### Pendiente
 **Ver `docs/PLAN.md`** — fuente de verdad única del trabajo pendiente, en bloques por dependencia.
-No se duplica aquí para que no diverja. El resto de roadmaps y auditorías del repositorio son
-evidencia o historia; `PLAN.md` dice cuál manda para qué.
+No se duplica aquí para que no diverja.
 
 ### DDL
 Esquema completo para una BD vacía: `scripts/sql/crear-esquema.sql` (PostgreSQL, sin nombre de esquema; se
 aplica con `scripts/crear-esquema.ps1`, en una transacción). Si cambias el modelo, actualízalo ahí.
-Copia del esquema real: `pg_dump --schema-only -n impresoras`.
-`scripts/sql/schema/` y los `migrate_*.sql`/`create_*.sql` sueltos son el esquema **HANA** histórico: no aplicar.
-`crear-esquema.sql` ya incluye todo lo que en HANA se aplicó por partes (`pdf_blob` nullable,
-`is_active`/`token_version` en `printer_user`, `printer_worker_lock`...). Estado de la migración: `docs/PLAN.md`, B0.5.
+Copia del esquema real: `pg_dump --schema-only -n <esquema>`. Puesta en marcha y pendientes: `docs/PLAN.md`, B0.
 
 ---
 
@@ -194,7 +192,7 @@ Copia del esquema real: `pg_dump --schema-only -n impresoras`.
 
 ### Git
 - Rama principal: `main`
-- Rama activa: `main`
+- Rama activa: `feat/postgres`
 - Commits convencionales: `feat:`, `fix:`, `chore:`, `refactor:`
 
 ---
@@ -230,8 +228,7 @@ src/ImpresorasService.Web.PHP/
 
 tests/ImpresorasService.Api.IntegrationTests/  → xUnit + SQLite en memoria
 
-scripts/sql/crear-esquema.sql         → DDL PostgreSQL (el resto de scripts/sql/ es histórico HANA)
+scripts/sql/crear-esquema.sql         → DDL PostgreSQL (único; se aplica con scripts/crear-esquema.ps1)
 docs/PLAN.md                          → QUÉ HACER: plan único de trabajo pendiente
 docs/                                 → guías de despliegue, estilo, smoke tests
-TELEGRAM_AND_IPP_ROADMAP.md           → completado (IPP y Telegram ya implementados); histórico
 ```

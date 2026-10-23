@@ -22,8 +22,6 @@ No cubre el frontend Laravel (`ImpresorasService.Web.PHP`) ni PostgreSQL/impreso
 | Cuenta de servicio en el grupo local **Print Operators** (si usas `-ServiceAccount`) | Necesario para que el proceso pueda hablar con el spooler de Windows | El script lo intenta automáticamente vía `Add-LocalGroupMember` |
 | .NET Runtime | **No hace falta** — el publish es self-contained (incluye su propio runtime) | — |
 
-> Las restricciones de publish de HANA (sin `PublishSingleFile` ni `PublishTrimmed`) venían del
-> driver nativo de SAP; con PostgreSQL ya no aplican, pero el script sigue publicando sin ellas.
 
 ---
 
@@ -135,8 +133,6 @@ Para verlas manualmente (necesita admin):
 ```
 
 > En local la conexión va en el `.env` de la raíz del repo (fuera de git), no en `launchSettings.json`.
-> Hasta el 23/10/2026 esos `launchSettings.json` llevaban la contraseña de HANA en claro: sigue en el
-> historial de git.
 
 ---
 
@@ -176,7 +172,6 @@ sc.exe delete ImpresorasServiceWorker
 # Solo si además configuraste variables de entorno de MAQUINA en pruebas antiguas del script
 # (versiones nuevas ya no las usan; las credenciales por servicio desaparecen solas con el servicio)
 [Environment]::SetEnvironmentVariable("ConnectionStrings__PrintQueue", $null, "Machine")
-[Environment]::SetEnvironmentVariable("SapHana__ConnectionString", $null, "Machine")
 [Environment]::SetEnvironmentVariable("Jwt__Secret", $null, "Machine")
 
 Remove-Item -Recurse -Force "C:\ImpresorasService"

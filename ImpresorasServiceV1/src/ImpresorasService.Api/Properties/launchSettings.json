@@ -17,8 +17,6 @@
       "applicationUrl": "http://localhost:5105",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "Source__Mode": "SapHana",
-        "SapHana__LeaseSeconds": "90",
         "Jwt__Secret": "Impresoras_2026_Secret_Muy_Largo_32_chars_min"
       }
     },
@@ -30,8 +28,6 @@
       "applicationUrl": "https://localhost:7257;http://localhost:5105",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "Source__Mode": "SapHana",
-        "SapHana__LeaseSeconds": "90",
         "Jwt__Secret": "Impresoras_2026_Secret_Muy_Largo_32_chars_min"
       }
     },
@@ -41,8 +37,6 @@
       "launchUrl": "swagger",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "Source__Mode": "SapHana",
-        "SapHana__LeaseSeconds": "90",
         "Jwt__Secret": "Impresoras_2026_Secret_Muy_Largo_32_chars_min"
       }
     }

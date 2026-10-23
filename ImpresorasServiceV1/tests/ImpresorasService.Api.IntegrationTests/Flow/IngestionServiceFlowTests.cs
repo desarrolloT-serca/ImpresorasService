@@ -114,7 +114,7 @@ public sealed class IngestionServiceFlowTests
         var sourceRecord = new SourcePrintJobRecord
         {
             Id = sourceJobId,
-            SourceSystem = "SAP-TEST",
+            SourceSystem = "ERP-TEST",
             ExternalJobId = "EXT-1",
             StoreId = storeId,
             DocumentType = "FACTURA",
@@ -190,7 +190,7 @@ public sealed class IngestionServiceFlowTests
         var sourceRecord = new SourcePrintJobRecord
         {
             Id = sourceJobId,
-            SourceSystem = "SAP-TEST",
+            SourceSystem = "ERP-TEST",
             ExternalJobId = "EXT-2",
             StoreId = storeId,
             DocumentType = "FACTURA",
@@ -276,7 +276,7 @@ public sealed class IngestionServiceFlowTests
         var sourceRecord = new SourcePrintJobRecord
         {
             Id = sourceJobId,
-            SourceSystem = "SAP-TEST",
+            SourceSystem = "ERP-TEST",
             ExternalJobId = "EXT-3",
             StoreId = 1,
             DocumentType = "FACTURA",
@@ -340,7 +340,7 @@ public sealed class IngestionServiceFlowTests
         var sourceRecord = new SourcePrintJobRecord
         {
             Id = sourceJobId,
-            SourceSystem = "SAP-HANA",
+            SourceSystem = "ERP",
             ExternalJobId = "EXT-FALLO-PERSISTENCIA",
             StoreId = 1,
             DocumentType = "FACTURA",

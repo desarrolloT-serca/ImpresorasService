@@ -19,8 +19,8 @@ public class PrintJobRepository : IPrintJobRepository
         string externalJobId,
         CancellationToken cancellationToken)
     {
-        // Workaround para SAP EF provider (HANA): AnyAsync puede lanzar
-        // "Sequence contains no elements" en consultas EXISTS.
+        // herencia-hana: Count acotado en vez de AnyAsync, que fallaba con el provider anterior.
+        // Simplificable a AnyAsync (docs/PLAN.md, B6).
         return await _dbContext.PrintJobs
             .Where(x => x.SourceSystem == sourceSystem && x.ExternalJobId == externalJobId)
             .Select(x => x.JobId)

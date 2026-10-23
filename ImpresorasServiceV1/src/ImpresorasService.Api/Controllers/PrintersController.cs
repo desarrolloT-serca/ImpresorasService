@@ -122,8 +122,7 @@ public class PrintersController : ControllerBase
     [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdatePrinterRequest request, CancellationToken cancellationToken)
     {
-        // AsNoTracking: no necesitamos change-tracking; la escritura es por SQL directo
-        // para eludir el bug del proveedor HANA que genera WHERE sin parametrizar strings.
+        // AsNoTracking: no necesitamos change-tracking; la escritura es por SQL directo (ver abajo).
         var printer = await _dbContext.Printers
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.PrinterId == id, cancellationToken);
@@ -151,8 +150,8 @@ public class PrintersController : ControllerBase
 
         try
         {
-            // Raw SQL garantiza parametrizado real — el proveedor HANA EF Core falla al
-            // generar WHERE con strings que contienen paréntesis cuando usa LINQ.
+            // herencia-hana: UPDATE en SQL directo porque el provider anterior generaba mal los WHERE
+            // con strings con paréntesis. Con Npgsql bastaría el change tracking (docs/PLAN.md, B6).
             // Cuando el host cambia, reseteamos ipp_supported a NULL para que el Worker
             // vuelva a descubrir el soporte IPP del nuevo host en el siguiente ciclo.
             var sql = hostChanged

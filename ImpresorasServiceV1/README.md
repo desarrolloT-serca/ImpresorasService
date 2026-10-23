@@ -1,6 +1,6 @@
 # ImpresorasServiceV1
 
-Plataforma de cola de impresión sobre **PostgreSQL** (antes SAP HANA, migrada el 23/10/2026): ingesta por polling con claim/ack, cola interna, enrutado y ejecución con reintentos.
+Plataforma de cola de impresión sobre **PostgreSQL**: ingesta por polling con claim/ack de los trabajos que deja el ERP, cola interna, enrutado y ejecución con reintentos.
 
 ## Arquitectura (4 bloques + tests)
 
@@ -20,11 +20,9 @@ En `appsettings.json` de API y Worker (secretos por entorno / variables / `.env`
 
 ```json
 {
-  "Database": { "ApplyMigrations": false },
   "ConnectionStrings": { "PrintQueue": "Host=HOST;Port=5432;Database=BD;Username=USUARIO;Search Path=impresoras" },
-  "Source": { "Mode": "SapHana" },
-  "SapHana": {
-    "SourceSystem": "SAP-HANA",
+  "Source": {
+    "SourceSystem": "ERP",
     "LeaseSeconds": 90
   },
   "Jwt": { "Secret": "<mínimo 32 caracteres>" },
@@ -32,9 +30,8 @@ En `appsettings.json` de API y Worker (secretos por entorno / variables / `.env`
 }
 ```
 
-Variables de entorno equivalentes: `ConnectionStrings__PrintQueue`, `Source__Mode`, `Jwt__Secret`, etc.
-`Source:Mode = SapHana` y la sección `SapHana` conservan el nombre: describen el **origen** de los trabajos
-(SAP), no la base de datos.
+Variables de entorno equivalentes: `ConnectionStrings__PrintQueue`, `Source__SourceSystem`, `Jwt__Secret`, etc.
+`Source` describe el **origen** de los trabajos: la tabla `printer_source_print_job` que escribe el ERP.
 
 ### Base de datos y cambio de base de datos
 
@@ -52,9 +49,8 @@ cargan al arrancar (`DotEnv.cs`) sin pisar variables ya definidas.
 En producción la cadena vive en las variables de cada servicio:
 `.\scripts\install-windows-services.ps1 -SkipPublish -Reconfigure -DbHost HOST -DbPort 5433 -DbName BD -DbUser USUARIO`.
 
-Copia del esquema real: `pg_dump --schema-only -n impresoras`. `Database:ApplyMigrations` debe permanecer en
-`false`: el DDL se aplica a mano. Las migraciones EF del repo son referencia histórica SQLite
-(ver `Infrastructure/Persistence/Migrations/README.md`).
+Copia del esquema real: `pg_dump --schema-only -n <esquema>`. No hay migraciones EF: el esquema vive en
+`scripts/sql/crear-esquema.sql` y la aplicación nunca lo crea ni lo altera (salvo en los tests).
 
 ## Arranque
 
@@ -93,6 +89,6 @@ Scripts operativos: `scripts/probar-impresion.ps1`, `scripts/verificar-estado.ps
 ## Documentación
 
 - Resumen: `docs/RESUMEN-PROYECTO.md`
-- Histórico (SQLite/Postgres/SqlTest): `docs/archive/`
+- Plan de trabajo: `docs/PLAN.md`
 - Despliegue PHP: `docs/DESPLIEGUE-PHP.md`
 - Smoke UI: `docs/SMOKE-TESTS-PHP.md`

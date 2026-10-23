@@ -76,7 +76,7 @@ class DashboardController extends Controller
         }
 
         // limit=500: coincide con el clamp real de la Api (PrintJobsController); usado solo como
-        // fallback si el overview no responde (ver F2.2, docs/roadmap-kpi-dashboard.md).
+        // fallback si el overview no responde (ver F2.2).
         $jobsPath     = 'api/printjobs?limit=500' . ($effectiveStore !== null ? '&storeId=' . $effectiveStore : '');
         $printersPath = 'api/printers?isActive=true' . ($effectiveStore !== null ? '&storeId=' . $effectiveStore : '');
 
@@ -172,7 +172,7 @@ class DashboardController extends Controller
         // sobre $jobs aquí sería trabajo desechado. Solo se calcula como fallback ante caída de la Api,
         // y en ese caso limit=500 (arriba) puede truncar tiendas con mucha cola: ver $partialData.
         //
-        // Fase 2 (docs/prompt-roadmap-kpi-dashboard.md, KPI-P1-001/002 aplicado aquí): printed/failed
+        // Fase 2 (KPI-P1-001/002 aplicado aquí): printed/failed
         // en la Api leen PrintJobEvents (primera transición a estado impreso / señal de fallo,
         // deduplicado por JobId). `api/printjobs` no expone eventos, solo el snapshot actual del job
         // (Status/UpdatedAtUtc) — este fallback es una APROXIMACIÓN por diseño, no puede replicar la
@@ -248,7 +248,7 @@ class DashboardController extends Controller
                     $storeStats[$storeId]['failed']++;
                 }
 
-                // Sin ventana (A-KPI-01, docs/auditoria-integral-2026-07-21.md): es una foto de
+                // Sin ventana (A-KPI-01): es una foto de
                 // estado actual, no un evento — un ErrorFinal es terminal y su UpdatedAtUtc no
                 // vuelve a moverse, así que exigir updatedInWindow lo hacía "desaparecer" al cruzar
                 // medianoche aunque el job siguiera roto. Coherente con DashboardController.cs.

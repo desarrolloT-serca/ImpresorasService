@@ -5,7 +5,7 @@ Este documento explica el proyecto de forma corta y practica para poder orientar
 ## 1) Que es este proyecto
 
 `ImpresorasServiceV1` es una plataforma para:
-- recibir trabajos de impresion desde SAP (polling con claim/ack sobre PostgreSQL),
+- recibir trabajos de impresion desde el ERP (polling con claim/ack sobre PostgreSQL),
 - guardarlos en la cola interna (`printer_print_job`, eventos),
 - decidir a que impresora enviarlos (enrutado),
 - y ejecutarlos con reintentos/control de estado.
@@ -14,7 +14,7 @@ La solucion esta separada por capas en `ImpresorasService.Core` y por procesos (
 
 ## 2) Mapa mental en 30 segundos
 
-- **Origen**: tabla `printer_source_print_job`, donde SAP deja los trabajos.
+- **Origen**: tabla `printer_source_print_job`, donde el ERP deja los trabajos.
 - **Cola interna**: tablas `printer_*` en el mismo esquema PostgreSQL (`admon`, provisional; ver `docs/PLAN.md` B0.5).
 - **Decision**: reglas que eligen impresora segun tienda/tipo de documento/canal.
 - **Ejecucion**: worker que manda el PDF al spooler y actualiza estado.
@@ -30,18 +30,16 @@ La solucion esta separada por capas en `ImpresorasService.Core` y por procesos (
 ## 4) Configuracion que mas impacta
 
 - `ConnectionStrings:PrintQueue` (servidor, usuario y esquema: única configuración de BD)
-- `Source:Mode` = `SapHana`
-- `SapHana:*` (sistema origen, lease)
+- `Source:*` (etiqueta del sistema origen, lease)
 - `Ingestion:*`, `PrintExecution:*`
 - `Jwt:Secret`
 - `Database:ApplyMigrations` = `false` (el DDL se aplica con `scripts/crear-esquema.ps1`)
 
-Documentacion historica (Sqlite/SqlTest/Postgres): `docs/archive/`.
 
 ## 5) Flujo end-to-end
 
 1. Trabajo en la tabla origen.
-2. `IngestionBackgroundService` → `SapHanaJobSourceAdapter` (claim/ack).
+2. `IngestionBackgroundService` → `ErpJobSourceAdapter` (claim/ack).
 3. `IngestionService` → cola interna con idempotencia.
 4. `RoutingService` → impresora.
 5. `PrintExecutionBackgroundService` → spooler.
@@ -52,7 +50,7 @@ Documentacion historica (Sqlite/SqlTest/Postgres): `docs/archive/`.
 1. `README.md`
 2. `src/ImpresorasService.Api/Program.cs`
 3. `src/ImpresorasService.Worker/Program.cs`
-4. `Infrastructure/Adapters/SapHanaJobSourceAdapter.cs` (sin modificar claim/ack en limpiezas)
+4. `Infrastructure/Adapters/ErpJobSourceAdapter.cs` (sin modificar claim/ack en limpiezas)
 5. `Infrastructure/Services/PrintExecutionService.cs`
 6. `Controllers/PrintJobsController.cs`
 
@@ -61,7 +59,6 @@ Documentacion historica (Sqlite/SqlTest/Postgres): `docs/archive/`.
 - `scripts/crear-esquema.ps1` — crea el esquema PostgreSQL desde `ConnectionStrings:PrintQueue`
 - `scripts/probar-impresion.ps1`
 - `scripts/verificar-estado.ps1`
-- `scripts/archive/verificar-bd-sqlite-historico.ps1` — solo referencia historica
 
 ## 8) Frontend PHP
 

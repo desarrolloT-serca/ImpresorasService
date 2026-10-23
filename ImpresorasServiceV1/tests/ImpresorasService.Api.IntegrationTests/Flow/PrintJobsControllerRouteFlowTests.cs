@@ -67,7 +67,7 @@ public sealed class PrintJobsControllerRouteFlowTests
         db.PrintJobs.Add(new PrintJob
         {
             JobId = jobId,
-            SourceSystem = "SAP-TEST",
+            SourceSystem = "ERP-TEST",
             ExternalJobId = "EXT-1",
             StoreId = 1,
             DocumentType = "FACTURA",
@@ -146,7 +146,7 @@ public sealed class PrintJobsControllerRouteFlowTests
         db.PrintJobs.Add(new PrintJob
         {
             JobId = jobId,
-            SourceSystem = "SAP-TEST",
+            SourceSystem = "ERP-TEST",
             ExternalJobId = "EXT-2",
             StoreId = 1,
             DocumentType = "FACTURA",
@@ -226,7 +226,7 @@ public sealed class PrintJobsControllerRouteFlowTests
         db.PrintJobs.Add(new PrintJob
         {
             JobId = jobId,
-            SourceSystem = "SAP-TEST",
+            SourceSystem = "ERP-TEST",
             ExternalJobId = "EXT-3",
             StoreId = 1,
             DocumentType = "FACTURA",

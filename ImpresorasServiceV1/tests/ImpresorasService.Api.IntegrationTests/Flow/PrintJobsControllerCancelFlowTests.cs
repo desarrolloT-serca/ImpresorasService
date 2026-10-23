@@ -45,7 +45,7 @@ public sealed class PrintJobsControllerCancelFlowTests
         db.PrintJobs.Add(new PrintJob
         {
             JobId = jobId,
-            SourceSystem = "SAP-TEST",
+            SourceSystem = "ERP-TEST",
             ExternalJobId = "EXT-1",
             StoreId = 1,
             DocumentType = "FACTURA",
@@ -110,7 +110,7 @@ public sealed class PrintJobsControllerCancelFlowTests
         db.PrintJobs.Add(new PrintJob
         {
             JobId = jobId,
-            SourceSystem = "SAP-TEST",
+            SourceSystem = "ERP-TEST",
             ExternalJobId = "EXT-2",
             StoreId = 1,
             DocumentType = "FACTURA",
@@ -162,7 +162,7 @@ public sealed class PrintJobsControllerCancelFlowTests
         db.PrintJobs.Add(new PrintJob
         {
             JobId = jobId,
-            SourceSystem = "SAP-TEST",
+            SourceSystem = "ERP-TEST",
             ExternalJobId = "EXT-3",
             StoreId = 1,
             DocumentType = "FACTURA",
@@ -220,7 +220,7 @@ public sealed class PrintJobsControllerCancelFlowTests
         db.PrintJobs.Add(new PrintJob
         {
             JobId = jobId,
-            SourceSystem = "SAP-TEST",
+            SourceSystem = "ERP-TEST",
             ExternalJobId = "EXT-4",
             StoreId = 2,
             DocumentType = "FACTURA",
@@ -265,7 +265,7 @@ public sealed class PrintJobsControllerCancelFlowTests
         db.PrintJobs.Add(new PrintJob
         {
             JobId = jobId,
-            SourceSystem = "SAP-TEST",
+            SourceSystem = "ERP-TEST",
             ExternalJobId = "EXT-5",
             StoreId = 1,
             DocumentType = "FACTURA",
@@ -328,7 +328,7 @@ public sealed class PrintJobsControllerCancelFlowTests
         db.PrintJobs.Add(new PrintJob
         {
             JobId = jobId,
-            SourceSystem = "SAP-TEST",
+            SourceSystem = "ERP-TEST",
             ExternalJobId = "EXT-6",
             StoreId = 1,
             DocumentType = "FACTURA",

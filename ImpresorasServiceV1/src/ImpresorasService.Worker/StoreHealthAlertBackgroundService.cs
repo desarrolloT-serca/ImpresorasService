@@ -106,8 +106,8 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
         // G5.3: reglas de severidad de 1-3 niveles — fuente única de verdad, compartida con la Api.
         var rules = await _ruleStore.LoadAsync(ct);
 
-        // No usar const: EF plegaría `IsActive == true` a un booleano desnudo y HANA rechaza
-        // `WHERE (col AND ...)`. Como variable se parametriza y genera `col = :param`.
+        // herencia-hana: variable y no const porque la BD anterior rechazaba `WHERE (col AND ...)`.
+        // PostgreSQL acepta el booleano desnudo: simplificable (docs/PLAN.md, B6).
         var activeOnly = true;
         var now = _timeProvider.GetUtcNow();
 

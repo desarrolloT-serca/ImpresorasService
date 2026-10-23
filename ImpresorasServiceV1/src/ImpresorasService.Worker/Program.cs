@@ -33,10 +33,6 @@ await using (var scope = host.Services.CreateAsyncScope())
     var logger = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<ImpresorasService.Worker.IngestionBackgroundService>>();
     logger.LogInformation("Worker usando PostgreSQL Host={Host} Database={Database}", conn.DataSource, conn.Database);
 
-    var applyMigrations = host.Services.GetRequiredService<IConfiguration>().GetValue<bool>("Database:ApplyMigrations");
-    if (applyMigrations)
-        await dbContext.Database.MigrateAsync();
-
     var activeOnly = true;
     var rulesCount = await dbContext.RoutingRules.CountAsync(r => r.IsActive == activeOnly);
     logger.LogInformation("Reglas de enrutado activas: {Count}", rulesCount);

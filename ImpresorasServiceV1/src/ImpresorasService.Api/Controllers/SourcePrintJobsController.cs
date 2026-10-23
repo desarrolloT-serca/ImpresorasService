@@ -75,7 +75,7 @@ public class SourcePrintJobsController : ControllerBase
         [FromBody] CreateSourcePrintJobRequest request,
         CancellationToken cancellationToken)
     {
-        string sourceSystem = string.IsNullOrWhiteSpace(request.SourceSystem) ? "SAP-TEST" : request.SourceSystem;
+        string sourceSystem = string.IsNullOrWhiteSpace(request.SourceSystem) ? "ERP-TEST" : request.SourceSystem;
         string externalJobId = string.IsNullOrWhiteSpace(request.ExternalJobId)
             ? $"JOB-{Guid.NewGuid():N}"
             : request.ExternalJobId;

@@ -6,10 +6,9 @@
 -- este fichero en UNA transaccion: o se crea todo o nada.
 -- A mano:  psql ... -v ON_ERROR_STOP=1 -1 -c "SET search_path TO impresoras" -f crear-esquema.sql
 --
--- Traduccion del esquema HANA (scripts/sql/schema/, extraido de ZTEST_VICENTE_2 el 12/08/2026):
---   BLOB / VARBINARY -> bytea, NVARCHAR -> varchar, TINYINT usado como bool -> boolean.
---   Fechas -> varchar(26). ponytail: el modelo EF convierte TODO DateTimeOffset a texto
---   "yyyy-MM-dd HH:mm:ss" (herencia de HANA, ver ImpresorasDbContext) y Npgsql no deja meter texto
+-- Tipos:
+--   Fechas -> varchar(26). herencia-hana: el modelo EF convierte TODO DateTimeOffset a texto
+--   "yyyy-MM-dd HH:mm:ss" (ver ImpresorasDbContext) y Npgsql no deja meter texto
 --   en una columna timestamp. Es el mismo formato que ya ejercitan los tests en SQLite, y al ser
 --   ISO de ancho fijo en UTC ordena y compara bien como texto. Pasar a timestamptz exige quitar
 --   esos converters y revisar que todo DateTimeOffset llegue con offset 0.

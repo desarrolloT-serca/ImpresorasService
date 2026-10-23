@@ -151,9 +151,8 @@ function Ensure-Service([string]$Name, [string]$DisplayName, [string]$ExePath) {
 
     # Reinicio automatico ante caida del proceso.
     #
-    # Con HANA el Worker moria con AccessViolationException en el driver nativo de SAP, que no se
-    # puede capturar. Con PostgreSQL ese fallo desaparece, pero la politica se mantiene: sin
-    # acciones de recuperacion, un proceso caido se queda caido hasta que alguien lo arranque a mano.
+    # Sin acciones de recuperacion, un proceso caido se queda caido hasta que alguien lo arranque
+    # a mano.
     #
     # Se aplica siempre, no solo al crear: los servicios ya instalados no las tenian.
     # reset=86400 -> el contador de fallos vuelve a cero pasado un dia sin caidas.

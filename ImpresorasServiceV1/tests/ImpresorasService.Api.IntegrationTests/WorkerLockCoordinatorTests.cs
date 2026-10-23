@@ -6,7 +6,7 @@ using Xunit;
 namespace ImpresorasService.Api.IntegrationTests;
 
 /// <summary>
-/// G4.1 (docs/roadmapimpresoras.md Fase 2.1): lock de instancia única del Worker.
+/// G4.1 (Fase 2.1): lock de instancia única del Worker.
 /// Acceptance del roadmap: arrancar 2 Workers → solo uno procesa; matar al titular → el segundo
 /// toma el relevo tras expirar el lease. Aquí se prueba el coordinador (sin levantar hosts reales)
 /// contra SQLite en memoria, mismo patrón que <see cref="Persistence.TelegramConfigCompatibilityTests"/>.

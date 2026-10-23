@@ -11,9 +11,7 @@ namespace ImpresorasService.Api.IntegrationTests.Persistence;
 
 /// <summary>
 /// El resto de la suite corre sobre SQLite, que traduce cualquier LINQ razonable. El provider de
-/// produccion puede no hacerlo: con HANA, el EXISTS correlacionado de `overview` y el NOT IN de
-/// `timeseries` tumbaron el dashboard entero con SQL que SQLite aceptaba. Ningun test sobre SQLite
-/// detecta esa clase de fallo.
+/// produccion puede no hacerlo, y ningun test sobre SQLite detecta esa clase de fallo.
 ///
 /// Estas pruebas generan el SQL con el provider real (Npgsql) y NO conectan: el fallo ocurriria al
 /// traducir, asi que ToQueryString() lo reproduce en seco contra una cadena ficticia.

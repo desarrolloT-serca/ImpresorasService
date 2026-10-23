@@ -38,7 +38,6 @@ public static class DependencyInjection
             .Validate(o => o.BackoffSeconds is null || o.BackoffSeconds.All(s => s >= 0), "PrintExecution:BackoffSeconds no admite valores negativos.")
             .Validate(o => o.MaxAttempts > 0, "PrintExecution:MaxAttempts debe ser mayor que 0.")
             .ValidateOnStart();
-        services.Configure<SapHanaOptions>(configuration.GetSection(SapHanaOptions.SectionName));
 
         string connectionString = configuration.GetConnectionString("PrintQueue") ?? string.Empty;
         if (string.IsNullOrWhiteSpace(connectionString))
@@ -47,8 +46,7 @@ public static class DependencyInjection
         services.AddDbContext<ImpresorasDbContext>(options => options.UseNpgsql(connectionString));
 
         services.AddScoped<IPrintJobRepository, PrintJobRepository>();
-        services.AddScoped<SapHanaJobSourceAdapter>();
-        services.AddScoped<IJobSourceAdapter, ConfigurableJobSourceAdapter>();
+        services.AddScoped<IJobSourceAdapter, ErpJobSourceAdapter>();
         services.AddScoped<IRoutingResolver, RoutingResolver>();
         services.AddScoped<IRoutingService, RoutingService>();
 

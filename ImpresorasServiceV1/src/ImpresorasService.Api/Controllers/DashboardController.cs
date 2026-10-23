@@ -57,9 +57,8 @@ public class DashboardController : ControllerBase
         var stores = _dbContext.Stores.AsNoTracking().Where(x => x.IsActive == activeOnly);
         var printers = _dbContext.Printers.AsNoTracking().Where(x => x.IsActive == activeOnly);
         // El dashboard operativo solo muestra tiendas activas; excluye histórico de tiendas dadas de baja.
-        // Los ids se materializan en vez de usar un Any() correlacionado: el provider de HANA traduce
-        // ese EXISTS a SQL inválido ("WHERE ( 1 AS X FROM DUMMY WHERE EXISTS ..."), que tumbaba el
-        // endpoint entero con un 500. Mismo patrón que StoreHealthAlertBackgroundService.
+        // herencia-hana: ids materializados en vez de un Any() correlacionado, que el provider
+        // anterior traducia a SQL invalido. Npgsql lo traduce bien: simplificable (docs/PLAN.md, B6).
         var activeStoreIds = await stores
             .Select(x => x.StoreId)
             .ToListAsync(cancellationToken);
@@ -74,17 +73,17 @@ public class DashboardController : ControllerBase
         }
 
         // received: cohorte de creados en la ventana (foto de qué entró). failedWithoutRetryCurrent:
-        // foto actual de fallos sin reenvío — SIN ventana (A-KPI-01, auditoria-integral-2026-07-21.md):
+        // foto actual de fallos sin reenvío — SIN ventana (A-KPI-01):
         // un ErrorFinal es terminal, su UpdatedAtUtc no vuelve a moverse, así que filtrarlo por ventana
         // lo hacía "desaparecer" al cruzar medianoche aunque el job siguiera roto. printed/failed:
         // eventos de negocio (PrintJobEvents), contados una sola vez por job — KPI-P1-001/002,
-        // docs/prompt-roadmap-kpi-dashboard.md. Acotada también por arriba (<= now), igual que PHP
+        //. Acotada también por arriba (<= now), igual que PHP
         // (resolveWindowRange) — VAL-P3-009.
         var jobsInWindow = jobs.Where(x => x.CreatedAtUtc >= fromUtc && x.CreatedAtUtc <= now);
 
         var (printedRows, failedRows) = await LoadPrintedAndFailedAsync(jobs, fromUtc, now, cancellationToken);
 
-        // BuildStoreRowsAsync ya agrega received/queue/failed por tienda en HANA;
+        // BuildStoreRowsAsync ya agrega received/queue/failed por tienda en la BD;
         // sumar en memoria evita 5 COUNT queries adicionales (AUD-18).
         var rules = await _ruleStore.LoadAsync(cancellationToken);
         var (storeRows, alerts) = await BuildStoreRowsAsync(stores, printers, jobsInWindow, jobs, printedRows, failedRows, thresholds, rules, cancellationToken);
@@ -132,8 +131,8 @@ public class DashboardController : ControllerBase
     /// caminando hacia atras desde la foto de ahora: depth[n-1] = depth[n] - llegadas[n] + salidas[n].
     /// Sale exacta y ahorra la consulta de sembrado que haria falta yendo hacia delante.
     ///
-    /// Los tramos se agrupan en memoria y no en SQL a proposito: el provider de HANA traduce mal las
-    /// funciones de truncado de fecha, y el volumen de una ventana de dashboard no lo justifica.
+    /// Los tramos se agrupan en memoria y no en SQL: las fechas se guardan como texto (ver
+    /// ImpresorasDbContext) y el volumen de una ventana de dashboard no justifica truncarlas en SQL.
     /// </summary>
     [HttpGet("timeseries")]
     public async Task<IActionResult> GetTimeseries(
@@ -183,11 +182,9 @@ public class DashboardController : ControllerBase
         // Salidas de cola: primer evento a un estado que ya no cuenta como "en cola". RetryScheduled
         // sigue dentro de QueueStatuses, asi que un reintento no cuenta como salida.
         //
-        // El complemento se calcula aqui y no con `!QueueStatuses.Contains(...)`: el provider de HANA
-        // no sabe traducir un NOT IN dentro de un AND y revienta con NullReferenceException en
-        // HanaQuerySqlGenerator.VisitSqlUnary, tumbando el endpoint entero con un 500. El IN positivo
-        // si traduce — es la forma que ya usa `overview`. PrintJobStatus es un enum cerrado, asi que
-        // el complemento es equivalente y no puede quedarse obsoleto en silencio.
+        // herencia-hana: complemento calculado aqui en vez de `!QueueStatuses.Contains(...)`, porque
+        // el provider anterior no traducia un NOT IN dentro de un AND. PrintJobStatus es un enum
+        // cerrado, asi que es equivalente. Simplificable con Npgsql (docs/PLAN.md, B6).
         var departureStatuses = Enum.GetValues<PrintJobStatus>()
             .Where(s => !DashboardPrintJobPredicates.QueueStatuses.Contains(s))
             .ToArray();
@@ -366,7 +363,7 @@ public class DashboardController : ControllerBase
     /// (entrada a ErrorFinal/RetryScheduled, o primera impresión con AttemptCount>1 — KPI-P1-002).
     /// Un mismo job nunca suma más de una vez a cada KPI dentro de la misma ventana.
     ///
-    /// Perf (A-KPI-03, docs/auditoria-integral-2026-07-21.md): el MIN(OccurredAtUtc) agrupado por
+    /// Perf (A-KPI-03): el MIN(OccurredAtUtc) agrupado por
     /// JobId se hacía sobre TODA la tabla de eventos (todas las tiendas, todo el histórico) y
     /// luego se resolvía StoreId/AttemptCount con un segundo roundtrip + IN-list de todos los
     /// JobId impresos. El Join contra <paramref name="jobsScope"/> (ya filtrado por tienda activa

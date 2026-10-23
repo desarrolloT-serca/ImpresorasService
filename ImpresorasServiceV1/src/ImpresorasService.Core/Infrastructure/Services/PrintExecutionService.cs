@@ -20,7 +20,7 @@ namespace ImpresorasService.Infrastructure.Services;
 ///
 /// <para>Antes esto era leer-comprobar-escribir con un snapshot de <c>RowVersion</c>, que dejaba
 /// abierta la ventana entre la lectura y el guardado. <c>RowVersion</c> además nunca fue un token de
-/// concurrencia de EF: en HANA es un BLOB y no se puede comparar en un WHERE.</para>
+/// concurrencia de EF: es un binario opaco que no se compara en el WHERE.</para>
 /// </summary>
 public sealed class PrintExecutionService : IPrintExecutionService
 {

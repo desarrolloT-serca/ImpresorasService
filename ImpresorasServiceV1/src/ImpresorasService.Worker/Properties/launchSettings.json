@@ -5,9 +5,7 @@
       "commandName": "Project",
       "dotnetRunMessages": true,
       "environmentVariables": {
-        "DOTNET_ENVIRONMENT": "Development",
-        "Source__Mode": "SapHana",
-        "SapHana__LeaseSeconds": "90"
+        "DOTNET_ENVIRONMENT": "Development"
       }
     }
   }

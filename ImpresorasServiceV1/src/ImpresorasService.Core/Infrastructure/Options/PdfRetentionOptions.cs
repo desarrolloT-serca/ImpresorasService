@@ -27,6 +27,6 @@ public sealed class PdfRetentionOptions
     /// <summary>Horas entre barridos. No necesita ser frecuente: el crecimiento es diario.</summary>
     public int IntervalHours { get; set; } = 6;
 
-    /// <summary>Trabajos por barrido, para no lanzar un UPDATE masivo contra HANA de una vez.</summary>
+    /// <summary>Trabajos por barrido, para no lanzar un UPDATE masivo contra la BD de una vez.</summary>
     public int BatchSize { get; set; } = 500;
 }
