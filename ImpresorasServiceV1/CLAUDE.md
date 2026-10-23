@@ -11,7 +11,7 @@ Sistema de cola de impresión para tiendas de retail. Ingesta trabajos (albarane
 | `ImpresorasService.Core` | .NET 8, EF Core 8 | — | Dominio, aplicación, infraestructura compartida |
 | `ImpresorasService.Api` | ASP.NET Core 8 | 5105 | REST API con JWT; consume Core |
 | `ImpresorasService.Worker` | .NET 8 Host Service | — | Servicios de fondo (ingesta, ejecución, watchdog, alertas) |
-| `ImpresorasService.Web.PHP` | Laravel 11, PHP 8.2 | 8000 | Frontend web (Blade + CSS glass-effect) |
+| `ImpresorasService.Web.PHP` | Laravel 12, PHP 8.5 | 8000 | Frontend web (Blade + CSS glass-effect) |
 | PostgreSQL | Npgsql EF provider | 5433 | Base de datos única (`10.110.46.121`, BD `serca`, usuario `pb8_xp57`, esquema **`admon` provisional**, ver `docs/PLAN.md` B0.5). Servidor 19beta4 |
 | Telegram Bot API | HTTP | — | Notificaciones de alertas de tienda |
 
@@ -97,7 +97,7 @@ Pending → Routed → SpoolAccepted → PrintedConfirmed
 | Auth | JWT Bearer, BCrypt |
 | Printer protocol | IPP (RFC 8010/8011) vía HttpClient raw |
 | Notifications | Telegram Bot API (REST) |
-| Frontend | Laravel 11 (Blade, PHP 8.2), CSS custom glass-effect |
+| Frontend | Laravel 12 (Blade, PHP 8.5), CSS custom glass-effect |
 | CI/CD | GitHub Actions |
 
 > **DDL externo**: no hay migraciones EF. El esquema vive en `scripts/sql/crear-esquema.sql` y se aplica con `scripts/crear-esquema.ps1`; la aplicación nunca lo crea ni lo altera (solo los tests, con `EnsureCreated` sobre SQLite).
