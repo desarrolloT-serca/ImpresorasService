@@ -36,6 +36,12 @@ class DashboardControllerTest extends TestCase
                 return $this->responseFor($path);
             }
 
+            /** El dashboard pide el overview dentro del lote paralelo. */
+            public function getQuietAsync(string $path): PromiseInterface
+            {
+                return Create::promiseFor($this->getQuiet($path));
+            }
+
             public function getQuiet(string $path): array
             {
                 $this->paths[] = $path;
@@ -139,6 +145,12 @@ class DashboardControllerTest extends TestCase
             public function get(string $path): array
             {
                 return $this->responseFor($path);
+            }
+
+            /** El dashboard pide el overview dentro del lote paralelo. */
+            public function getQuietAsync(string $path): PromiseInterface
+            {
+                return Create::promiseFor($this->getQuiet($path));
             }
 
             public function getQuiet(string $path): array
@@ -253,6 +265,12 @@ class DashboardControllerTest extends TestCase
             public function get(string $path): array
             {
                 return $this->responseFor($path);
+            }
+
+            /** El dashboard pide el overview dentro del lote paralelo. */
+            public function getQuietAsync(string $path): PromiseInterface
+            {
+                return Create::promiseFor($this->getQuiet($path));
             }
 
             public function getQuiet(string $path): array
@@ -581,6 +599,12 @@ class DashboardControllerTest extends TestCase
                 return $this->responseFor($path);
             }
 
+            /** El dashboard pide el overview dentro del lote paralelo. */
+            public function getQuietAsync(string $path): PromiseInterface
+            {
+                return Create::promiseFor($this->getQuiet($path));
+            }
+
             public function getQuiet(string $path): array
             {
                 return $this->responseFor($path);
@@ -620,6 +644,105 @@ class DashboardControllerTest extends TestCase
                     'api/dashboard/timeseries?window=today' => ['points' => $this->timeseriesPoints],
                     default => [],
                 };
+            }
+        };
+    }
+
+    /**
+     * Todo lo que alimenta el dashboard se pide en un unico lote paralelo. Antes eran tres tandas
+     * secuenciales y el tiempo de carga era la suma de las tres, no la mas lenta.
+     */
+    public function test_dashboard_requests_everything_in_a_single_batch(): void
+    {
+        $api = $this->makeRecordingApiClient(activeStoreIds: [10]);
+        $this->app->instance(ApiClient::class, $api);
+
+        $this->withSession([
+            'impresoras_token' => 'token',
+            'impresoras_user' => ['role' => 'Admin', 'login' => 'admin'],
+        ])->get('/')->assertOk();
+
+        // Overview y threshold-rules entran en el lote, no en peticiones sueltas despues de el.
+        // El doble no simula el cache por peticion del ApiClient real, asi que aqui solo se
+        // comprueba que la ruta se pidio; en produccion la segunda lectura sale de ese cache.
+        foreach (['api/dashboard/overview?window=today', 'api/dashboard/threshold-rules'] as $esperada) {
+            self::assertContains($esperada, $api->paths, "falta $esperada en el lote");
+        }
+    }
+
+    /**
+     * Unica dependencia real entre peticiones: si la tienda seleccionada ya no esta activa, el
+     * filtro se limpia y el lote se rehace sin ella. Sin esto, el dashboard mostraria los datos
+     * de una tienda dada de baja.
+     */
+    public function test_dashboard_refetches_without_the_store_when_it_is_no_longer_active(): void
+    {
+        // La sesion apunta a la tienda 99, que no esta entre las activas.
+        $api = $this->makeRecordingApiClient(activeStoreIds: [10]);
+        $this->app->instance(ApiClient::class, $api);
+
+        $response = $this->withSession([
+            'impresoras_token' => 'token',
+            'impresoras_user' => ['role' => 'Admin', 'login' => 'admin'],
+            'selected_store_id' => 99,
+        ])->get('/');
+
+        $response->assertOk();
+
+        $conTienda = array_filter($api->paths, fn ($p) => str_contains($p, 'storeId=99'));
+        $sinTienda = array_filter($api->paths, fn ($p) => str_starts_with($p, 'api/printers?isActive=true') && !str_contains($p, 'storeId'));
+
+        self::assertNotEmpty($conTienda, 'el primer lote debe salir acotado a la tienda de sesion');
+        self::assertNotEmpty($sinTienda, 'el lote debe rehacerse sin la tienda inactiva');
+        $response->assertSessionMissing('selected_store_id');
+    }
+
+    /** Doble que solo registra las rutas pedidas; el contenido no importa para estas pruebas. */
+    private function makeRecordingApiClient(array $activeStoreIds): ApiClient
+    {
+        return new class($activeStoreIds) extends ApiClient
+        {
+            /** @var list<string> */
+            public array $paths = [];
+
+            public function __construct(private readonly array $activeStoreIds)
+            {
+                parent::__construct(new Client(['base_uri' => 'http://api.test/']), 'http://api.test');
+            }
+
+            public function getAsync(string $path): PromiseInterface
+            {
+                return Create::promiseFor($this->responseFor($path));
+            }
+
+            public function getQuietAsync(string $path): PromiseInterface
+            {
+                return Create::promiseFor($this->getQuiet($path));
+            }
+
+            public function get(string $path): array
+            {
+                return $this->responseFor($path);
+            }
+
+            public function getQuiet(string $path): array
+            {
+                return $this->responseFor($path);
+            }
+
+            /** @return array<int|string, mixed> */
+            private function responseFor(string $path): array
+            {
+                $this->paths[] = $path;
+
+                if (str_starts_with($path, 'api/stores')) {
+                    return array_map(
+                        static fn (int $id): array => ['storeId' => $id, 'name' => 'Tienda ' . $id],
+                        $this->activeStoreIds,
+                    );
+                }
+
+                return [];
             }
         };
     }

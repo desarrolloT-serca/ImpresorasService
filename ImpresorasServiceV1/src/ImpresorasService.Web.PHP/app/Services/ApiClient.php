@@ -69,6 +69,49 @@ class ApiClient
         );
     }
 
+    /**
+     * getAsync sin marcar error de sesion, para las rutas que tienen respaldo propio y no deben
+     * pintar el aviso de "no se pudo conectar" (mismo criterio que getQuiet). Existe para poder
+     * meterlas en el mismo lote paralelo que el resto en vez de pagar una ida y vuelta aparte.
+     */
+    public function getQuietAsync(string $path): \GuzzleHttp\Promise\PromiseInterface
+    {
+        $normalizedPath = ltrim($path, '/');
+        $token = Session::get('impresoras_token');
+        $cacheKey = sha1(($token ? 'auth:' . $token : 'guest') . '|' . $normalizedPath);
+
+        if (array_key_exists($cacheKey, $this->requestGetCache)) {
+            return \GuzzleHttp\Promise\Create::promiseFor($this->requestGetCache[$cacheKey]);
+        }
+
+        $options = $token ? ['headers' => ['Authorization' => 'Bearer ' . $token]] : [];
+
+        return $this->client->getAsync($normalizedPath, $options)->then(
+            function ($response) use ($cacheKey) {
+                $decoded = json_decode((string) $response->getBody(), true) ?? [];
+                if (array_key_exists('value', $decoded) && is_array($decoded['value'])) {
+                    $decoded = $decoded['value'];
+                } elseif (array_key_exists('Value', $decoded) && is_array($decoded['Value'])) {
+                    $decoded = $decoded['Value'];
+                }
+
+                return $this->requestGetCache[$cacheKey] = $decoded;
+            },
+            function (\Throwable $e) use ($normalizedPath) {
+                if ($e instanceof \Illuminate\Http\Exceptions\HttpResponseException) {
+                    throw $e;
+                }
+                // Silencioso para la UI pero no invisible, igual que getQuiet.
+                Log::warning('ApiClient GET silencioso fallo', [
+                    'path' => $normalizedPath,
+                    'error' => $e->getMessage(),
+                ]);
+
+                return [];
+            }
+        );
+    }
+
     public function get(string $path): array
     {
         $normalizedPath = ltrim($path, '/');
