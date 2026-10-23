@@ -1,9 +1,12 @@
 ﻿using System.Net.Http.Json;
+using System.Security.Claims;
 using ImpresorasService.Api.Controllers;
 using ImpresorasService.Application.Services;
 using ImpresorasService.Domain;
 using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -328,6 +331,25 @@ public sealed class DashboardControllerTests : IntegrationTestBase
         response.EnsureSuccessStatusCode();
         var series = await ReadAsJsonAsync<TimeseriesResponse>(response);
         Assert.Equal("day", series!.Bucket);
+    }
+
+    // Quien no es Admin y no tiene tienda no ve ninguna, nunca todas: igual que la cola y las
+    // impresoras. Pedir una tienda concreta tampoco le sirve.
+    [Fact]
+    public async Task OverviewAndTimeseries_NonAdminWithoutStore_ReturnForbid()
+    {
+        using var scope = Factory.Services.CreateScope();
+        var controller = ActivatorUtilities.CreateInstance<DashboardController>(scope.ServiceProvider);
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim(ClaimTypes.Role, "Employee") }, "test"))
+            }
+        };
+
+        Assert.IsType<ForbidResult>(await controller.GetOverview("today", DashboardTestStoreId, CancellationToken.None));
+        Assert.IsType<ForbidResult>(await controller.GetTimeseries("today", DashboardTestStoreId, CancellationToken.None));
     }
 
     [Fact]

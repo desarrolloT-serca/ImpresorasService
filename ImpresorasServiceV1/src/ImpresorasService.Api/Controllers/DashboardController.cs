@@ -48,8 +48,11 @@ public class DashboardController : ControllerBase
         [FromQuery] int? storeId,
         CancellationToken cancellationToken)
     {
-        var thresholds = await GetThresholdsAsync(cancellationToken);
         var effectiveStoreId = IsAdmin() ? storeId : GetCurrentUserStoreId();
+        // Sin tienda no se ve ninguna, nunca todas: igual que la cola y las impresoras.
+        if (!IsAdmin() && !effectiveStoreId.HasValue)
+            return Forbid();
+        var thresholds = await GetThresholdsAsync(cancellationToken);
         var now = _timeProvider.GetUtcNow();
         var fromUtc = ResolveWindowStartUtc(window, now);
 
@@ -139,6 +142,8 @@ public class DashboardController : ControllerBase
         CancellationToken cancellationToken)
     {
         var effectiveStoreId = IsAdmin() ? storeId : GetCurrentUserStoreId();
+        if (!IsAdmin() && !effectiveStoreId.HasValue)
+            return Forbid();
         var now = _timeProvider.GetUtcNow();
         var fromUtc = ResolveWindowStartUtc(window, now);
         var normalized = NormalizeWindow(window);
