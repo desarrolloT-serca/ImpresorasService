@@ -145,9 +145,6 @@ guardan como texto ISO, porque SQLite no compara fechas en SQL: el modelo depend
 cachea por proveedor. Las fechas en PostgreSQL las cubre `PostgresQueryTranslationTests` y la prueba
 contra un PostgreSQL real.
 
-**`herencia-hana:`** marca en el código los rodeos que solo existían por el proveedor de HANA (la BD
-hasta el 23/10/2026). Son el bloque B6 de `docs/PLAN.md`: al simplificar uno, quitar su marca.
-
 ---
 
 ## Estado actual (2026-10-23)

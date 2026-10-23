@@ -390,10 +390,9 @@ public class PrintersController : ControllerBase
         if (storeId < 0)
             return false;
 
-        var activeStoreOnly = true;
         return await _dbContext.Stores
             .AsNoTracking()
-            .Where(x => x.StoreId == storeId && x.IsActive == activeStoreOnly)
+            .Where(x => x.StoreId == storeId && x.IsActive)
             .AnyAsync(cancellationToken);
     }
 

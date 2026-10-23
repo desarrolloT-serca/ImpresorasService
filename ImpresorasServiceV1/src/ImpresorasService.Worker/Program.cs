@@ -33,8 +33,7 @@ await using (var scope = host.Services.CreateAsyncScope())
     var logger = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<ImpresorasService.Worker.IngestionBackgroundService>>();
     logger.LogInformation("Worker usando PostgreSQL Host={Host} Database={Database}", conn.DataSource, conn.Database);
 
-    var activeOnly = true;
-    var rulesCount = await dbContext.RoutingRules.CountAsync(r => r.IsActive == activeOnly);
+    var rulesCount = await dbContext.RoutingRules.CountAsync(r => r.IsActive);
     logger.LogInformation("Reglas de enrutado activas: {Count}", rulesCount);
 
     // En Production esto es inalcanzable (AddInfrastructure ya habría fallado), pero fuera de

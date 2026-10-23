@@ -183,12 +183,8 @@ public class ImpresorasDbContext : DbContext
             entity.Property(x => x.CorrelationId).HasConversion(GuidToBytesConverter);
             entity.Property(x => x.CreatedAtUtc).HasColumnName("created_at_utc");
             entity.Property(x => x.UpdatedAtUtc).HasColumnName("updated_at_utc");
-            // herencia-hana: row_version existe en el esquema pero NO participa en la concurrencia
-            // (en la BD anterior era un BLOB no comparable). Candidata a borrar (docs/PLAN.md, B6). Hasta el 19/08/2026 se le
-            // escribían 8 bytes aleatorios en cada guardado con la idea de usarlo como token, y no lo
-            // leía nadie. La exclusión entre procesos la da el estado en el WHERE del UPDATE
-            // (PrintExecutionService.TryTransitionAsync). No reintroducir aquí IsConcurrencyToken.
-            entity.Property(x => x.RowVersion).HasColumnName("row_version");
+            // Sin token de concurrencia a propósito: la exclusión entre procesos la da el estado en el
+            // WHERE del UPDATE (PrintExecutionService.TryTransitionAsync).
             entity.Property(x => x.SourceSystem).HasMaxLength(50).IsRequired();
             entity.Property(x => x.ExternalJobId).HasMaxLength(120).IsRequired();
             entity.Property(x => x.DocumentType).HasMaxLength(80).IsRequired();

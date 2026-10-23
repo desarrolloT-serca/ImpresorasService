@@ -53,9 +53,8 @@ public class DashboardController : ControllerBase
         var now = _timeProvider.GetUtcNow();
         var fromUtc = ResolveWindowStartUtc(window, now);
 
-        var activeOnly = true;
-        var stores = _dbContext.Stores.AsNoTracking().Where(x => x.IsActive == activeOnly);
-        var printers = _dbContext.Printers.AsNoTracking().Where(x => x.IsActive == activeOnly);
+        var stores = _dbContext.Stores.AsNoTracking().Where(x => x.IsActive);
+        var printers = _dbContext.Printers.AsNoTracking().Where(x => x.IsActive);
         // El dashboard operativo solo muestra tiendas activas; excluye histórico de tiendas dadas de baja.
         // Consulta propia (no `stores`, que se acota más abajo por tienda) para que el EXISTS no cambie.
         var activeStores = _dbContext.Stores.Where(s => s.IsActive);

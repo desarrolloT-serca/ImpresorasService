@@ -51,15 +51,13 @@ public class ErpJobSourceAdapter : IJobSourceAdapter
 
         await using var tx = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
 
-        var pendingOnly = false;
-
         // Selección de candidatos: proyección escalar sin PdfBlob (Fase 1.3) y filtro de
         // disponibilidad de claim + orden empujados a SQL antes del Take (Fase 1.2). Antes,
         // Take(batchSize*5) cortaba por Id antes de filtrar por claim: si las primeras filas
         // estaban reclamadas por otro worker, se perdía el ciclo aunque hubiera libres después,
         // y además se cargaba el blob completo de filas que ni siquiera se iban a reclamar.
         var candidateIds = await _dbContext.SourcePrintJobs
-            .Where(x => x.IsProcessed == pendingOnly
+            .Where(x => !x.IsProcessed
                 && (x.ClaimedUntilUtc == null || x.ClaimedUntilUtc <= now))
             .OrderBy(x => x.CreatedAtUtc)
             .ThenBy(x => x.Id)
@@ -76,7 +74,7 @@ public class ErpJobSourceAdapter : IJobSourceAdapter
         // Recarga con entidad completa (incluye PdfBlob) solo de las filas ya seleccionadas,
         // y re-verifica disponibilidad para reducir la ventana de carrera con otro worker.
         var claimedRows = (await _dbContext.SourcePrintJobs
-            .Where(x => candidateIds.Contains(x.Id) && x.IsProcessed == pendingOnly)
+            .Where(x => candidateIds.Contains(x.Id) && !x.IsProcessed)
             .ToListAsync(cancellationToken))
             .Where(x => x.ClaimedUntilUtc == null || x.ClaimedUntilUtc <= now)
             .ToList();

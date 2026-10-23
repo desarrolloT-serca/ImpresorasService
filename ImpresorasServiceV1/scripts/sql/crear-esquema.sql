@@ -103,7 +103,6 @@ CREATE TABLE printer_print_job (
     correlation_id bytea NOT NULL,
     created_at_utc timestamptz NOT NULL,
     updated_at_utc timestamptz NOT NULL,
-    row_version bytea,
     PRIMARY KEY (job_id)
 );
 CREATE UNIQUE INDEX ix_printer_print_job_source_external ON printer_print_job (source_system, external_job_id);

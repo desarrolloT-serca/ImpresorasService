@@ -106,13 +106,10 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
         // G5.3: reglas de severidad de 1-3 niveles — fuente única de verdad, compartida con la Api.
         var rules = await _ruleStore.LoadAsync(ct);
 
-        // herencia-hana: variable y no const porque la BD anterior rechazaba `WHERE (col AND ...)`.
-        // PostgreSQL acepta el booleano desnudo: simplificable (docs/PLAN.md, B6).
-        var activeOnly = true;
         var now = _timeProvider.GetUtcNow();
 
         var stores = await db.Stores.AsNoTracking()
-            .Where(s => s.IsActive == activeOnly)
+            .Where(s => s.IsActive)
             .Select(s => new { s.StoreId, s.Name })
             .ToListAsync(ct);
 
@@ -123,7 +120,7 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
         var storeIdList = stores.Select(s => s.StoreId).ToList();
 
         var printersByStore = (await db.Printers.AsNoTracking()
-            .Where(p => p.IsActive == activeOnly && storeIdList.Contains(p.StoreId))
+            .Where(p => p.IsActive && storeIdList.Contains(p.StoreId))
             .Select(p => new
             {
                 p.StoreId, p.IsActive, p.LastConnectionOk,

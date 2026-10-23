@@ -37,11 +37,10 @@ Hecho el 23/10/2026: esquema creado (`scripts/crear-esquema.ps1`), 29 tiendas (a
 | B0.4 | Usuarios con contraseña = login (decisión temporal). Varias no cumplen el mínimo de 6 de la Api: se insertaron por SQL con el mismo BCrypt. Al embeber la app en el ERP, el login automático debería usar un secreto del ERP, no estas contraseñas | ⏳ Temporal |
 | B0.5 | Permisos: las `printer_*` solo las lee `pb8_xp57` (dueño) y los superusuarios; `admon` no tiene permisos por defecto. Si el ERP conecta con otro usuario: `GRANT SELECT, INSERT ON admon.printer_source_print_job TO <usuario>` | ⏳ Según el usuario del ERP |
 
-### B6 · Simplificar lo heredado de HANA
+### ~~B6 · Simplificar lo heredado de HANA~~ ✅ COMPLETO 2026-10-23
 
-Rodeos que solo existían por limitaciones del proveedor de HANA. Cada uno está marcado en el código
-con `herencia-hana:` (`grep -rn herencia-hana src`). Al simplificarlo, se quita la marca. Verificar
-siempre contra PostgreSQL: `PostgresQueryTranslationTests` para la traducción y la BD real para los tipos.
+Rodeos que solo existían por limitaciones del proveedor de HANA. Ya no queda ninguno: la marca
+`herencia-hana:` ha desaparecido del código.
 
 | # | Qué | Dónde | Nota |
 |---|---|---|---|
@@ -49,8 +48,8 @@ siempre contra PostgreSQL: `PostgresQueryTranslationTests` para la traducción y
 | ~~B6.2~~ | ~~`AnyAsync` en vez de `Take(1).CountAsync() > 0`~~ | 12 comprobaciones de existencia | ✅ 23/10/2026. Verificado contra PostgreSQL |
 | ~~B6.3~~ | ~~Dashboard: `Any()` correlacionado y `NOT IN` directo~~ | `DashboardController` | ✅ 23/10/2026. Prueba A/B contra PostgreSQL: 8 de 8 respuestas del dashboard idénticas a la versión anterior. El agrupado por tramos se queda en memoria a propósito (marca `ponytail:` con su techo): en SQL necesitaría código solo para PostgreSQL y sin tests |
 | ~~B6.4~~ | ~~`UPDATE` de impresora por EF en vez de SQL crudo~~ | `PrintersController.Update` | ✅ 23/10/2026. Test nuevo: el cambio de host anula `ipp_supported` y la telemetría del Worker no se pisa. Verificado contra PostgreSQL |
-| B6.5 | Booleanos: variables `activeOnly`/`pendingOnly` usadas solo para que el proveedor no plegase la constante | `StoreHealthAlertBackgroundService` y el resto del código | Cosmético |
-| B6.6 | `row_version`: columna que no participa en la concurrencia | `ImpresorasDbContext`, `crear-esquema.sql` | Borrarla, o usar `xmin` como token real si hiciera falta |
+| ~~B6.5~~ | ~~Booleanos: variables `activeOnly`/`pendingOnly`~~ | 10 ficheros, 13 condiciones | ✅ 23/10/2026. Condiciones directas (`x.IsActive`, `!x.IsProcessed`) |
+| ~~B6.6~~ | ~~`row_version`: columna que no participaba en la concurrencia~~ | `PrintJob`, `ImpresorasDbContext`, `crear-esquema.sql` | ✅ 23/10/2026. Columna borrada (`scripts/sql/migraciones/2026-10-23-quitar-row-version.sql`) |
 
 ### B3 · Confirmación de impresión
 

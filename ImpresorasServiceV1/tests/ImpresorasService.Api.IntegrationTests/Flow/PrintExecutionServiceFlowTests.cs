@@ -55,7 +55,6 @@ public sealed class PrintExecutionServiceFlowTests
             CorrelationId = Guid.NewGuid(),
             CreatedAtUtc = now,
             UpdatedAtUtc = now,
-            RowVersion = Array.Empty<byte>()
         };
         db.PrintJobs.Add(job);
         await db.SaveChangesAsync();
@@ -152,7 +151,6 @@ public sealed class PrintExecutionServiceFlowTests
             CorrelationId = Guid.NewGuid(),
             CreatedAtUtc = now,
             UpdatedAtUtc = now,
-            RowVersion = Array.Empty<byte>()
         };
         db.PrintJobs.Add(job);
         await db.SaveChangesAsync();
@@ -228,7 +226,6 @@ public sealed class PrintExecutionServiceFlowTests
             CorrelationId = Guid.NewGuid(),
             CreatedAtUtc = now,
             UpdatedAtUtc = now,
-            RowVersion = Array.Empty<byte>()
         };
         db.PrintJobs.Add(job);
         await db.SaveChangesAsync();
@@ -309,7 +306,6 @@ public sealed class PrintExecutionServiceFlowTests
             CorrelationId = Guid.NewGuid(),
             CreatedAtUtc = now,
             UpdatedAtUtc = now,
-            RowVersion = Array.Empty<byte>()
         };
         db.PrintJobs.Add(job);
         await db.SaveChangesAsync();
@@ -388,7 +384,6 @@ public sealed class PrintExecutionServiceFlowTests
             CorrelationId = Guid.NewGuid(),
             CreatedAtUtc = now,
             UpdatedAtUtc = now,
-            RowVersion = Array.Empty<byte>()
         };
         db.PrintJobs.Add(job);
         await db.SaveChangesAsync();
@@ -476,7 +471,6 @@ public sealed class PrintExecutionServiceFlowTests
             CorrelationId = Guid.NewGuid(),
             CreatedAtUtc = now,
             UpdatedAtUtc = now - staleAfter - TimeSpan.FromSeconds(1),
-            RowVersion = Array.Empty<byte>()
         };
         db.PrintJobs.Add(job);
         await db.SaveChangesAsync();
@@ -550,7 +544,6 @@ public sealed class PrintExecutionServiceFlowTests
             CorrelationId = Guid.NewGuid(),
             CreatedAtUtc = now,
             UpdatedAtUtc = now,
-            RowVersion = Array.Empty<byte>()
         };
         db.PrintJobs.Add(job);
         await db.SaveChangesAsync();
@@ -636,7 +629,6 @@ public sealed class PrintExecutionServiceFlowTests
             CorrelationId = Guid.NewGuid(),
             CreatedAtUtc = now,
             UpdatedAtUtc = now - staleAfter - TimeSpan.FromSeconds(1),
-            RowVersion = Array.Empty<byte>()
         };
         db.PrintJobs.Add(job);
         await db.SaveChangesAsync();

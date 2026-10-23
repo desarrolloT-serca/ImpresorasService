@@ -110,7 +110,6 @@ public sealed class PrintJobsControllerConflictTests
             CorrelationId = Guid.NewGuid(),
             CreatedAtUtc = now,
             UpdatedAtUtc = now,
-            RowVersion = Array.Empty<byte>()
         });
 
         await db.SaveChangesAsync();

@@ -83,7 +83,6 @@ public sealed class PrintJobsControllerRouteFlowTests
             CorrelationId = Guid.NewGuid(),
             CreatedAtUtc = now,
             UpdatedAtUtc = now,
-            RowVersion = Array.Empty<byte>()
         });
         await db.SaveChangesAsync();
 
@@ -162,7 +161,6 @@ public sealed class PrintJobsControllerRouteFlowTests
             CorrelationId = Guid.NewGuid(),
             CreatedAtUtc = now,
             UpdatedAtUtc = now,
-            RowVersion = Array.Empty<byte>()
         });
         await db.SaveChangesAsync();
 
@@ -242,7 +240,6 @@ public sealed class PrintJobsControllerRouteFlowTests
             CorrelationId = Guid.NewGuid(),
             CreatedAtUtc = now,
             UpdatedAtUtc = now,
-            RowVersion = Array.Empty<byte>()
         });
         await db.SaveChangesAsync();
 
