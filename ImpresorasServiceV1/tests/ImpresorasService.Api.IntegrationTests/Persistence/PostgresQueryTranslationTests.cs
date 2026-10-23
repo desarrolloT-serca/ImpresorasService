@@ -23,20 +23,20 @@ public sealed class PostgresQueryTranslationTests
     {
         using var db = PostgresContext();
 
-        var jobs = db.PrintJobs.AsNoTracking().Where(x => ActiveStoreIds.Contains(x.StoreId));
-
-        var departureStatuses = Enum.GetValues<PrintJobStatus>()
-            .Where(s => !DashboardPrintJobPredicates.QueueStatuses.Contains(s))
-            .ToArray();
+        // Mismas formas que DashboardController: EXISTS correlacionado contra tiendas activas y
+        // NOT IN de los estados de cola (las dos rompían el proveedor anterior).
+        var activeStores = db.Stores.Where(s => s.IsActive);
+        var jobs = db.PrintJobs.AsNoTracking().Where(x => activeStores.Any(s => s.StoreId == x.StoreId));
 
         var sql = db.PrintJobEvents
-            .Where(e => e.NewStatus != null && departureStatuses.Contains(e.NewStatus.Value))
+            .Where(e => e.NewStatus != null && !DashboardPrintJobPredicates.QueueStatuses.Contains(e.NewStatus.Value))
             .Join(jobs, e => e.JobId, j => j.JobId, (e, j) => new { e.JobId, e.OccurredAtUtc })
             .GroupBy(x => x.JobId)
             .Select(g => g.Min(x => x.OccurredAtUtc))
             .ToQueryString();
 
-        Assert.Contains("printer_print_job_event", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("EXISTS", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("NOT", sql, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -83,8 +83,6 @@ public sealed class PostgresQueryTranslationTests
         // 10:00 +02:00 llega a la BD como 08:00 UTC: Npgsql rechaza offsets distintos de 0.
         Assert.Contains("2026-10-23T08:00:00", sql);
     }
-
-    private static readonly List<int> ActiveStoreIds = [1, 2, 3];
 
     internal static ImpresorasDbContext PostgresContext() =>
         new(new DbContextOptionsBuilder<ImpresorasDbContext>()

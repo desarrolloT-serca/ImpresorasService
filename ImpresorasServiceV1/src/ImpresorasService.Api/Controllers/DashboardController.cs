@@ -57,13 +57,10 @@ public class DashboardController : ControllerBase
         var stores = _dbContext.Stores.AsNoTracking().Where(x => x.IsActive == activeOnly);
         var printers = _dbContext.Printers.AsNoTracking().Where(x => x.IsActive == activeOnly);
         // El dashboard operativo solo muestra tiendas activas; excluye histórico de tiendas dadas de baja.
-        // herencia-hana: ids materializados en vez de un Any() correlacionado, que el provider
-        // anterior traducia a SQL invalido. Npgsql lo traduce bien: simplificable (docs/PLAN.md, B6).
-        var activeStoreIds = await stores
-            .Select(x => x.StoreId)
-            .ToListAsync(cancellationToken);
+        // Consulta propia (no `stores`, que se acota más abajo por tienda) para que el EXISTS no cambie.
+        var activeStores = _dbContext.Stores.Where(s => s.IsActive);
         var jobs = _dbContext.PrintJobs.AsNoTracking()
-            .Where(x => activeStoreIds.Contains(x.StoreId));
+            .Where(x => activeStores.Any(s => s.StoreId == x.StoreId));
 
         if (effectiveStoreId.HasValue)
         {
@@ -131,8 +128,10 @@ public class DashboardController : ControllerBase
     /// caminando hacia atras desde la foto de ahora: depth[n-1] = depth[n] - llegadas[n] + salidas[n].
     /// Sale exacta y ahorra la consulta de sembrado que haria falta yendo hacia delante.
     ///
-    /// herencia-hana: los tramos se agrupan en memoria; con fechas nativas podría hacerse en SQL
-    /// (docs/PLAN.md, B6.3). El volumen de una ventana de dashboard es pequeño.
+    /// ponytail: los tramos se agrupan en memoria (se traen los instantes, no filas completas). Es la
+    /// misma lógica en PostgreSQL y en los tests sobre SQLite, que no sabe truncar fechas. Techo: una
+    /// ventana de 30 días con cientos de miles de trabajos; si el dashboard se nota lento, agrupar en
+    /// SQL con date_trunc (solo PostgreSQL) y cubrirlo con una prueba contra PostgreSQL real.
     /// </summary>
     [HttpGet("timeseries")]
     public async Task<IActionResult> GetTimeseries(
@@ -146,12 +145,8 @@ public class DashboardController : ControllerBase
         var normalized = NormalizeWindow(window);
         var bucket = normalized == "today" ? TimeSpan.FromHours(1) : TimeSpan.FromDays(1);
 
-        var activeStoreIds = await _dbContext.Stores.AsNoTracking()
-            .Where(x => x.IsActive)
-            .Select(x => x.StoreId)
-            .ToListAsync(cancellationToken);
-
-        var jobs = _dbContext.PrintJobs.AsNoTracking().Where(x => activeStoreIds.Contains(x.StoreId));
+        var activeStores = _dbContext.Stores.Where(s => s.IsActive);
+        var jobs = _dbContext.PrintJobs.AsNoTracking().Where(x => activeStores.Any(s => s.StoreId == x.StoreId));
         if (effectiveStoreId.HasValue)
             jobs = jobs.Where(x => x.StoreId == effectiveStoreId.Value);
 
@@ -181,16 +176,8 @@ public class DashboardController : ControllerBase
 
         // Salidas de cola: primer evento a un estado que ya no cuenta como "en cola". RetryScheduled
         // sigue dentro de QueueStatuses, asi que un reintento no cuenta como salida.
-        //
-        // herencia-hana: complemento calculado aqui en vez de `!QueueStatuses.Contains(...)`, porque
-        // el provider anterior no traducia un NOT IN dentro de un AND. PrintJobStatus es un enum
-        // cerrado, asi que es equivalente. Simplificable con Npgsql (docs/PLAN.md, B6).
-        var departureStatuses = Enum.GetValues<PrintJobStatus>()
-            .Where(s => !DashboardPrintJobPredicates.QueueStatuses.Contains(s))
-            .ToArray();
-
         var departures = await _dbContext.PrintJobEvents
-            .Where(e => e.NewStatus != null && departureStatuses.Contains(e.NewStatus.Value))
+            .Where(e => e.NewStatus != null && !DashboardPrintJobPredicates.QueueStatuses.Contains(e.NewStatus.Value))
             .Join(jobs, e => e.JobId, j => j.JobId, (e, j) => new { e.JobId, e.OccurredAtUtc })
             .GroupBy(x => x.JobId)
             .Select(g => g.Min(x => x.OccurredAtUtc))
