@@ -2,7 +2,7 @@
 
 **Fuente de verdad única del trabajo pendiente.**
 
-**Estado a 2026-10-23**, rama `feat/postgres`. `dotnet test` 179/179.
+**Estado a 2026-10-23**, rama `feat/postgres`. `dotnet test` 181/181.
 
 El 23/10/2026 la cola pasó de SAP HANA a PostgreSQL y el origen de los trabajos pasó de SAP al ERP
 propio. La documentación y los scripts de la etapa HANA se retiraron del repositorio; siguen en el
@@ -45,7 +45,7 @@ siempre contra PostgreSQL: `PostgresQueryTranslationTests` para la traducción y
 
 | # | Qué | Dónde | Nota |
 |---|---|---|---|
-| B6.1 | **Fechas como texto → `timestamptz`** | `ImpresorasDbContext`, `StoresController`, `crear-esquema.sql` | ✅ Código y DDL hechos (23/10/2026); migración `scripts/sql/migraciones/2026-10-23-fechas-timestamptz.sql` probada contra PostgreSQL. ⏳ **Falta aplicarla en la BD real** junto con el despliegue. Solo toca las 21 columnas de fecha de las `printer_*`: nada fuera depende de ellas |
+| ~~B6.1~~ | ~~Fechas como texto → `timestamptz`~~ | `ImpresorasDbContext`, `StoresController`, `crear-esquema.sql` | ✅ 23/10/2026. Migración `scripts/sql/migraciones/2026-10-23-fechas-timestamptz.sql` aplicada en la BD real y desplegada: 21 columnas, 0 diferencias en los datos, servicios y frontend verificados. Solo tocó las `printer_*` |
 | ~~B6.2~~ | ~~`AnyAsync` en vez de `Take(1).CountAsync() > 0`~~ | 12 comprobaciones de existencia | ✅ 23/10/2026. Verificado contra PostgreSQL |
 | B6.3 | Dashboard: `Any()` correlacionado en vez de ids materializados; `NOT IN` directo en vez del complemento; agrupar tramos en SQL | `DashboardController` | Desbloqueado por B6.1 |
 | ~~B6.4~~ | ~~`UPDATE` de impresora por EF en vez de SQL crudo~~ | `PrintersController.Update` | ✅ 23/10/2026. Test nuevo: el cambio de host anula `ipp_supported` y la telemetría del Worker no se pisa. Verificado contra PostgreSQL |
