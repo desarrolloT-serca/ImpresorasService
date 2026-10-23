@@ -92,9 +92,7 @@ public class StoresController : ControllerBase
 
         var exists = await _dbContext.Stores
             .Where(x => x.StoreId == request.StoreId)
-            .Select(x => x.StoreId)
-            .Take(1)
-            .CountAsync(cancellationToken) > 0;
+            .AnyAsync(cancellationToken);
         if (exists)
             return Conflict(new { error = "Ya existe una tienda con ese numero." });
 
@@ -152,9 +150,7 @@ public class StoresController : ControllerBase
         {
             var usersAssigned = await _dbContext.Users
                 .Where(x => x.StoreId == storeId)
-                .Select(x => x.UserId)
-                .Take(1)
-                .CountAsync(cancellationToken) > 0;
+                .AnyAsync(cancellationToken);
             if (usersAssigned)
             {
                 return Conflict(new

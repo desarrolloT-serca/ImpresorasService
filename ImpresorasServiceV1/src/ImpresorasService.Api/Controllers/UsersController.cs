@@ -72,13 +72,10 @@ public class UsersController : ControllerBase
         if (validationError is not null)
             return BadRequest(new { error = validationError });
 
-        var exists = (await _dbContext.Users
+        var exists = await _dbContext.Users
             .AsNoTracking()
             .Where(x => x.Login == request.Login.Trim())
-            .Select(x => x.UserId)
-            .Take(1)
-            .ToListAsync(cancellationToken))
-            .Count > 0;
+            .AnyAsync(cancellationToken);
         if (exists)
             return Conflict(new { error = "Ya existe un usuario con ese login." });
 
@@ -233,13 +230,10 @@ public class UsersController : ControllerBase
             return "La contrasena debe tener al menos 6 caracteres.";
 
         var normalizedLogin = login.Trim();
-        var loginInUse = (await _dbContext.Users
+        var loginInUse = await _dbContext.Users
             .AsNoTracking()
             .Where(x => x.Login == normalizedLogin && (!currentUserId.HasValue || x.UserId != currentUserId.Value))
-            .Select(x => x.UserId)
-            .Take(1)
-            .ToListAsync(ct))
-            .Count > 0;
+            .AnyAsync(ct);
         if (loginInUse)
             return "Ya existe un usuario con ese login.";
 
@@ -250,13 +244,10 @@ public class UsersController : ControllerBase
                 return "La tienda seleccionada no existe o esta inactiva.";
 
             var activeStoreOnly = true;
-            var storeIsActive = (await _dbContext.Stores
+            var storeIsActive = await _dbContext.Stores
                 .AsNoTracking()
                 .Where(x => x.StoreId == storeIdValue && x.IsActive == activeStoreOnly)
-                .Select(x => x.StoreId)
-                .Take(1)
-                .ToListAsync(ct))
-                .Count > 0;
+                .AnyAsync(ct);
             if (!storeIsActive)
                 return "La tienda seleccionada no existe o esta inactiva.";
         }

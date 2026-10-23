@@ -2,7 +2,7 @@
 
 **Fuente de verdad única del trabajo pendiente.**
 
-**Estado a 2026-10-23**, rama `feat/postgres`. `dotnet test` 177/177.
+**Estado a 2026-10-23**, rama `feat/postgres`. `dotnet test` 179/179.
 
 El 23/10/2026 la cola pasó de SAP HANA a PostgreSQL y el origen de los trabajos pasó de SAP al ERP
 propio. La documentación y los scripts de la etapa HANA se retiraron del repositorio; siguen en el
@@ -46,9 +46,9 @@ siempre contra PostgreSQL: `PostgresQueryTranslationTests` para la traducción y
 | # | Qué | Dónde | Nota |
 |---|---|---|---|
 | B6.1 | **Fechas como texto → `timestamptz`.** Todo `DateTimeOffset` se guarda como `"yyyy-MM-dd HH:mm:ss"` en columnas `varchar(26)`, con formatos de lectura día-primero que ya no se dan | `ImpresorasDbContext` (converters y `SupportedDateFormats`), `crear-esquema.sql` | El más grande. Requiere migrar columnas en la BD y revisar que todo `DateTimeOffset` llegue con offset 0. Desbloquea B6.3 |
-| B6.2 | `AnyAsync` en vez de `Take(1).CountAsync() > 0` | `Program.cs` (bootstrap), `PrintJobRepository`, y los `.Take(1)` usados como «¿existe?» | Quita además los avisos de EF por `Take` sin `OrderBy` |
+| ~~B6.2~~ | ~~`AnyAsync` en vez de `Take(1).CountAsync() > 0`~~ | 12 comprobaciones de existencia | ✅ 23/10/2026. Verificado contra PostgreSQL |
 | B6.3 | Dashboard: `Any()` correlacionado en vez de ids materializados; `NOT IN` directo en vez del complemento; agrupar tramos en SQL | `DashboardController` | El agrupado en SQL depende de B6.1 |
-| B6.4 | `UPDATE` de impresora por EF en vez de SQL crudo | `PrintersController.Update` | |
+| ~~B6.4~~ | ~~`UPDATE` de impresora por EF en vez de SQL crudo~~ | `PrintersController.Update` | ✅ 23/10/2026. Test nuevo: el cambio de host anula `ipp_supported` y la telemetría del Worker no se pisa. Verificado contra PostgreSQL |
 | B6.5 | Booleanos: variables `activeOnly`/`pendingOnly` usadas solo para que el proveedor no plegase la constante | `StoreHealthAlertBackgroundService` y el resto del código | Cosmético |
 | B6.6 | `row_version`: columna que no participa en la concurrencia | `ImpresorasDbContext`, `crear-esquema.sql` | Borrarla, o usar `xmin` como token real si hiciera falta |
 

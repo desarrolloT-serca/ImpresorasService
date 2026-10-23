@@ -19,13 +19,9 @@ public class PrintJobRepository : IPrintJobRepository
         string externalJobId,
         CancellationToken cancellationToken)
     {
-        // herencia-hana: Count acotado en vez de AnyAsync, que fallaba con el provider anterior.
-        // Simplificable a AnyAsync (docs/PLAN.md, B6).
         return await _dbContext.PrintJobs
             .Where(x => x.SourceSystem == sourceSystem && x.ExternalJobId == externalJobId)
-            .Select(x => x.JobId)
-            .Take(1)
-            .CountAsync(cancellationToken) > 0;
+            .AnyAsync(cancellationToken);
     }
 
     public async Task AddAsync(PrintJob printJob, CancellationToken cancellationToken)

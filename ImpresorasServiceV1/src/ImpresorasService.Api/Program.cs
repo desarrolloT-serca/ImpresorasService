@@ -59,9 +59,7 @@ static async Task SeedDefaultUsersAsync(ImpresorasDbContext db)
 {
     var adminExists = await db.Users
         .Where(u => u.Login == "admin")
-        .Select(u => u.UserId)
-        .Take(1)
-        .CountAsync() > 0;
+        .AnyAsync();
     if (!adminExists)
     {
         var hash = BCrypt.Net.BCrypt.HashPassword("admin123", BCrypt.Net.BCrypt.GenerateSalt(10));
@@ -76,9 +74,7 @@ static async Task SeedDefaultUsersAsync(ImpresorasDbContext db)
     }
     var supervisorExists = await db.Users
         .Where(u => u.Login == "supervisor")
-        .Select(u => u.UserId)
-        .Take(1)
-        .CountAsync() > 0;
+        .AnyAsync();
     if (!supervisorExists)
     {
         var hash = BCrypt.Net.BCrypt.HashPassword("sup123", BCrypt.Net.BCrypt.GenerateSalt(10));
@@ -321,13 +317,8 @@ app.MapPost("/bootstrap/first-admin", async (
         return Results.BadRequest(new { error = "El login debe tener al menos 3 caracteres." });
     if (password.Length < 6)
         return Results.BadRequest(new { error = "La password debe tener al menos 6 caracteres." });
-
-    // herencia-hana: Count acotado a 1 fila en vez de AnyAsync, que fallaba con el provider anterior.
-    // Simplificable a AnyAsync (docs/PLAN.md, B6).
     var anyUsers = await db.Users
-        .Select(u => u.UserId)
-        .Take(1)
-        .CountAsync(cancellationToken) > 0;
+        .AnyAsync(cancellationToken);
     if (anyUsers)
         return Results.Conflict(new { error = "Ya existen usuarios. Este endpoint solo sirve para bootstrap inicial." });
 
