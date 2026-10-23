@@ -5,7 +5,7 @@ Este documento explica el proyecto de forma corta y practica para poder orientar
 ## 1) Que es este proyecto
 
 `ImpresorasServiceV1` es una plataforma para:
-- recibir trabajos de impresion desde SAP HANA (polling con claim/ack),
+- recibir trabajos de impresion desde SAP (polling con claim/ack sobre PostgreSQL),
 - guardarlos en la cola interna (`printer_print_job`, eventos),
 - decidir a que impresora enviarlos (enrutado),
 - y ejecutarlos con reintentos/control de estado.
@@ -14,8 +14,8 @@ La solucion esta separada por capas en `ImpresorasService.Core` y por procesos (
 
 ## 2) Mapa mental en 30 segundos
 
-- **Origen HANA**: tabla configurable (`SapHana:Table`, por defecto `printer_source_print_job`).
-- **Cola interna**: tablas `printer_*` en el mismo esquema HANA.
+- **Origen**: tabla `printer_source_print_job`, donde SAP deja los trabajos.
+- **Cola interna**: tablas `printer_*` en el mismo esquema PostgreSQL (`admon`, provisional; ver `docs/PLAN.md` B0.5).
 - **Decision**: reglas que eligen impresora segun tienda/tipo de documento/canal.
 - **Ejecucion**: worker que manda el PDF al spooler y actualiza estado.
 
@@ -29,19 +29,18 @@ La solucion esta separada por capas en `ImpresorasService.Core` y por procesos (
 
 ## 4) Configuracion que mas impacta
 
-- `Database:Provider` = `Hana`
-- `ConnectionStrings:PrintQueue`
+- `ConnectionStrings:PrintQueue` (servidor, usuario y esquema: única configuración de BD)
 - `Source:Mode` = `SapHana`
-- `SapHana:*` (schema, tabla origen, lease)
+- `SapHana:*` (sistema origen, lease)
 - `Ingestion:*`, `PrintExecution:*`
 - `Jwt:Secret`
-- `Database:ApplyMigrations` = `false` en HANA real
+- `Database:ApplyMigrations` = `false` (el DDL se aplica con `scripts/crear-esquema.ps1`)
 
 Documentacion historica (Sqlite/SqlTest/Postgres): `docs/archive/`.
 
 ## 5) Flujo end-to-end
 
-1. Trabajo en tabla origen HANA.
+1. Trabajo en la tabla origen.
 2. `IngestionBackgroundService` → `SapHanaJobSourceAdapter` (claim/ack).
 3. `IngestionService` → cola interna con idempotencia.
 4. `RoutingService` → impresora.
@@ -59,7 +58,7 @@ Documentacion historica (Sqlite/SqlTest/Postgres): `docs/archive/`.
 
 ## 7) Scripts utiles
 
-- `scripts/verificar-hana.ps1` — configuracion y conectividad HANA
+- `scripts/crear-esquema.ps1` — crea el esquema PostgreSQL desde `ConnectionStrings:PrintQueue`
 - `scripts/probar-impresion.ps1`
 - `scripts/verificar-estado.ps1`
 - `scripts/archive/verificar-bd-sqlite-historico.ps1` — solo referencia historica

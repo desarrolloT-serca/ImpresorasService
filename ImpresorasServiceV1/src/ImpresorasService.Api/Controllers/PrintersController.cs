@@ -176,7 +176,7 @@ public class PrintersController : ControllerBase
                 input.SpoolQueue,
                 input.Host!,
                 request.StoreId,
-                request.IsActive ? 1 : 0,
+                request.IsActive,
                 input.CapabilitiesJson!,
                 nowStr,
                 id);

@@ -1,6 +1,6 @@
 # ImpresorasService — Contexto del proyecto
 
-Sistema de cola de impresión para tiendas de retail. Ingesta trabajos desde SAP HANA, los enruta a la impresora correcta según reglas configurables, los ejecuta con reintentos, y monitorea el estado en tiempo real. Incluye alertas por Telegram y confirmación de impresión vía protocolo IPP.
+Sistema de cola de impresión para tiendas de retail. Ingesta trabajos (albaranes) que el ERP propio deja en la tabla `printer_source_print_job` de PostgreSQL (hasta el 23/10/2026 el origen era SAP), los enruta a la impresora correcta según reglas configurables, los ejecuta con reintentos, y monitorea el estado en tiempo real. Incluye alertas por Telegram y confirmación de impresión vía protocolo IPP.
 
 ---
 
@@ -12,7 +12,7 @@ Sistema de cola de impresión para tiendas de retail. Ingesta trabajos desde SAP
 | `ImpresorasService.Api` | ASP.NET Core 8 | 5105 | REST API con JWT; consume Core |
 | `ImpresorasService.Worker` | .NET 8 Host Service | — | Servicios de fondo (ingesta, ejecución, watchdog, alertas) |
 | `ImpresorasService.Web.PHP` | Laravel 11, PHP 8.2 | 8000 | Frontend web (Blade + CSS glass-effect) |
-| SAP HANA | ODBC / EF provider | — | Base de datos única en producción |
+| PostgreSQL | Npgsql EF provider | 5433 | Base de datos única (`10.110.46.121`, BD `serca`, usuario `pb8_xp57`, esquema **`admon` provisional**, ver `docs/PLAN.md` B0.5). Servidor 19beta4. Hasta el 23/10/2026 era SAP HANA |
 | Telegram Bot API | HTTP | — | Notificaciones de alertas de tienda |
 
 > **No hay Docker**. En producción: Nginx hace reverse proxy al frontend PHP, la API .NET corre en Kestrel, el Worker como servicio de sistema.
@@ -54,7 +54,7 @@ Pending → Routed → SpoolAccepted → PrintedConfirmed
 
 ```
 1. INGESTA  (IngestionBackgroundService, poll 2s)
-   SAP HANA printer_source_print_job → claim/ack 90s lease
+   printer_source_print_job (la escribe el ERP) → claim/ack 90s lease
    → IngestionService.ProcessAsync() → PrintJob{Pending}
 
 2. ENRUTADO (dentro de IngestionService)
@@ -92,7 +92,7 @@ Pending → Routed → SpoolAccepted → PrintedConfirmed
 | Capa | Tecnología |
 |---|---|
 | Backend | .NET 8, ASP.NET Core, EF Core 8 |
-| Base de datos | SAP HANA (Sap.EntityFrameworkCore.Hana.v8.0) |
+| Base de datos | PostgreSQL (Npgsql.EntityFrameworkCore.PostgreSQL 8.0.11) |
 | Tests | xUnit + SQLite en memoria (EF, no mocks) |
 | Auth | JWT Bearer, BCrypt |
 | Printer protocol | IPP (RFC 8010/8011) vía HttpClient raw |
@@ -132,14 +132,24 @@ Pending → Routed → SpoolAccepted → PrintedConfirmed
 ```
 
 Variables de entorno que sobreescriben appsettings (patrón `Section__Key`):
-- `Telegram__BotToken`, `Jwt__Secret`, `ConnectionStrings__PrintQueue`, `SapHana__Schema`
+- `Telegram__BotToken`, `Jwt__Secret`, `ConnectionStrings__PrintQueue`
+
+`ConnectionStrings:PrintQueue` es la **única** configuración de BD (host, puerto, BD, usuario y esquema
+vía `Search Path`); Api, Worker y `scripts/crear-esquema.ps1` la leen de ahí. En local va en el `.env` de la
+raíz (fuera de git, lo carga `Infrastructure/DotEnv.cs`; contraseña en `PGPASSWORD`). No reintroducir
+`SapHana:ConnectionString`/`Schema`/`Table` ni nombres de esquema en código, config o DDL.
+`Source:Mode=SapHana` y la sección `SapHana` son nombres heredados: el origen es el ERP (`SapHana:SourceSystem=ERP`) y la BD es PostgreSQL.
+
+**Fechas como texto**: el modelo EF convierte todo `DateTimeOffset` a `"yyyy-MM-dd HH:mm:ss"` y las
+columnas de fecha son `varchar(26)`, igual que en los tests SQLite. No poner `timestamp` en el DDL sin
+quitar antes esos converters de `ImpresorasDbContext`: Npgsql rechaza texto en columnas `timestamp`.
 
 ---
 
 ## Estado actual (rama `main` — 2026-08-19)
 
 ### Implementado y en producción
-- Ingesta SAP HANA con claim/ack (solo se acusa recibo de lo realmente persistido)
+- Ingesta desde el ERP con claim/ack (solo se acusa recibo de lo realmente persistido)
 - Enrutado por reglas configurables
 - Ejecución con reintentos exponenciales
 - Monitoreo de conectividad de impresoras
@@ -159,14 +169,12 @@ No se duplica aquí para que no diverja. El resto de roadmaps y auditorías del 
 evidencia o historia; `PLAN.md` dice cuál manda para qué.
 
 ### DDL
-El esquema real vive extraído en `scripts/sql/schema/` (regenerar con `scripts/extraer-ddl-hana.ps1`, no editar a mano).
-Ya aplicados: `printer_telegram_config`, `printer_telegram_chat`, `printer_alert_state`, `ipp_supported` en `printer_printer`, `printer_worker_lock`.
-
-Pendiente de aplicar (ver `docs/PLAN.md`, bloque B0):
-- `scripts/sql/migrate_pdf_blob_nullable.sql` — dos `ALTER`. `pdf_blob` sigue siendo `BLOB NOT NULL`
-  en `printer_print_job` y `printer_source_print_job`; sin ellos `PdfRetention` no libera nada.
-- `scripts/sql/migrate_user_revocation.sql` — `is_active` y `token_version` en `printer_user`.
-  Sin estas columnas la Api falla al consultar usuarios.
+Esquema completo para una BD vacía: `scripts/sql/crear-esquema.sql` (PostgreSQL, sin nombre de esquema; se
+aplica con `scripts/crear-esquema.ps1`, en una transacción). Si cambias el modelo, actualízalo ahí.
+Copia del esquema real: `pg_dump --schema-only -n impresoras`.
+`scripts/sql/schema/` y los `migrate_*.sql`/`create_*.sql` sueltos son el esquema **HANA** histórico: no aplicar.
+`crear-esquema.sql` ya incluye todo lo que en HANA se aplicó por partes (`pdf_blob` nullable,
+`is_active`/`token_version` en `printer_user`, `printer_worker_lock`...). Estado de la migración: `docs/PLAN.md`, B0.5.
 
 ---
 
@@ -203,7 +211,7 @@ src/ImpresorasService.Core/
   Infrastructure/Options/             → clases de configuración tipada
 
 src/ImpresorasService.Worker/
-  IngestionBackgroundService.cs           → polling HANA → cola
+  IngestionBackgroundService.cs           → polling tabla origen → cola
   PrintExecutionBackgroundService.cs      → cola → spooler
   SpoolAcceptedWatchdogBackgroundService.cs → confirmación IPP
   PrinterConnectivityMonitorService.cs    → sondeo de puertos + IPP
@@ -222,7 +230,7 @@ src/ImpresorasService.Web.PHP/
 
 tests/ImpresorasService.Api.IntegrationTests/  → xUnit + SQLite en memoria
 
-scripts/sql/                          → DDL para SAP HANA
+scripts/sql/crear-esquema.sql         → DDL PostgreSQL (el resto de scripts/sql/ es histórico HANA)
 docs/PLAN.md                          → QUÉ HACER: plan único de trabajo pendiente
 docs/                                 → guías de despliegue, estilo, smoke tests
 TELEGRAM_AND_IPP_ROADMAP.md           → completado (IPP y Telegram ya implementados); histórico

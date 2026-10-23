@@ -5,6 +5,7 @@ using ImpresorasService.Worker;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
 
+DotEnv.Load();
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddWindowsService(options => options.ServiceName = "ImpresorasService.Worker");
 var appCultureName = builder.Configuration["Globalization:Culture"] ?? "es-ES";
@@ -29,14 +30,8 @@ await using (var scope = host.Services.CreateAsyncScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
     var conn = dbContext.Database.GetDbConnection();
-    var server = conn.ConnectionString?.Split(';').Select(s => s.Trim())
-        .FirstOrDefault(s => s.StartsWith("Server=", StringComparison.OrdinalIgnoreCase))
-        ?.Substring("Server=".Length).Trim() ?? "?";
-    var schema = conn.ConnectionString?.Split(';').Select(s => s.Trim())
-        .FirstOrDefault(s => s.StartsWith("Current Schema=", StringComparison.OrdinalIgnoreCase))
-        ?.Substring("Current Schema=".Length).Trim() ?? "?";
     var logger = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<ImpresorasService.Worker.IngestionBackgroundService>>();
-    logger.LogInformation("Worker usando HANA Server={Server} Schema={Schema}", server, schema);
+    logger.LogInformation("Worker usando PostgreSQL Host={Host} Database={Database}", conn.DataSource, conn.Database);
 
     var applyMigrations = host.Services.GetRequiredService<IConfiguration>().GetValue<bool>("Database:ApplyMigrations");
     if (applyMigrations)

@@ -1,6 +1,6 @@
 # ImpresorasServiceV1
 
-Plataforma de cola de impresión centrada en **SAP HANA**: ingesta por polling con claim/ack, cola interna, enrutado y ejecución con reintentos.
+Plataforma de cola de impresión sobre **PostgreSQL** (antes SAP HANA, migrada el 23/10/2026): ingesta por polling con claim/ack, cola interna, enrutado y ejecución con reintentos.
 
 ## Arquitectura (4 bloques + tests)
 
@@ -14,19 +14,16 @@ Plataforma de cola de impresión centrada en **SAP HANA**: ingesta por polling c
 
 Estado Git del frontend: ver `docs/FRONTEND-WEB-PHP-GIT.md` (gitlink/submódulo no formalizado).
 
-## Configuración mínima oficial (HANA)
+## Configuración mínima oficial (PostgreSQL)
 
-En `appsettings.json` de API y Worker (secretos por entorno / variables):
+En `appsettings.json` de API y Worker (secretos por entorno / variables / `.env`):
 
 ```json
 {
-  "Database": { "Provider": "Hana", "ApplyMigrations": false },
-  "ConnectionStrings": { "PrintQueue": "<HANA EF>" },
+  "Database": { "ApplyMigrations": false },
+  "ConnectionStrings": { "PrintQueue": "Host=HOST;Port=5432;Database=BD;Username=USUARIO;Search Path=impresoras" },
   "Source": { "Mode": "SapHana" },
   "SapHana": {
-    "ConnectionString": "<HANA ODBC para diagnóstico opcional>",
-    "Schema": "<schema>",
-    "Table": "printer_source_print_job",
     "SourceSystem": "SAP-HANA",
     "LeaseSeconds": 90
   },
@@ -35,11 +32,29 @@ En `appsettings.json` de API y Worker (secretos por entorno / variables):
 }
 ```
 
-Variables de entorno equivalentes: `Database__Provider`, `ConnectionStrings__PrintQueue`, `Source__Mode`, `SapHana__ConnectionString`, `Jwt__Secret`, etc.
+Variables de entorno equivalentes: `ConnectionStrings__PrintQueue`, `Source__Mode`, `Jwt__Secret`, etc.
+`Source:Mode = SapHana` y la sección `SapHana` conservan el nombre: describen el **origen** de los trabajos
+(SAP), no la base de datos.
 
-**No usar en producción:** `Sqlite`, `SqlTest`, `SqlServer`, `SapPostgres` (histórico; ver `docs/archive/` y `Infrastructure/Legacy/`).
+### Base de datos y cambio de base de datos
 
-El esquema HANA se gestiona con DDL externo (`scripts/sql/`). `Database:ApplyMigrations` debe permanecer en `false`. Las migraciones EF en el repo son referencia histórica SQLite (ver `Infrastructure/Persistence/Migrations/README.md`).
+`ConnectionStrings:PrintQueue` es la **única** configuración de base de datos: Api, Worker y
+`scripts/crear-esquema.ps1` sacan de ella servidor, puerto, BD, usuario y esquema (`Search Path`).
+Ningún fichero lleva el esquema escrito. La contraseña puede ir en la cadena (`Password=`) o en `PGPASSWORD`.
+
+En desarrollo va en el fichero `.env` de la raíz (copiar `.env.example`; no se sube a git). Api y Worker lo
+cargan al arrancar (`DotEnv.cs`) sin pisar variables ya definidas.
+
+```powershell
+.\scripts\crear-esquema.ps1   # crea el esquema y las tablas (scripts/sql/crear-esquema.sql) si está vacío; todo o nada
+```
+
+En producción la cadena vive en las variables de cada servicio:
+`.\scripts\install-windows-services.ps1 -SkipPublish -Reconfigure -DbHost HOST -DbPort 5433 -DbName BD -DbUser USUARIO`.
+
+Copia del esquema real: `pg_dump --schema-only -n impresoras`. `Database:ApplyMigrations` debe permanecer en
+`false`: el DDL se aplica a mano. Las migraciones EF del repo son referencia histórica SQLite
+(ver `Infrastructure/Persistence/Migrations/README.md`).
 
 ## Arranque
 
@@ -48,12 +63,7 @@ cd ImpresorasServiceV1
 dotnet restore
 dotnet build -c Debug
 
-# Configurar secretos HANA (ejemplo)
-$env:Database__Provider = "Hana"
-$env:ConnectionStrings__PrintQueue = "ServerNode=...;UID=...;PWD=...;Current Schema=..."
-$env:Source__Mode = "SapHana"
-$env:SapHana__ConnectionString = "Driver={HDBODBC};ServerNode=...;UID=...;PWD=..."
-$env:SapHana__Schema = "ZTEST_VICENTE_2"
+# Conexión: .env en la raíz (ver .env.example)
 $env:Jwt__Secret = "REEMPLAZAR_CON_SECRETO_LARGO_MIN_32"
 $env:Bootstrap__SeedDefaultUsers = "false"
 
@@ -70,7 +80,7 @@ npm install
 php artisan serve
 ```
 
-Verificación HANA: `.\scripts\verificar-hana.ps1`
+Verificación de la BD con la Api en marcha (JWT admin): `GET /diagnostics` y `GET /diagnostics/db`.
 
 ## Pruebas
 

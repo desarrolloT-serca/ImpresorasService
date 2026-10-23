@@ -57,3 +57,6 @@ templates/
 
 # .NET dev overrides — pueden contener secretos locales; usar Telegram__BotToken como env var
 **/appsettings.Development.json
+
+# Conexion a la base de datos (Api, Worker y scripts). Ver .env.example
+/.env

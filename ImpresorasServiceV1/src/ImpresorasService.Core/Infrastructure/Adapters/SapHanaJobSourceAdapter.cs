@@ -37,7 +37,7 @@ public class SapHanaJobSourceAdapter : IJobSourceAdapter
         _dbContext = dbContext;
         _logger = logger;
         _workerId = $"{Environment.MachineName}-{Process.GetCurrentProcess().Id}";
-        _sourceSystem = string.IsNullOrWhiteSpace(_hanaOptions.SourceSystem) ? "SAP-HANA" : _hanaOptions.SourceSystem.Trim();
+        _sourceSystem = string.IsNullOrWhiteSpace(_hanaOptions.SourceSystem) ? "ERP" : _hanaOptions.SourceSystem.Trim();
     }
 
     public async Task<IReadOnlyList<IncomingPrintJob>> FetchPendingJobsAsync(

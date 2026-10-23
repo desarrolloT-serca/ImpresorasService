@@ -69,21 +69,21 @@ public sealed class WorkerLockCoordinator : IWorkerLockCoordinator
     /// ambos enviando al spooler. Leyendo la hora de donde vive el dato, la deriva entre relojes de
     /// servidor deja de importar.
     ///
-    /// Solo contra HANA: en SQLite (tests) se sigue usando el TimeProvider inyectado, que es lo que
+    /// Solo contra PostgreSQL: en SQLite (tests) se sigue usando el TimeProvider inyectado, que es lo que
     /// permite simular la expiracion del lease de forma determinista.
     /// Si la consulta falla se cae al reloj local con traza: quedarse sin lock por no poder leer la
     /// hora dejaria al Worker inerte, que es peor que el riesgo de deriva.
     /// </summary>
     private async Task<DateTimeOffset> GetSharedNowAsync(CancellationToken ct)
     {
-        if (_db.Database.ProviderName?.Contains("Hana", StringComparison.OrdinalIgnoreCase) != true)
+        if (_db.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) != true)
             return _timeProvider.GetUtcNow();
 
         try
         {
             // EF exige que la columna escalar se llame "Value".
             var dbNow = await _db.Database
-                .SqlQueryRaw<DateTime>("SELECT CURRENT_UTCTIMESTAMP AS \"Value\" FROM DUMMY")
+                .SqlQueryRaw<DateTime>("SELECT (now() AT TIME ZONE 'utc') AS \"Value\"")
                 .FirstAsync(ct);
 
             return new DateTimeOffset(DateTime.SpecifyKind(dbNow, DateTimeKind.Utc));
