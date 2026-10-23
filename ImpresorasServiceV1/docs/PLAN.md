@@ -36,6 +36,7 @@ Hecho el 23/10/2026: esquema creado (`scripts/crear-esquema.ps1`), 29 tiendas (a
 | B0.3 | Esquema definitivo. Hoy **`admon`, provisional**: `pb8_xp57` no puede crear esquemas. Para mover: el DBA crea el destino (`CREATE SCHEMA impresoras AUTHORIZATION pb8_xp57`), `ALTER TABLE admon.<tabla> SET SCHEMA impresoras;` en las 12 `printer_*` (arrastra índices y secuencias) y cambiar `Search Path` en la cadena (`.env` y servicios) | ⏳ Decisión |
 | B0.4 | Usuarios con contraseña = login (decisión temporal). Varias no cumplen el mínimo de 6 de la Api: se insertaron por SQL con el mismo BCrypt. Al embeber la app en el ERP, el login automático debería usar un secreto del ERP, no estas contraseñas | ⏳ Temporal |
 | B0.5 | Permisos: las `printer_*` solo las lee `pb8_xp57` (dueño) y los superusuarios; `admon` no tiene permisos por defecto. Si el ERP conecta con otro usuario: `GRANT SELECT, INSERT ON admon.printer_source_print_job TO <usuario>` | ⏳ Según el usuario del ERP |
+| B0.6 | **Servidor del frontend con PHP 8.5.12 o superior** (corrige PHP2Shell, CVE-2026-109618/109619, explotado desde el 21/10/2026). El proyecto exige `^8.5` desde el 23/10/2026; la 8.2 deja de recibir parches el 31/12/2026 | ⏳ Al montar el servidor |
 
 ### ~~B6 · Simplificar lo heredado de HANA~~ ✅ COMPLETO 2026-10-23
 
