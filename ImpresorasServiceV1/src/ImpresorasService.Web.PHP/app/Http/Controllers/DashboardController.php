@@ -38,11 +38,18 @@ class DashboardController extends Controller
         $storeCols = max(1, min(4, (int) request()->query('storeCols', 4)));
         // Refresco fijo: el selector de segundos se retiro de la interfaz, no hay nada que elegir.
         $autoRefreshSeconds = 30;
-        ['stores' => $storesRaw, 'thr' => $rawThresholdsResponse] =
-            \GuzzleHttp\Promise\Utils::unwrap([
-                'stores' => $this->api->getAsync('api/stores?isActive=true'),
-                'thr'    => $this->api->getAsync('api/dashboard/thresholds'),
-            ]);
+
+        // Un solo lote para toda la pagina. Antes eran tres tandas secuenciales (stores+umbrales,
+        // luego trabajos+impresoras+serie, y por ultimo overview), asi que el tiempo de carga era
+        // la SUMA de las tres y no la mas lenta. Ninguna necesita el resultado de la anterior para
+        // construir su ruta: solo storeId y window, que se conocen desde el principio.
+        //
+        // Importa porque cada peticion a la Api cuesta una ida y vuelta completa (red + BD) y el
+        // dashboard dispara del orden de veinte consultas entre todos los endpoints.
+        $batchResult = $this->fetchDashboardBatch($effectiveStore, $window, $isAdminDashboard);
+
+        $storesRaw = $batchResult['stores'];
+        $rawThresholdsResponse = $batchResult['thr'];
 
         $thresholds = $this->resolveHealthThresholds($rawThresholdsResponse);
         $activeStoreIds = [];
@@ -58,10 +65,14 @@ class DashboardController extends Controller
             }
         }
 
-        // Si el admin tenia seleccionada una tienda ya inactiva/eliminada, limpiar filtro.
+        // Si el admin tenia seleccionada una tienda ya inactiva/eliminada, limpiar filtro. Es la
+        // unica dependencia real entre peticiones: el resto del lote se pidio acotado a esa tienda,
+        // asi que hay que rehacerlo sin filtro. Solo ocurre en ese caso; las rutas que no llevaban
+        // storeId salen del cache por peticion del ApiClient y no se repiten.
         if ($isAdminUser && $effectiveStore !== null && !isset($activeStoreIds[$effectiveStore])) {
             $effectiveStore = null;
             session()->forget('selected_store_id');
+            $batchResult = $this->fetchDashboardBatch(null, $window, $isAdminUser);
         }
 
         $isAdminDashboard = $isAdminUser && $effectiveStore === null;
@@ -75,32 +86,12 @@ class DashboardController extends Controller
             $storeSort = 'severity';
         }
 
-        // limit=500: coincide con el clamp real de la Api (PrintJobsController); usado solo como
-        // fallback si el overview no responde (ver F2.2).
-        $jobsPath     = 'api/printjobs?limit=500' . ($effectiveStore !== null ? '&storeId=' . $effectiveStore : '');
-        $printersPath = 'api/printers?isActive=true' . ($effectiveStore !== null ? '&storeId=' . $effectiveStore : '');
-
-        // Serie temporal del periodo (grafica de cola y sparklines). getAsync entra en el mismo
-        // lote, asi que no anade latencia; si la Api aun no expone el endpoint la respuesta llega
-        // vacia y la vista simplemente no pinta grafica.
-        $seriesPath = 'api/dashboard/timeseries?window=' . urlencode($window)
-            . ($effectiveStore !== null ? '&storeId=' . $effectiveStore : '');
-
-        $batch2 = [
-            'jobs'     => $this->api->getAsync($jobsPath),
-            'printers' => $this->api->getAsync($printersPath),
-            'series'   => $this->api->getAsync($seriesPath),
-        ];
-        if ($isAdminDashboard) {
-            $batch2['users'] = $this->api->getAsync('api/users');
-        }
-        $batch2Result = \GuzzleHttp\Promise\Utils::unwrap($batch2);
-        $jobs     = $batch2Result['jobs'];
-        $printers = $batch2Result['printers'];
-        $users    = $isAdminDashboard ? ($batch2Result['users'] ?? []) : [];
-        $seriesPoints = $batch2Result['series']['points'] ?? $batch2Result['series']['Points'] ?? [];
+        $jobs     = $batchResult['jobs'];
+        $printers = $batchResult['printers'];
+        $users    = $isAdminDashboard ? ($batchResult['users'] ?? []) : [];
+        $seriesPoints = $batchResult['series']['points'] ?? $batchResult['series']['Points'] ?? [];
         $timeseries = is_array($seriesPoints) ? array_values(array_filter($seriesPoints, 'is_array')) : [];
-        $overview = $this->overviewService->fetch($effectiveStore, $window);
+        $overview = $this->overviewService->parse($batchResult['overview'] ?? null);
 
         [$windowStart, $windowEnd] = $this->resolveWindowRange($window);
         $connWarnMin = (int) ($thresholds['connWarningFailuresMin'] ?? 2);
@@ -655,6 +646,42 @@ class DashboardController extends Controller
         };
 
         return [$start->getTimestamp(), $now->getTimestamp()];
+    }
+
+    /**
+     * Todas las peticiones que alimentan el dashboard, en paralelo. Ninguna depende del resultado
+     * de otra para construir su ruta.
+     *
+     * @return array<string, mixed>
+     */
+    private function fetchDashboardBatch(?int $storeId, string $window, bool $isAdminDashboard): array
+    {
+        $store = $storeId !== null ? '&storeId=' . $storeId : '';
+
+        $batch = [
+            'stores'   => $this->api->getAsync('api/stores?isActive=true'),
+            'thr'      => $this->api->getAsync('api/dashboard/thresholds'),
+            // limit=500: coincide con el clamp real de la Api (PrintJobsController); usado solo
+            // como fallback si el overview no responde (F2.2).
+            'jobs'     => $this->api->getAsync('api/printjobs?limit=500' . $store),
+            'printers' => $this->api->getAsync('api/printers?isActive=true' . $store),
+            // Serie temporal del periodo (grafica). Si la Api no expone el endpoint, llega vacia
+            // y la vista no pinta grafica.
+            'series'   => $this->api->getAsync('api/dashboard/timeseries?window=' . urlencode($window) . $store),
+            // Silencioso: tiene respaldo propio (la agregacion legacy sobre `jobs`), asi que su
+            // caida no debe pintar el aviso de "no se pudo conectar con la Api".
+            'overview' => $this->api->getQuietAsync($this->overviewService->path($storeId, $window)),
+            // No se lee de aqui: resolveHealthThresholds() la pide mas abajo con get(), y el cache
+            // por peticion del ApiClient se la devuelve ya resuelta. Estar en el lote le ahorra la
+            // ida y vuelta secuencial que hacia. Silencioso porque tiene fallback local y el
+            // endpoint puede no estar desplegado todavia.
+            'rules'    => $this->api->getQuietAsync('api/dashboard/threshold-rules'),
+        ];
+        if ($isAdminDashboard) {
+            $batch['users'] = $this->api->getAsync('api/users');
+        }
+
+        return \GuzzleHttp\Promise\Utils::unwrap($batch);
     }
 
     private function normalizeWindow(string $window): string

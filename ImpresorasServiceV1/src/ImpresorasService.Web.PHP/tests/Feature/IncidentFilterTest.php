@@ -40,6 +40,12 @@ class IncidentFilterTest extends TestCase
                 return [];
             }
 
+            /** El dashboard pide el overview dentro del lote paralelo. */
+            public function getQuietAsync(string $path): PromiseInterface
+            {
+                return Create::promiseFor($this->getQuiet($path));
+            }
+
             public function getQuiet(string $path): array
             {
                 $this->paths[] = $path;
@@ -79,6 +85,12 @@ class IncidentFilterTest extends TestCase
             public function get(string $path): array
             {
                 return $this->responseFor($path);
+            }
+
+            /** El dashboard pide el overview dentro del lote paralelo. */
+            public function getQuietAsync(string $path): PromiseInterface
+            {
+                return Create::promiseFor($this->getQuiet($path));
             }
 
             public function getQuiet(string $path): array
@@ -135,6 +147,12 @@ class IncidentFilterTest extends TestCase
             public function get(string $path): array
             {
                 return $this->responseFor($path);
+            }
+
+            /** El dashboard pide el overview dentro del lote paralelo. */
+            public function getQuietAsync(string $path): PromiseInterface
+            {
+                return Create::promiseFor($this->getQuiet($path));
             }
 
             public function getQuiet(string $path): array

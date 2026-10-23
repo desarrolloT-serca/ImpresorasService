@@ -29,9 +29,15 @@ class ReglasController extends Controller
             $params['storeId'] = $effectiveStore;
         }
         $path = 'api/routingrules' . (empty($params) ? '' : '?' . http_build_query($params));
-        $rules = $this->api->get($path) ?? [];
-        $printers = $this->api->get('api/printers') ?? [];
-        $stores = $this->api->get('api/stores?isActive=true') ?? [];
+
+        // Las tres en paralelo: ninguna depende de las otras y en secuencia se pagaban tres idas y
+        // vueltas a la Api seguidas.
+        ['rules' => $rules, 'printers' => $printers, 'stores' => $stores] =
+            \GuzzleHttp\Promise\Utils::unwrap([
+                'rules'    => $this->api->getAsync($path),
+                'printers' => $this->api->getAsync('api/printers'),
+                'stores'   => $this->api->getAsync('api/stores?isActive=true'),
+            ]);
 
         $rules = is_array($rules) ? $rules : [];
         $printers = is_array($printers) ? $printers : [];

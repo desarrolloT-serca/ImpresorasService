@@ -24,9 +24,10 @@ class DashboardOverviewService
     }
 
     /**
-     * @return array<string, mixed>|null null si la API no responde o el payload es invalido
+     * Ruta del overview. Publica para que el dashboard pueda pedirla dentro de su lote paralelo
+     * en vez de en una ida y vuelta aparte.
      */
-    public function fetch(?int $storeId, string $window): ?array
+    public function path(?int $storeId, string $window): string
     {
         $params = ['window' => $window];
         if ($storeId !== null) {
@@ -34,14 +35,24 @@ class DashboardOverviewService
         }
 
         $query = http_build_query($params);
-        $path = 'api/dashboard/overview' . ($query !== '' ? '?' . $query : '');
 
-        $response = $this->api->getQuiet($path);
-        if (!is_array($response) || $response === []) {
-            return null;
-        }
+        return 'api/dashboard/overview' . ($query !== '' ? '?' . $query : '');
+    }
 
-        return $response;
+    /**
+     * @return array<string, mixed>|null null si la API no responde o el payload es invalido
+     */
+    public function parse(mixed $response): ?array
+    {
+        return is_array($response) && $response !== [] ? $response : null;
+    }
+
+    /**
+     * @return array<string, mixed>|null null si la API no responde o el payload es invalido
+     */
+    public function fetch(?int $storeId, string $window): ?array
+    {
+        return $this->parse($this->api->getQuiet($this->path($storeId, $window)));
     }
 
     /**
