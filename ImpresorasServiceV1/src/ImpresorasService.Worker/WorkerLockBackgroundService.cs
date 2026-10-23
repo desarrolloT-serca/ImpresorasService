@@ -5,7 +5,7 @@ using Microsoft.Extensions.Options;
 namespace ImpresorasService.Worker;
 
 /// <summary>
-/// G4.1 (docs/roadmapimpresoras.md Fase 2.1): mantiene el lock de instancia única del Worker.
+/// G4.1 (Fase 2.1): mantiene el lock de instancia única del Worker.
 /// Adquiere/renueva en bucle vía <see cref="IWorkerLockCoordinator"/> y publica el resultado en
 /// <see cref="WorkerLockState"/>, que consultan el resto de BackgroundService antes de procesar.
 /// </summary>

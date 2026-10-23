@@ -67,10 +67,9 @@ public static class PdfRetention
         int batchSize,
         CancellationToken ct = default)
     {
-        var processed = true;
         var ids = await db.SourcePrintJobs
             .AsNoTracking()
-            .Where(r => r.IsProcessed == processed
+            .Where(r => r.IsProcessed
                 && r.CreatedAtUtc <= cutoff
                 && r.PdfBlob != null)
             .OrderBy(r => r.CreatedAtUtc)

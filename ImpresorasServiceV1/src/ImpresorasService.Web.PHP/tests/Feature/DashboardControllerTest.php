@@ -299,7 +299,7 @@ class DashboardControllerTest extends TestCase
     }
 
     /**
-     * Fase 2 (docs/prompt-roadmap-kpi-dashboard.md, KPI-P2-003): activePrinters/activeStores
+     * Fase 2 (KPI-P2-003): activePrinters/activeStores
      * también deben salir del overview, no solo received/printed/failed/queueCurrent/
      * failedWithoutRetryCurrent. Antes del fix, applyOverviewKpis() no los tocaba y el valor
      * mostrado quedaba en el calculado localmente (heurística distinta: "tiendas con impresora

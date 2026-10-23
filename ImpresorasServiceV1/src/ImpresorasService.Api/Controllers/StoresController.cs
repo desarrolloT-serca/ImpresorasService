@@ -92,9 +92,7 @@ public class StoresController : ControllerBase
 
         var exists = await _dbContext.Stores
             .Where(x => x.StoreId == request.StoreId)
-            .Select(x => x.StoreId)
-            .Take(1)
-            .CountAsync(cancellationToken) > 0;
+            .AnyAsync(cancellationToken);
         if (exists)
             return Conflict(new { error = "Ya existe una tienda con ese numero." });
 
@@ -152,9 +150,7 @@ public class StoresController : ControllerBase
         {
             var usersAssigned = await _dbContext.Users
                 .Where(x => x.StoreId == storeId)
-                .Select(x => x.UserId)
-                .Take(1)
-                .CountAsync(cancellationToken) > 0;
+                .AnyAsync(cancellationToken);
             if (usersAssigned)
             {
                 return Conflict(new
@@ -236,13 +232,13 @@ public class StoresController : ControllerBase
         }
 
         await using var softDeleteTx = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
-        var nowText = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss");
-        var affectedPrinters = await _dbContext.Database.ExecuteSqlInterpolatedAsync(
-            $"UPDATE \"printer_printer\" SET \"is_active\" = 0, \"updated_at_utc\" = {nowText} WHERE \"store_id\" = {storeId} AND \"is_active\" = 1",
-            cancellationToken);
-        await _dbContext.Database.ExecuteSqlInterpolatedAsync(
-            $"UPDATE \"printer_store\" SET \"is_active\" = 0, \"updated_at_utc\" = {nowText} WHERE \"store_id\" = {storeId}",
-            cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+        var affectedPrinters = await _dbContext.Printers
+            .Where(x => x.StoreId == storeId && x.IsActive)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsActive, false).SetProperty(x => x.UpdatedAtUtc, now), cancellationToken);
+        await _dbContext.Stores
+            .Where(x => x.StoreId == storeId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsActive, false).SetProperty(x => x.UpdatedAtUtc, now), cancellationToken);
         await softDeleteTx.CommitAsync(cancellationToken);
 
         return Ok(new

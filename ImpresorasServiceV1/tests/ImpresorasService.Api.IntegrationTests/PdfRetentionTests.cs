@@ -144,6 +144,5 @@ public sealed class PdfRetentionTests
         CorrelationId = Guid.NewGuid(),
         CreatedAtUtc = updatedAtUtc,
         UpdatedAtUtc = updatedAtUtc,
-        RowVersion = Array.Empty<byte>()
     };
 }

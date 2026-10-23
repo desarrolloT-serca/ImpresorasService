@@ -74,10 +74,9 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
         await using var scope = _scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
 
-        var activeOnly = true;
         var printers = await db.Printers
             .AsNoTracking()
-            .Where(p => p.IsActive == activeOnly)
+            .Where(p => p.IsActive)
             .Select(p => new PrinterConnectivityCandidate(
                 p.PrinterId,
                 p.SpoolQueue,

@@ -3,8 +3,7 @@
 **Ejecutado el 19/08/2026** contra el parque real, con `scripts/probar-ipp-operaciones.ps1` y
 `scripts/probar-ipp-jobs.ps1` (ambos de solo lectura: preguntan, no encolan nada).
 
-Este gate bloqueaba la Fase 3.4 de `roadmapimpresoras.md` y el hallazgo H-01 de
-`auditoria/revision-garantias-2026-08-12.md`.
+Decide el bloque B3 de `PLAN.md` (confirmación de impresión por trabajo).
 
 ---
 

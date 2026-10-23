@@ -29,8 +29,6 @@ public class ApiWebApplicationFactory : WebApplicationFactory<Program>
         builder.UseSetting("TestInstanceId", Interlocked.Increment(ref _instanceId).ToString());
         builder.UseSetting("Jwt:Secret", "integration-tests-secret-32-chars-minimum!!");
         builder.UseSetting("ConnectionStrings:PrintQueue", "ServerNode=localhost;UID=test;PWD=test;Current Schema=TEST");
-        builder.UseSetting("Database:Provider", "Hana");
-        builder.UseSetting("Source:Mode", "SapHana");
 
         builder.ConfigureTestServices(services =>
         {

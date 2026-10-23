@@ -11,7 +11,7 @@ namespace ImpresorasService.Api.Security;
 ///
 /// Un JWT es válido hasta que caduca, y aquí caduca a las 8 horas: sin esta comprobación, borrar o
 /// desactivar un usuario —o cambiarle la contraseña porque se sospecha que está comprometida— no le
-/// quitaba el acceso hasta ese plazo. Fase 5 de docs/roadmapimpresoras.md.
+/// quitaba el acceso hasta ese plazo. Fase 5.
 ///
 /// Se consulta la base de datos en cada petición autenticada, proyectando dos columnas de una fila
 /// por clave primaria. Sin caché a propósito: una caché reintroduce exactamente la ventana que esto

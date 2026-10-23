@@ -1,6 +1,4 @@
-using System.Data.Odbc;
 using System.Globalization;
-using System.Text.RegularExpressions;
 using System.Text;
 using System.Threading.RateLimiting;
 using ImpresorasService.Api.HealthChecks;
@@ -16,6 +14,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 
+DotEnv.Load();
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddWindowsService(options => options.ServiceName = "ImpresorasService.Api");
 var appCultureName = builder.Configuration["Globalization:Culture"] ?? "es-ES";
@@ -60,9 +59,7 @@ static async Task SeedDefaultUsersAsync(ImpresorasDbContext db)
 {
     var adminExists = await db.Users
         .Where(u => u.Login == "admin")
-        .Select(u => u.UserId)
-        .Take(1)
-        .CountAsync() > 0;
+        .AnyAsync();
     if (!adminExists)
     {
         var hash = BCrypt.Net.BCrypt.HashPassword("admin123", BCrypt.Net.BCrypt.GenerateSalt(10));
@@ -77,9 +74,7 @@ static async Task SeedDefaultUsersAsync(ImpresorasDbContext db)
     }
     var supervisorExists = await db.Users
         .Where(u => u.Login == "supervisor")
-        .Select(u => u.UserId)
-        .Take(1)
-        .CountAsync() > 0;
+        .AnyAsync();
     if (!supervisorExists)
     {
         var hash = BCrypt.Net.BCrypt.HashPassword("sup123", BCrypt.Net.BCrypt.GenerateSalt(10));
@@ -228,15 +223,9 @@ var app = builder.Build();
 await using (var scope = app.Services.CreateAsyncScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
-    var applyMigrations = app.Configuration.GetValue<bool>("Database:ApplyMigrations");
+    // El esquema lo crea scripts/crear-esquema.ps1; solo los tests lo generan desde el modelo.
     if (app.Environment.IsEnvironment("Testing"))
-    {
         await dbContext.Database.EnsureCreatedAsync();
-    }
-    else if (applyMigrations)
-    {
-        await dbContext.Database.MigrateAsync();
-    }
     await NormalizeLegacyUserRolesAsync(dbContext);
 
     var seedDefaultUsers = app.Configuration.GetValue<bool>("Bootstrap:SeedDefaultUsers");
@@ -328,13 +317,8 @@ app.MapPost("/bootstrap/first-admin", async (
         return Results.BadRequest(new { error = "El login debe tener al menos 3 caracteres." });
     if (password.Length < 6)
         return Results.BadRequest(new { error = "La password debe tener al menos 6 caracteres." });
-
-    // Workaround para SAP EF provider: AnyAsync puede fallar con "Sequence contains no elements"
-    // en ciertos modelos, por eso usamos un Count acotado a 1 fila.
     var anyUsers = await db.Users
-        .Select(u => u.UserId)
-        .Take(1)
-        .CountAsync(cancellationToken) > 0;
+        .AnyAsync(cancellationToken);
     if (anyUsers)
         return Results.Conflict(new { error = "Ya existen usuarios. Este endpoint solo sirve para bootstrap inicial." });
 
@@ -362,18 +346,11 @@ app.MapGet("/diagnostics", async (ImpresorasDbContext db) =>
 {
     var conn = db.Database.GetDbConnection();
     var provider = db.Database.ProviderName ?? "unknown";
-    var serverNode = conn.ConnectionString?.Split(';')
-        .Select(s => s.Trim())
-        .FirstOrDefault(s => s.StartsWith("ServerNode=", StringComparison.OrdinalIgnoreCase))
-        ?.Substring("ServerNode=".Length).Trim() ?? "?";
-    var database = conn.ConnectionString?.Split(';')
-        .Select(s => s.Trim())
-        .FirstOrDefault(s => s.StartsWith("Database=", StringComparison.OrdinalIgnoreCase))
-        ?.Substring("Database=".Length).Trim() ?? "?";
+    var serverNode = conn.DataSource;
+    var database = conn.Database;
     var sourceCount = await db.SourcePrintJobs.CountAsync();
     var printCount = await db.PrintJobs.CountAsync();
-    var pendingOnly = false;
-    var pendingSource = await db.SourcePrintJobs.CountAsync(x => x.IsProcessed == pendingOnly);
+    var pendingSource = await db.SourcePrintJobs.CountAsync(x => !x.IsProcessed);
     return Results.Ok(new
     {
         provider,
@@ -385,38 +362,33 @@ app.MapGet("/diagnostics", async (ImpresorasDbContext db) =>
     });
 }).RequireAuthorization("AdminOnly");
 
-app.MapGet("/diagnostics/hana", async (IConfiguration configuration, CancellationToken cancellationToken) =>
+app.MapGet("/diagnostics/db", async (ImpresorasDbContext db, CancellationToken cancellationToken) =>
 {
-    static string NormalizeIdentifier(string value, string fallback)
-    {
-        var candidate = string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
-        return Regex.IsMatch(candidate, "^[A-Za-z0-9_]+$") ? candidate : fallback;
-    }
-
-    var connectionString = configuration["SapHana:ConnectionString"];
-    if (string.IsNullOrWhiteSpace(connectionString))
-        return Results.BadRequest(new { ok = false, error = "SapHana:ConnectionString no está configurado." });
-
-    var schema = NormalizeIdentifier(configuration["SapHana:Schema"] ?? "ZTEST_VICENTE_2", "ZTEST_VICENTE_2");
-    var table = NormalizeIdentifier(configuration["SapHana:Table"] ?? "printer_source_print_job", "printer_source_print_job");
+    // Misma conexión que la aplicación (ConnectionStrings:PrintQueue); el esquema es su Search Path.
+    const string table = "printer_source_print_job";
 
     try
     {
-        await using var connection = new OdbcConnection(connectionString);
-        await connection.OpenAsync(cancellationToken);
+        var connection = db.Database.GetDbConnection();
+        await db.Database.OpenConnectionAsync(cancellationToken);
 
-        await using var pingCmd = connection.CreateCommand();
-        pingCmd.CommandText = "SELECT CURRENT_UTCTIMESTAMP FROM DUMMY";
-        var serverUtc = await pingCmd.ExecuteScalarAsync(cancellationToken);
+        object? serverUtc;
+        string? schema;
+        await using (var pingCmd = connection.CreateCommand())
+        {
+            pingCmd.CommandText = "SELECT now() AT TIME ZONE 'utc', current_schema()";
+            await using var pingReader = await pingCmd.ExecuteReaderAsync(cancellationToken);
+            await pingReader.ReadAsync(cancellationToken);
+            serverUtc = pingReader.GetValue(0);
+            schema = pingReader.GetValue(1)?.ToString();
+        }
 
         await using var columnsCmd = connection.CreateCommand();
-        columnsCmd.CommandText = @"
-SELECT COLUMN_NAME, DATA_TYPE_NAME, LENGTH, SCALE, IS_NULLABLE
-FROM SYS.TABLE_COLUMNS
-WHERE SCHEMA_NAME = ? AND TABLE_NAME = ?
-ORDER BY POSITION";
-        columnsCmd.Parameters.Add(new OdbcParameter { Value = schema });
-        columnsCmd.Parameters.Add(new OdbcParameter { Value = table });
+        columnsCmd.CommandText = $@"
+SELECT column_name, data_type, character_maximum_length, numeric_scale, is_nullable
+FROM information_schema.columns
+WHERE table_schema = current_schema() AND table_name = '{table}'
+ORDER BY ordinal_position";
 
         var columns = new List<object>();
         await using (var reader = await columnsCmd.ExecuteReaderAsync(cancellationToken))
@@ -425,11 +397,11 @@ ORDER BY POSITION";
             {
                 columns.Add(new
                 {
-                    name = reader["COLUMN_NAME"]?.ToString(),
-                    type = reader["DATA_TYPE_NAME"]?.ToString(),
-                    length = reader["LENGTH"] == DBNull.Value ? null : reader["LENGTH"],
-                    scale = reader["SCALE"] == DBNull.Value ? null : reader["SCALE"],
-                    nullable = reader["IS_NULLABLE"]?.ToString()
+                    name = reader["column_name"]?.ToString(),
+                    type = reader["data_type"]?.ToString(),
+                    length = reader["character_maximum_length"] == DBNull.Value ? null : reader["character_maximum_length"],
+                    scale = reader["numeric_scale"] == DBNull.Value ? null : reader["numeric_scale"],
+                    nullable = reader["is_nullable"]?.ToString()
                 });
             }
         }
@@ -447,9 +419,13 @@ ORDER BY POSITION";
     catch (Exception ex)
     {
         return Results.Problem(
-            title: "Fallo al conectar con HANA por ODBC",
+            title: "Fallo al conectar con la base de datos",
             detail: ex.Message,
             statusCode: StatusCodes.Status502BadGateway);
+    }
+    finally
+    {
+        await db.Database.CloseConnectionAsync();
     }
 }).RequireAuthorization("AdminOnly");
 

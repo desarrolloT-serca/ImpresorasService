@@ -13,7 +13,7 @@ public static class BusinessTimeZoneClock
 {
     /// <summary>
     /// Un id de timezone inválido en config no debe tumbar el dashboard/Worker con un 500 en el
-    /// constructor del controller — A-KPI-07 (docs/auditoria-integral-2026-07-21.md). Cae a UTC.
+    /// constructor del controller — A-KPI-07. Cae a UTC.
     /// </summary>
     public static TimeZoneInfo Resolve(string? configuredTimeZoneId, ILogger? logger = null, string defaultTimeZoneId = "Europe/Madrid")
     {

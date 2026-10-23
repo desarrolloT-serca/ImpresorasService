@@ -1,6 +1,6 @@
 # ImpresorasService — Contexto del proyecto
 
-Sistema de cola de impresión para tiendas de retail. Ingesta trabajos desde SAP HANA, los enruta a la impresora correcta según reglas configurables, los ejecuta con reintentos, y monitorea el estado en tiempo real. Incluye alertas por Telegram y confirmación de impresión vía protocolo IPP.
+Sistema de cola de impresión para tiendas de retail. Ingesta trabajos (albaranes) que el ERP propio deja en la tabla `printer_source_print_job` de PostgreSQL, los enruta a la impresora correcta según reglas configurables, los ejecuta con reintentos, y monitorea el estado en tiempo real. Incluye alertas por Telegram y confirmación de impresión vía protocolo IPP.
 
 ---
 
@@ -12,7 +12,7 @@ Sistema de cola de impresión para tiendas de retail. Ingesta trabajos desde SAP
 | `ImpresorasService.Api` | ASP.NET Core 8 | 5105 | REST API con JWT; consume Core |
 | `ImpresorasService.Worker` | .NET 8 Host Service | — | Servicios de fondo (ingesta, ejecución, watchdog, alertas) |
 | `ImpresorasService.Web.PHP` | Laravel 11, PHP 8.2 | 8000 | Frontend web (Blade + CSS glass-effect) |
-| SAP HANA | ODBC / EF provider | — | Base de datos única en producción |
+| PostgreSQL | Npgsql EF provider | 5433 | Base de datos única (`10.110.46.121`, BD `serca`, usuario `pb8_xp57`, esquema **`admon` provisional**, ver `docs/PLAN.md` B0.5). Servidor 19beta4 |
 | Telegram Bot API | HTTP | — | Notificaciones de alertas de tienda |
 
 > **No hay Docker**. En producción: Nginx hace reverse proxy al frontend PHP, la API .NET corre en Kestrel, el Worker como servicio de sistema.
@@ -54,7 +54,7 @@ Pending → Routed → SpoolAccepted → PrintedConfirmed
 
 ```
 1. INGESTA  (IngestionBackgroundService, poll 2s)
-   SAP HANA printer_source_print_job → claim/ack 90s lease
+   printer_source_print_job (la escribe el ERP) → claim/ack 90s lease
    → IngestionService.ProcessAsync() → PrintJob{Pending}
 
 2. ENRUTADO (dentro de IngestionService)
@@ -92,7 +92,7 @@ Pending → Routed → SpoolAccepted → PrintedConfirmed
 | Capa | Tecnología |
 |---|---|
 | Backend | .NET 8, ASP.NET Core, EF Core 8 |
-| Base de datos | SAP HANA (Sap.EntityFrameworkCore.Hana.v8.0) |
+| Base de datos | PostgreSQL (Npgsql.EntityFrameworkCore.PostgreSQL 8.0.11) |
 | Tests | xUnit + SQLite en memoria (EF, no mocks) |
 | Auth | JWT Bearer, BCrypt |
 | Printer protocol | IPP (RFC 8010/8011) vía HttpClient raw |
@@ -100,7 +100,7 @@ Pending → Routed → SpoolAccepted → PrintedConfirmed
 | Frontend | Laravel 11 (Blade, PHP 8.2), CSS custom glass-effect |
 | CI/CD | GitHub Actions |
 
-> **DDL externo**: EF Migrations son solo referencia histórica. El DBA aplica el DDL manualmente desde `scripts/sql/`. No ejecutar `dotnet ef database update` en producción.
+> **DDL externo**: no hay migraciones EF. El esquema vive en `scripts/sql/crear-esquema.sql` y se aplica con `scripts/crear-esquema.ps1`; la aplicación nunca lo crea ni lo altera (solo los tests, con `EnsureCreated` sobre SQLite).
 
 ---
 
@@ -132,14 +132,25 @@ Pending → Routed → SpoolAccepted → PrintedConfirmed
 ```
 
 Variables de entorno que sobreescriben appsettings (patrón `Section__Key`):
-- `Telegram__BotToken`, `Jwt__Secret`, `ConnectionStrings__PrintQueue`, `SapHana__Schema`
+- `Telegram__BotToken`, `Jwt__Secret`, `ConnectionStrings__PrintQueue`
+
+`ConnectionStrings:PrintQueue` es la **única** configuración de BD (host, puerto, BD, usuario y esquema
+vía `Search Path`); Api, Worker y `scripts/crear-esquema.ps1` la leen de ahí. En local va en el `.env` de la
+raíz (fuera de git, lo carga `Infrastructure/DotEnv.cs`; contraseña en `PGPASSWORD`). No poner nombres de
+esquema en código, config ni DDL. La sección `Source` (`SourceSystem=ERP`, `LeaseSeconds`) describe el origen.
+
+**Fechas**: en PostgreSQL son `timestamptz` y siempre UTC (`ImpresorasDbContext` normaliza cualquier
+`DateTimeOffset` con otro offset; Npgsql rechaza offsets distintos de 0). Solo en los tests (SQLite) se
+guardan como texto ISO, porque SQLite no compara fechas en SQL: el modelo depende del proveedor y se
+cachea por proveedor. Las fechas en PostgreSQL las cubre `PostgresQueryTranslationTests` y la prueba
+contra un PostgreSQL real.
 
 ---
 
-## Estado actual (rama `main` — 2026-08-19)
+## Estado actual (2026-10-23)
 
 ### Implementado y en producción
-- Ingesta SAP HANA con claim/ack (solo se acusa recibo de lo realmente persistido)
+- Ingesta desde el ERP con claim/ack (solo se acusa recibo de lo realmente persistido)
 - Enrutado por reglas configurables
 - Ejecución con reintentos exponenciales
 - Monitoreo de conectividad de impresoras
@@ -148,25 +159,19 @@ Variables de entorno que sobreescriben appsettings (patrón `Section__Key`):
 - Dashboard con umbrales configurables en BD, KPIs por periodo (contrato en `docs/contrato-kpi-dashboard.md`) y timezone de negocio configurable (`Dashboard:BusinessTimeZone`)
 - **IPP**: `IIppConfirmationService`/`IppConfirmationService`, `IppSupported` en `Printer`, sondeo desde `PrinterConnectivityMonitorService`, filtro en el watchdog, badge en UI PHP (`resources/views/impresoras/index.blade.php`)
 - **Telegram**: `TelegramNotifierService`, `StoreHealthAlertBackgroundService`, `TelegramController` (API). `Telegram:Enabled=false` por defecto en `Worker/appsettings.json`; activar en producción con `BotToken` real. **La página PHP de alertas se retiró** (commit `fcd05d7`): la configuración se toca por API.
-- **Lock de instancia única** (`WorkerLockCoordinator` + `WorkerLockBackgroundService`): DDL aplicado y verificado el 19/08/2026 con dos procesos Worker reales contra `ZTEST_VICENTE_2`
+- **Lock de instancia única** (`WorkerLockCoordinator` + `WorkerLockBackgroundService`): relevo verificado con dos procesos Worker reales; la hora del lease la da la BD (`now()`)
 - **Health check `worker`** en la Api (`WorkerActivityHealthCheck`): delata un Worker inerte usando la huella del monitor de conectividad. Reporta `Degraded`, sin tag `ready`.
-- **Retención de PDF** (`PdfRetentionBackgroundService`): **activa, 90 días** (decisión del 19/08/2026). Libera el blob de los trabajos en estado terminal y de las filas de origen ya procesadas, conservando fila, `pdf_sha256` y metadatos. **No libera nada hasta que se aplique su DDL.**
-- **Revocación de acceso**: `User.IsActive` y `User.TokenVersion` comprobados en cada petición (`UserRevocationValidator`, enganchado a `OnTokenValidated`). Desactivar, borrar o cambiar la contraseña corta el acceso en la siguiente petición; el frontend ya redirige al login ante un 401. Requiere su DDL.
+- **Retención de PDF** (`PdfRetentionBackgroundService`): **activa, 90 días** (decisión del 19/08/2026). Libera el blob de los trabajos en estado terminal y de las filas de origen ya procesadas, conservando fila, `pdf_sha256` y metadatos.
+- **Revocación de acceso**: `User.IsActive` y `User.TokenVersion` comprobados en cada petición (`UserRevocationValidator`, enganchado a `OnTokenValidated`). Desactivar, borrar o cambiar la contraseña corta el acceso en la siguiente petición; el frontend ya redirige al login ante un 401.
 
 ### Pendiente
 **Ver `docs/PLAN.md`** — fuente de verdad única del trabajo pendiente, en bloques por dependencia.
-No se duplica aquí para que no diverja. El resto de roadmaps y auditorías del repositorio son
-evidencia o historia; `PLAN.md` dice cuál manda para qué.
+No se duplica aquí para que no diverja.
 
 ### DDL
-El esquema real vive extraído en `scripts/sql/schema/` (regenerar con `scripts/extraer-ddl-hana.ps1`, no editar a mano).
-Ya aplicados: `printer_telegram_config`, `printer_telegram_chat`, `printer_alert_state`, `ipp_supported` en `printer_printer`, `printer_worker_lock`.
-
-Pendiente de aplicar (ver `docs/PLAN.md`, bloque B0):
-- `scripts/sql/migrate_pdf_blob_nullable.sql` — dos `ALTER`. `pdf_blob` sigue siendo `BLOB NOT NULL`
-  en `printer_print_job` y `printer_source_print_job`; sin ellos `PdfRetention` no libera nada.
-- `scripts/sql/migrate_user_revocation.sql` — `is_active` y `token_version` en `printer_user`.
-  Sin estas columnas la Api falla al consultar usuarios.
+Esquema completo para una BD vacía: `scripts/sql/crear-esquema.sql` (PostgreSQL, sin nombre de esquema; se
+aplica con `scripts/crear-esquema.ps1`, en una transacción). Si cambias el modelo, actualízalo ahí.
+Copia del esquema real: `pg_dump --schema-only -n <esquema>`. Puesta en marcha y pendientes: `docs/PLAN.md`, B0.
 
 ---
 
@@ -186,7 +191,7 @@ Pendiente de aplicar (ver `docs/PLAN.md`, bloque B0):
 
 ### Git
 - Rama principal: `main`
-- Rama activa: `main`
+- Rama activa: `feat/postgres`
 - Commits convencionales: `feat:`, `fix:`, `chore:`, `refactor:`
 
 ---
@@ -203,7 +208,7 @@ src/ImpresorasService.Core/
   Infrastructure/Options/             → clases de configuración tipada
 
 src/ImpresorasService.Worker/
-  IngestionBackgroundService.cs           → polling HANA → cola
+  IngestionBackgroundService.cs           → polling tabla origen → cola
   PrintExecutionBackgroundService.cs      → cola → spooler
   SpoolAcceptedWatchdogBackgroundService.cs → confirmación IPP
   PrinterConnectivityMonitorService.cs    → sondeo de puertos + IPP
@@ -222,8 +227,7 @@ src/ImpresorasService.Web.PHP/
 
 tests/ImpresorasService.Api.IntegrationTests/  → xUnit + SQLite en memoria
 
-scripts/sql/                          → DDL para SAP HANA
+scripts/sql/crear-esquema.sql         → DDL PostgreSQL (único; se aplica con scripts/crear-esquema.ps1)
 docs/PLAN.md                          → QUÉ HACER: plan único de trabajo pendiente
 docs/                                 → guías de despliegue, estilo, smoke tests
-TELEGRAM_AND_IPP_ROADMAP.md           → completado (IPP y Telegram ya implementados); histórico
 ```

@@ -7,7 +7,7 @@ namespace ImpresorasService.Api.IntegrationTests;
 
 /// <summary>
 /// Factory con reloj controlable (<see cref="ManualTimeProvider"/>) para tests deterministas
-/// de ventanas temporales del dashboard (F1.4, docs/roadmap-kpi-dashboard.md).
+/// de ventanas temporales del dashboard (F1.4).
 /// </summary>
 public sealed class WindowClockApiFactory : ApiWebApplicationFactory
 {

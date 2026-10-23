@@ -17,13 +17,6 @@
       "applicationUrl": "http://localhost:5105",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "Database__Provider": "Hana",
-        "ConnectionStrings__PrintQueue": "Server=hanab1:30015;UserID=IMPRESION;Password=SercaImp1.-;Current Schema=ZTEST_VICENTE_2",
-        "Source__Mode": "SapHana",
-        "SapHana__ConnectionString": "Driver=HDBODBC;ServerNode=hanab1:30015;Database=ZTEST_VICENTE_2;UID=IMPRESION;PWD=SercaImp1.-",
-        "SapHana__Schema": "ZTEST_VICENTE_2",
-        "SapHana__Table": "printer_source_print_job",
-        "SapHana__LeaseSeconds": "90",
         "Jwt__Secret": "Impresoras_2026_Secret_Muy_Largo_32_chars_min"
       }
     },
@@ -35,13 +28,6 @@
       "applicationUrl": "https://localhost:7257;http://localhost:5105",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "Database__Provider": "Hana",
-        "ConnectionStrings__PrintQueue": "Server=hanab1:30015;UserID=IMPRESION;Password=SercaImp1.-;Current Schema=ZTEST_VICENTE_2",
-        "Source__Mode": "SapHana",
-        "SapHana__ConnectionString": "Driver=HDBODBC;ServerNode=hanab1:30015;Database=ZTEST_VICENTE_2;UID=IMPRESION;PWD=SercaImp1.-",
-        "SapHana__Schema": "ZTEST_VICENTE_2",
-        "SapHana__Table": "printer_source_print_job",
-        "SapHana__LeaseSeconds": "90",
         "Jwt__Secret": "Impresoras_2026_Secret_Muy_Largo_32_chars_min"
       }
     },
@@ -51,13 +37,6 @@
       "launchUrl": "swagger",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "Database__Provider": "Hana",
-        "ConnectionStrings__PrintQueue": "Server=hanab1:30015;UserID=IMPRESION;Password=SercaImp1.-;Current Schema=ZTEST_VICENTE_2",
-        "Source__Mode": "SapHana",
-        "SapHana__ConnectionString": "Driver=HDBODBC;ServerNode=hanab1:30015;Database=ZTEST_VICENTE_2;UID=IMPRESION;PWD=SercaImp1.-",
-        "SapHana__Schema": "ZTEST_VICENTE_2",
-        "SapHana__Table": "printer_source_print_job",
-        "SapHana__LeaseSeconds": "90",
         "Jwt__Secret": "Impresoras_2026_Secret_Muy_Largo_32_chars_min"
       }
     }

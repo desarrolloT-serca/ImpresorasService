@@ -411,6 +411,34 @@ public sealed class PrintersControllerTests : IntegrationTestBase
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
     }
 
+    [Theory]
+    [InlineData("10.0.0.2", null)]      // host nuevo: el Worker vuelve a descubrir IPP
+    [InlineData("10.0.0.1", true)]      // mismo host: se conserva lo ya descubierto
+    public async Task Update_ResetsIppSupportedOnlyWhenHostChanges_AndKeepsConnectivityTelemetry(string newHost, bool? expectedIpp)
+    {
+        var queue = $"\\\\srv\\q{Guid.NewGuid():N}"[..30];
+        var created = await CreatePrinterAsync("P-Ipp", queue, 1, host: "10.0.0.1");
+        await UpdatePrinterAsync(created.PrinterId, printer =>
+        {
+            printer.IppSupported = true;
+            printer.ConnectionFailuresStreak = 2;
+            printer.LastConnectionTransport = "tcp/9100";
+        });
+        var request = new { printerName = "P-Ipp-2", spoolQueue = queue, host = newHost, storeId = 1, isActive = true };
+
+        var response = await Client.PutAsJsonAsync($"/api/printers/{created.PrinterId}", request);
+
+        response.EnsureSuccessStatusCode();
+        var stored = await FindPrinterAsync(created.PrinterId);
+        Assert.NotNull(stored);
+        Assert.Equal("P-Ipp-2", stored.PrinterName);
+        Assert.Equal(newHost, stored.Host);
+        Assert.Equal(expectedIpp, stored.IppSupported);
+        // La telemetría la escribe el Worker: editar la impresora no debe pisarla.
+        Assert.Equal(2, stored.ConnectionFailuresStreak);
+        Assert.Equal("tcp/9100", stored.LastConnectionTransport);
+    }
+
     [Fact]
     public async Task Update_WithUnknownStore_Returns400()
     {

@@ -1,42 +1,34 @@
 # Publica ImpresorasService.Api e ImpresorasService.Worker como ejecutables
 # self-contained e instala/actualiza ambos como servicios Windows.
 #
-# Las credenciales (HANA, Jwt secret) se guardan en el registro propio de cada
+# Las credenciales (PostgreSQL, Jwt secret) se guardan en el registro propio de cada
 # servicio (HKLM:\SYSTEM\CurrentControlSet\Services\<Nombre>\Environment), NO como
 # variables de entorno de maquina: las de maquina solo las heredan procesos nuevos
 # tras un reinicio (el SCM cachea su entorno al arrancar Windows), las de servicio
 # las relee el SCM cada vez que arranca ESE servicio, sin reiniciar nada.
 #
 # Uso (elevado, como Administrador):
-#   .\scripts\install-windows-services.ps1 -HanaUser IMPRESION
-#     -> primera vez: pide password de HANA (no se guarda en ningun archivo de texto)
+#   .\scripts\install-windows-services.ps1 -DbHost 10.110.46.121 -DbPort 5433 -DbName serca -DbUser pb8_xp57
+#     -> primera vez: pide la password de PostgreSQL (no se guarda en ningun archivo de texto)
 #
 #   .\scripts\install-windows-services.ps1
 #     -> en un pull posterior: reutiliza las credenciales ya guardadas en el servicio,
 #        solo republica los binarios y reinicia los servicios.
 #
-#   .\scripts\install-windows-services.ps1 -Reconfigure -HanaUser IMPRESION -FrontendOrigin "http://192.168.1.50:8000"
+#   .\scripts\install-windows-services.ps1 -Reconfigure -DbHost ... -FrontendOrigin "http://192.168.1.50:8000"
 #     -> fuerza volver a pedir credenciales y añade un origen CORS para un frontend en otra IP.
 #
 #   .\scripts\install-windows-services.ps1 -ConfigureTelegram
 #     -> activa/actualiza las alertas de Telegram (opcional; sin token, TelegramNotifierService
 #        no-opea solo, no rompe nada).
 #
-# NOTA: no añadir -p:PublishTrimmed. SapHanaJobSourceAdapter/DependencyInjection.cs cargan el
-# provider EF de HANA vía Assembly.Load + reflection; el trimming lo rompe.
-#
-# NOTA: no añadir -p:PublishSingleFile. Sap.Data.Hana.HanaUnmanagedDll.SearchNativeDlls()
-# localiza libadonetHDB.dll vía Assembly.Location, que con single-file queda vacío y
-# revienta con "ArgumentNullException: Value cannot be null. (Parameter 'path1')" al
-# primer intento de conexión. Confirmado en pruebas reales (07/2026).
-
 param(
     [string]$InstallDir        = "C:\ImpresorasService",
-    [string]$HanaHost          = "hanab1",
-    [int]   $HanaPort          = 30015,
-    [string]$HanaSchema        = "ZTEST_VICENTE_2",
-    [string]$HanaUser          = "",
-    [string]$HanaIp            = "",            # si hanab1 no resuelve por DNS, añade la entrada a hosts
+    [string]$DbHost            = "",             # vacio = se pregunta al capturar credenciales
+    [int]   $DbPort            = 5432,
+    [string]$DbName            = "",
+    [string]$DbSchema          = "admon",        # PROVISIONAL (23/10/2026), ver docs/PLAN.md B0.5
+    [string]$DbUser            = "",
     [string]$FrontendOrigin    = "",             # ej. http://192.168.1.50:8000 (se añade a Cors:AllowedOrigins de la Api)
     [string]$ServiceAccount    = "",             # ej. ".\svc_impresoras"; vacio = LocalSystem
     [switch]$Reconfigure,                        # fuerza repedir/regenerar credenciales aunque ya existan
@@ -99,16 +91,6 @@ Write-Host "Repo: $RepoRoot"
 Write-Host "Destino: $InstallDir"
 Write-Host ""
 
-# ── 1. Entrada hosts para HANA (opcional) ───────────────────────────────────
-if ($HanaIp) {
-    $hostsFile = "$env:WinDir\System32\drivers\etc\hosts"
-    $already = Select-String -Path $hostsFile -Pattern "\b$HanaHost\b" -Quiet -ErrorAction SilentlyContinue
-    if (-not $already) {
-        Add-Content -Path $hostsFile -Value "`n$HanaIp`t$HanaHost"
-        Write-Host "Añadida entrada hosts: $HanaIp $HanaHost" -ForegroundColor Yellow
-    }
-}
-
 # ── 2. Detener servicios existentes (liberar los .exe para republicar) ─────
 foreach ($svc in @($ApiSvc, $WorkerSvc)) {
     $existing = Get-Service -Name $svc -ErrorAction SilentlyContinue
@@ -169,10 +151,8 @@ function Ensure-Service([string]$Name, [string]$DisplayName, [string]$ExePath) {
 
     # Reinicio automatico ante caida del proceso.
     #
-    # El Worker puede morir con AccessViolationException dentro de
-    # Sap.Data.Hana.PInvokeMethods64.HanaCommand_Cancel. Viene del driver nativo de SAP y NO se
-    # puede capturar con try/catch: se lleva el proceso entero. Sin acciones de recuperacion, un
-    # proceso caido se queda caido hasta que alguien lo arranque a mano.
+    # Sin acciones de recuperacion, un proceso caido se queda caido hasta que alguien lo arranque
+    # a mano.
     #
     # Se aplica siempre, no solo al crear: los servicios ya instalados no las tenian.
     # reset=86400 -> el contador de fallos vuelve a cero pasado un dia sin caidas.
@@ -189,22 +169,24 @@ function Ensure-Service([string]$Name, [string]$DisplayName, [string]$ExePath) {
 Ensure-Service $ApiSvc    "ImpresorasService API"    (Join-Path $ApiDir "ImpresorasService.Api.exe")
 Ensure-Service $WorkerSvc "ImpresorasService Worker" (Join-Path $WorkerDir "ImpresorasService.Worker.exe")
 
-# ── 7. Credenciales HANA / JWT, guardadas en el registro de cada servicio ──
+# ── 7. Credenciales PostgreSQL / JWT, guardadas en el registro de cada servicio ──
 Write-Host ""
 Write-Host "-- Credenciales --" -ForegroundColor Cyan
-$needsHanaCreds = $Reconfigure -or -not (Get-ServiceEnvVar $ApiSvc "ConnectionStrings__PrintQueue")
-if ($needsHanaCreds) {
-    if (-not $HanaUser) { $HanaUser = Read-Host "Usuario HANA (UID)" }
-    $hanaPasswordSecure = Read-Host "Password HANA (no se muestra)" -AsSecureString
-    $hanaPasswordPlain  = ConvertFrom-SecureStringPlain $hanaPasswordSecure
+$needsDbCreds = $Reconfigure -or -not (Get-ServiceEnvVar $ApiSvc "ConnectionStrings__PrintQueue")
+if ($needsDbCreds) {
+    if (-not $DbHost) { $DbHost = Read-Host "Servidor PostgreSQL (host o IP)" }
+    if (-not $DbName) { $DbName = Read-Host "Base de datos" }
+    if (-not $DbUser) { $DbUser = Read-Host "Usuario PostgreSQL" }
+    # PGPASSWORD (la del .env) evita el prompt; sin ella se pide oculta.
+    if ($env:PGPASSWORD) { $dbPasswordPlain = $env:PGPASSWORD.Trim() }
+    else { $dbPasswordPlain = ConvertFrom-SecureStringPlain (Read-Host "Password PostgreSQL (no se muestra)" -AsSecureString) }
 
-    $printQueueConn = "ServerNode=$HanaHost`:$HanaPort;UID=$HanaUser;PWD=$hanaPasswordPlain;Current Schema=$HanaSchema"
-    $sapHanaConn    = "Driver=HDBODBC;ServerNode=$HanaHost`:$HanaPort;Database=$HanaSchema;UID=$HanaUser;PWD=$hanaPasswordPlain"
-    Write-Host "  Conexion HANA capturada." -ForegroundColor Green
+    # Comillas en Password: una contrasena con ';' romperia la cadena sin ellas.
+    $printQueueConn = "Host=$DbHost;Port=$DbPort;Database=$DbName;Username=$DbUser;Password='" + $dbPasswordPlain.Replace("'", "''") + "';Search Path=$DbSchema"
+    Write-Host "  Conexion PostgreSQL capturada." -ForegroundColor Green
 } else {
     $printQueueConn = Get-ServiceEnvVar $ApiSvc "ConnectionStrings__PrintQueue"
-    $sapHanaConn    = Get-ServiceEnvVar $ApiSvc "SapHana__ConnectionString"
-    Write-Host "  Conexion HANA ya configurada (usa -Reconfigure para cambiarla)." -ForegroundColor DarkGray
+    Write-Host "  Conexion PostgreSQL ya configurada (usa -Reconfigure para cambiarla)." -ForegroundColor DarkGray
 }
 
 $jwtSecret = Get-ServiceEnvVar $ApiSvc "Jwt__Secret"
@@ -233,14 +215,12 @@ if ($ConfigureTelegram) {
 
 Set-ServiceEnv $ApiSvc @{
     "ConnectionStrings__PrintQueue" = $printQueueConn
-    "SapHana__ConnectionString"     = $sapHanaConn
     "Jwt__Secret"                   = $jwtSecret
     "ASPNETCORE_URLS"               = "http://+:5105"
     "Telegram__BotToken"            = $telegramToken
 }
 Set-ServiceEnv $WorkerSvc @{
     "ConnectionStrings__PrintQueue" = $printQueueConn
-    "SapHana__ConnectionString"     = $sapHanaConn
     "Telegram__BotToken"            = $telegramToken
 }
 
@@ -254,4 +234,4 @@ foreach ($svc in @($ApiSvc, $WorkerSvc)) {
 
 Write-Host ""
 Write-Host "Listo. Comprueba: Invoke-RestMethod http://localhost:5105/health" -ForegroundColor Cyan
-Write-Host "Pendiente manual (no automatizable desde aqui): driver SAP HANA ODBC, SumatraPDF, impresoras instaladas con el nombre de spool_queue." -ForegroundColor DarkYellow
+Write-Host "Pendiente manual (no automatizable desde aqui): esquema creado (scripts\crear-esquema.ps1), SumatraPDF, impresoras instaladas con el nombre de spool_queue." -ForegroundColor DarkYellow

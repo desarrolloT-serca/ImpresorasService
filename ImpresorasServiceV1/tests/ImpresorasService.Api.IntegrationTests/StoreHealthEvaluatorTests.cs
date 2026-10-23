@@ -4,7 +4,7 @@ using Xunit;
 namespace ImpresorasService.Api.IntegrationTests;
 
 /// <summary>
-/// G5.3 (docs/roadmap-integral-2026-07-21.md): puerto del motor de reglas de PHP
+/// G5.3: puerto del motor de reglas de PHP
 /// (computeHealth/buildPrioritizedAlerts, DashboardController.php) a .NET — única fuente de
 /// verdad para overview.stores[].health, overview.alerts y las alertas de Telegram del Worker.
 /// </summary>
