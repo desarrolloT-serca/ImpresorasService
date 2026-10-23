@@ -178,17 +178,13 @@ public class PrintersController : ControllerBase
         if (printer is null)
             return NotFound();
 
-        _dbContext.Printers.Remove(printer);
-
-        try
-        {
-            await _dbContext.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException ex) when (ex.InnerException?.Message?.Contains("FOREIGN KEY") == true)
-        {
+        // La base no tiene claves foráneas (scripts/sql/crear-esquema.sql): sin esta comprobación
+        // las reglas se quedaban apuntando a una impresora borrada.
+        if (await _dbContext.RoutingRules.AnyAsync(r => r.PrinterId == id, cancellationToken))
             return Conflict(new { error = "No se puede eliminar: existen reglas de enrutado que usan esta impresora." });
-        }
 
+        _dbContext.Printers.Remove(printer);
+        await _dbContext.SaveChangesAsync(cancellationToken);
         return NoContent();
     }
 

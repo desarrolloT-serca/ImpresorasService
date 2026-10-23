@@ -4,6 +4,7 @@ using ImpresorasService.Api.IntegrationTests;
 using ImpresorasService.Domain.Connectivity;
 using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -480,6 +481,37 @@ public sealed class PrintersControllerTests : IntegrationTestBase
 
         var getResponse = await Client.GetAsync($"/api/printers/{created.PrinterId}");
         Assert.Equal(HttpStatusCode.NotFound, getResponse.StatusCode);
+    }
+
+    // PostgreSQL no tiene claves foráneas (scripts/sql/crear-esquema.sql): sin la comprobación en
+    // el controlador, la impresora se borraba y sus reglas se quedaban apuntando a la nada. Aquí
+    // se apagan las de SQLite para probar lo mismo que pasa en producción.
+    [Fact]
+    public async Task Delete_WhenRulesUseIt_Returns409AndKeepsPrinter()
+    {
+        var spool = $"\\\\srv\\q{Guid.NewGuid():N}"[..30];
+        var created = await CreatePrinterAsync("P1", spool, 1);
+        var rule = await Client.PostAsJsonAsync("/api/routingrules",
+            new { priority = 1, storeId = 1, printerId = created.PrinterId });
+        rule.EnsureSuccessStatusCode();
+        using var scope = Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>().Database;
+
+        HttpResponseMessage response;
+        await db.ExecuteSqlRawAsync("PRAGMA foreign_keys = OFF");
+        try
+        {
+            response = await Client.DeleteAsync($"/api/printers/{created.PrinterId}");
+        }
+        finally
+        {
+            // La conexión es la de toda la clase: el resto de pruebas las necesitan.
+            await db.ExecuteSqlRawAsync("PRAGMA foreign_keys = ON");
+        }
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var getResponse = await Client.GetAsync($"/api/printers/{created.PrinterId}");
+        Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
     }
 
     [Fact]
