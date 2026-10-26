@@ -16,7 +16,7 @@ import {
   PruebaCreada,
   PruebasCanceladas,
   PruebaTelegram,
-  Regla,
+  ReglaEnrutado,
   ReglasUmbral,
   ResultadoAccion,
   ResumenDashboard,
@@ -122,14 +122,20 @@ export const useReglas = () =>
   useQuery({
     queryKey: ["impresion", "reglas"],
     queryFn: ({ signal }) =>
-      api("/impresion/routingrules", z.array(Regla), { signal }),
+      api("/impresion/routingrules", z.array(ReglaEnrutado), { signal }),
   })
 
 // Editar exige las fechas de vigencia: se conservan las que tenía.
 export function useGuardarRegla() {
   const cache = useQueryClient()
   return useMutation({
-    mutationFn: ({ regla, datos }: { regla?: Regla; datos: DatosRegla }) =>
+    mutationFn: ({
+      regla,
+      datos,
+    }: {
+      regla?: ReglaEnrutado
+      datos: DatosRegla
+    }) =>
       regla
         ? api(`/impresion/routingrules/${regla.ruleId}`, z.unknown(), {
             body: {
@@ -243,7 +249,9 @@ export function useBorrarChat() {
   const cache = useQueryClient()
   return useMutation({
     mutationFn: (chatId: number) =>
-      api(`/impresion/telegram/chats/${chatId}`, z.null(), { metodo: "DELETE" }),
+      api(`/impresion/telegram/chats/${chatId}`, z.null(), {
+        metodo: "DELETE",
+      }),
     onSettled: () => telegram(cache),
   })
 }
@@ -282,7 +290,8 @@ export function useCancelarPruebas() {
         PruebasCanceladas,
         { body: {} }
       ),
-    onSettled: () => cache.invalidateQueries({ queryKey: ["impresion", "cola"] }),
+    onSettled: () =>
+      cache.invalidateQueries({ queryKey: ["impresion", "cola"] }),
   })
 }
 

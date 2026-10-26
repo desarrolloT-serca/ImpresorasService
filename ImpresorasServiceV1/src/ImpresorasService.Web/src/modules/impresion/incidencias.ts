@@ -153,8 +153,8 @@ export function incidencias(
           ...(admin
             ? [{
                 etiqueta: "Revisar reglas",
-                panel: "impresionConfiguracion.reglas" as IdPanel,
-                clave: `tienda=${t.storeId}`,
+                panel: "impresionConfiguracion.reglasYAvisos" as IdPanel,
+                clave: `seccion=reglas&tienda=${t.storeId}`,
                 titulo: `Reglas · ${t.storeName}`,
               }]
             : []),

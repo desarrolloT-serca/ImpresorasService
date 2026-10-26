@@ -86,7 +86,7 @@ export type Tienda = z.infer<typeof Tienda>
 // GET /api/routingrules: la entidad, con su impresora. Sin tienda es global.
 // Gana la más específica (tienda + tipo + canal… hasta global) y, entre
 // iguales, la de menor prioridad (RoutingResolver).
-export const Regla = z.object({
+export const ReglaEnrutado = z.object({
   ruleId: z.number().int(),
   priority: z.number().int(),
   storeId: z.number().int().nullable(),
@@ -98,12 +98,15 @@ export const Regla = z.object({
   validToUtc: z.string().nullable(),
   printer: z.object({ printerName: z.string() }).nullable(),
 })
-export type Regla = z.infer<typeof Regla>
+export type ReglaEnrutado = z.infer<typeof ReglaEnrutado>
 
 // CreateRoutingRuleRequest y UpdateRoutingRuleRequest (límites del DDL).
 // Tipo y canal vacíos = cualquiera.
 export const DatosRegla = z.object({
-  priority: z.number({ error: "Obligatoria" }).int().min(0, "No puede ser negativa"),
+  priority: z
+    .number({ error: "Obligatoria" })
+    .int()
+    .min(0, "No puede ser negativa"),
   storeId: z.number().int().nullable(),
   documentType: z
     .string()
@@ -125,7 +128,10 @@ export type DatosRegla = z.output<typeof DatosRegla>
 // de Telegram; la API los valida (ThresholdRuleEngine).
 export const SeveridadUmbral = z.enum(["info", "warning", "critical"])
 export type SeveridadUmbral = z.infer<typeof SeveridadUmbral>
-export const Umbral = z.object({ min: z.number().int(), severity: SeveridadUmbral })
+export const Umbral = z.object({
+  min: z.number().int(),
+  severity: SeveridadUmbral,
+})
 export type Umbral = z.infer<typeof Umbral>
 export const ReglasUmbral = z.object({
   queue: z.array(Umbral),
@@ -159,7 +165,10 @@ export const DatosChat = z.object({
   chatId: z
     .string()
     .trim()
-    .regex(/^-?[1-9]\d{0,15}$/, "Número de chat de Telegram (los grupos son negativos)")
+    .regex(
+      /^-?[1-9]\d{0,15}$/,
+      "Número de chat de Telegram (los grupos son negativos)"
+    )
     .transform(Number),
   description: z
     .string()
@@ -299,8 +308,16 @@ export type Impresora = z.infer<typeof Impresora>
 // Alta y edición de impresoras: CreatePrinterRequest y UpdatePrinterRequest,
 // con los mismos límites que la API.
 export const DatosImpresora = z.object({
-  printerName: z.string().trim().min(1, "Obligatorio").max(120, "Máximo 120 caracteres"),
-  spoolQueue: z.string().trim().min(1, "Obligatoria").max(200, "Máximo 200 caracteres"),
+  printerName: z
+    .string()
+    .trim()
+    .min(1, "Obligatorio")
+    .max(120, "Máximo 120 caracteres"),
+  spoolQueue: z
+    .string()
+    .trim()
+    .min(1, "Obligatoria")
+    .max(200, "Máximo 200 caracteres"),
   host: z
     .string()
     .trim()

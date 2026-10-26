@@ -3,7 +3,7 @@ import type { ColumnDef } from "@tanstack/react-table"
 import { PlusIcon } from "lucide-react"
 import { toast } from "sonner"
 import { z } from "zod"
-import { DatosRegla, type Regla, type Tienda } from "@serca/contratos"
+import { DatosRegla, type ReglaEnrutado, type Tienda } from "@serca/contratos"
 
 import { DataTable } from "@/components/data-table"
 import { Panel } from "@/components/ficha"
@@ -46,9 +46,10 @@ export default function Reglas({ clave }: PropsPanel) {
   const borrar = useBorrarRegla()
   // Abierta desde el dashboard, la clave trae la tienda: «tienda=12».
   const [tienda, setTienda] = useState(
-    () => new URLSearchParams(clave).get("tienda")?.match(/^\d{1,9}$/)?.[0] ?? TODAS
+    () =>
+      new URLSearchParams(clave).get("tienda")?.match(/^\d{1,9}$/)?.[0] ?? TODAS
   )
-  const [editando, setEditando] = useState<Regla | "nueva">()
+  const [editando, setEditando] = useState<ReglaEnrutado | "nueva">()
   const [reinicio, setReinicio] = useState(0)
   useEsc(() => setReinicio((n) => n + 1))
 
@@ -62,10 +63,13 @@ export default function Reglas({ clave }: PropsPanel) {
     { value: GLOBAL, label: "Globales" },
     ...tiendas
       .filter((t) => t.isActive)
-      .map((t) => ({ value: String(t.storeId), label: nombreTienda(t.storeId, tiendas) })),
+      .map((t) => ({
+        value: String(t.storeId),
+        label: nombreTienda(t.storeId, tiendas),
+      })),
   ]
 
-  const columnas = useMemo<ColumnDef<Regla, unknown>[]>(
+  const columnas = useMemo<ColumnDef<ReglaEnrutado, unknown>[]>(
     () => [
       ...(tienda === TODAS
         ? [
@@ -73,16 +77,18 @@ export default function Reglas({ clave }: PropsPanel) {
               id: "tienda",
               header: "Tienda",
               size: 170,
-              accessorFn: (r: Regla) => nombreDe(r.storeId, tiendas),
+              accessorFn: (r: ReglaEnrutado) => nombreDe(r.storeId, tiendas),
               cell: ({ getValue }) => (
                 <span className="block truncate">{getValue<string>()}</span>
               ),
-            } satisfies ColumnDef<Regla, unknown>,
+            } satisfies ColumnDef<ReglaEnrutado, unknown>,
           ]
         : []),
       {
         id: "prioridad",
-        header: () => <span className="tracking-normal normal-case">Prioridad</span>,
+        header: () => (
+          <span className="tracking-normal normal-case">Prioridad</span>
+        ),
         size: 90,
         accessorKey: "priority",
         meta: { num: true },
@@ -96,7 +102,9 @@ export default function Reglas({ clave }: PropsPanel) {
         size: 160,
         accessorFn: (r) => r.documentType ?? "",
         cell: ({ row: { original: r } }) =>
-          r.documentType ?? <span className="text-muted-foreground">Cualquiera</span>,
+          r.documentType ?? (
+            <span className="text-muted-foreground">Cualquiera</span>
+          ),
       },
       {
         id: "canal",
@@ -104,7 +112,9 @@ export default function Reglas({ clave }: PropsPanel) {
         size: 130,
         accessorFn: (r) => r.channel ?? "",
         cell: ({ row: { original: r } }) =>
-          r.channel ?? <span className="text-muted-foreground">Cualquiera</span>,
+          r.channel ?? (
+            <span className="text-muted-foreground">Cualquiera</span>
+          ),
       },
       {
         id: "impresora",
@@ -122,7 +132,10 @@ export default function Reglas({ clave }: PropsPanel) {
         cell: ({ row: { original: r } }) => (
           <Badge
             variant="outline"
-            className={cn("border-transparent", CLASE_TONO[r.isActive ? "ok" : "neutro"])}
+            className={cn(
+              "border-transparent",
+              CLASE_TONO[r.isActive ? "ok" : "neutro"]
+            )}
           >
             {r.isActive ? "Sí" : "No"}
           </Badge>
@@ -148,7 +161,11 @@ export default function Reglas({ clave }: PropsPanel) {
                 borrar.mutate(r.ruleId, {
                   onSuccess: () => toast.success("Regla eliminada"),
                   onError: (e) =>
-                    toast.error(e instanceof ErrorApi ? e.problema.title : "No se pudo eliminar"),
+                    toast.error(
+                      e instanceof ErrorApi
+                        ? e.problema.title
+                        : "No se pudo eliminar"
+                    ),
                 })
               }
             >
@@ -176,7 +193,11 @@ export default function Reglas({ clave }: PropsPanel) {
         toolbar={
           <>
             <CampoFiltro etiqueta="Tienda">
-              <Select items={items} value={tienda} onValueChange={(v) => setTienda(v as string)}>
+              <Select
+                items={items}
+                value={tienda}
+                onValueChange={(v) => setTienda(v as string)}
+              >
                 <SelectTrigger className="w-64">
                   <SelectValue />
                 </SelectTrigger>
@@ -190,7 +211,8 @@ export default function Reglas({ clave }: PropsPanel) {
               </Select>
             </CampoFiltro>
             <span className="ml-auto self-center text-xs text-muted-foreground">
-              Gana la regla más específica; entre iguales, la de menor prioridad.
+              Gana la regla más específica; entre iguales, la de menor
+              prioridad.
             </span>
             <Button size="sm" onClick={() => setEditando("nueva")}>
               <PlusIcon data-icon="inline-start" />
@@ -202,7 +224,13 @@ export default function Reglas({ clave }: PropsPanel) {
       {editando && (
         <FormularioRegla
           regla={editando === "nueva" ? undefined : editando}
-          tienda={tienda === TODAS ? undefined : tienda === GLOBAL ? null : Number(tienda)}
+          tienda={
+            tienda === TODAS
+              ? undefined
+              : tienda === GLOBAL
+                ? null
+                : Number(tienda)
+          }
           tiendas={tiendas}
           onCerrar={() => setEditando(undefined)}
         />
@@ -226,7 +254,7 @@ function FormularioRegla({
   tiendas,
   onCerrar,
 }: {
-  regla?: Regla
+  regla?: ReglaEnrutado
   // Para una nueva: la del selector (null = global).
   tienda?: number | null
   tiendas: readonly Tienda[]
@@ -238,7 +266,10 @@ function FormularioRegla({
     { value: GLOBAL, label: "Global (todas las tiendas)" },
     ...tiendas
       .filter((t) => t.isActive || t.storeId === regla?.storeId)
-      .map((t) => ({ value: String(t.storeId), label: nombreTienda(t.storeId, tiendas) })),
+      .map((t) => ({
+        value: String(t.storeId),
+        label: nombreTienda(t.storeId, tiendas),
+      })),
   ]
   return (
     <DialogoFormulario
@@ -273,7 +304,9 @@ function FormularioRegla({
             <Campo id={id("storeId")} etiqueta="Tienda" error={errores.storeId}>
               <Select
                 items={tiendaItems}
-                value={valores.storeId === null ? GLOBAL : String(valores.storeId)}
+                value={
+                  valores.storeId === null ? GLOBAL : String(valores.storeId)
+                }
                 disabled={enviando}
                 onValueChange={(v) => {
                   cambiar("storeId", v === GLOBAL ? null : Number(v))
@@ -292,10 +325,18 @@ function FormularioRegla({
                 </SelectContent>
               </Select>
             </Campo>
-            <Campo id={id("printerId")} etiqueta="Impresora" error={errores.printerId}>
+            <Campo
+              id={id("printerId")}
+              etiqueta="Impresora"
+              error={errores.printerId}
+            >
               <Select
                 items={impresoraItems}
-                value={valores.printerId === undefined ? null : String(valores.printerId)}
+                value={
+                  valores.printerId === undefined
+                    ? null
+                    : String(valores.printerId)
+                }
                 disabled={enviando}
                 onValueChange={(v) => cambiar("printerId", Number(v))}
               >
@@ -306,7 +347,9 @@ function FormularioRegla({
                 >
                   <SelectValue
                     placeholder={
-                      disponibles.length ? "Elige una impresora" : "Esta tienda no tiene impresoras"
+                      disponibles.length
+                        ? "Elige una impresora"
+                        : "Esta tienda no tiene impresoras"
                     }
                   />
                 </SelectTrigger>

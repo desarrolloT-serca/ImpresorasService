@@ -26,7 +26,7 @@ Sesión: `POST /api/auth/login` de la API .NET deja el JWT en la cookie `impreso
 
 | Ruta | Origen | Al integrar en el ERP |
 | --- | --- | --- |
-| `src/modules/impresion/` | Propio, escrito como un módulo del ERP: dos manifiestos, `impresion` (operación) e `impresionConfiguracion` (solo administración) | Se copia a `apps/web/src/modules/` y se registran los dos en su `workspace/registro.ts` |
+| `src/modules/impresion/` | Propio, escrito como un módulo del ERP: dos manifiestos, `impresion` (operación) e `impresionConfiguracion` (solo administración: reglas, umbrales, Telegram y pruebas en una pestaña, «Reglas y avisos») | Se copia a `apps/web/src/modules/` y se registran los dos en su `workspace/registro.ts` |
 | `src/app/`, `src/main.tsx`, `src/core/sesion.ts`, `src/workspace/registro.ts` | Propio: contenedor de esta aplicación (login, sesión, menú) | Se tira |
 | `src/app/transicion/` | Propio: Tiendas y Usuarios, solo mientras la app vaya sola. En el ERP los usuarios son sus operadores y las tiendas, sus almacenes | Se tira |
 | `src/contratos/` | `comun.ts` copiado de `packages/contratos`; `impresion.ts`, contratos del módulo; `index.ts` sustituye a `@serca/contratos` | `impresion.ts` pasa a `packages/contratos` |

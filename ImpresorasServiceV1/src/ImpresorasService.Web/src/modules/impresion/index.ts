@@ -1,12 +1,9 @@
 import { lazy } from "react"
 import {
-  FlaskConicalIcon,
-  GaugeIcon,
   LayoutDashboardIcon,
   ListOrderedIcon,
   PrinterIcon,
-  RouteIcon,
-  SendIcon,
+  SlidersHorizontalIcon,
 } from "lucide-react"
 import { PERMISOS_IMPRESION as P } from "@serca/contratos"
 import type { ModuloWeb } from "@/workspace/modulo"
@@ -16,7 +13,8 @@ import type { ModuloWeb } from "@/workspace/modulo"
 // sus dos manifiestos en su workspace/registro.ts. No importa nada de src/app.
 // Todas sus pantallas van en el grupo «Impresión» del menú. Son dos
 // manifiestos porque cada uno da un solo permiso: la operación, a quien lee;
-// la configuración, solo a quien administra. El menú los junta por grupo.
+// «Reglas y avisos» (reglas, umbrales, Telegram y pruebas en una sola
+// pestaña), solo a quien administra. El menú los junta por grupo.
 // ponytail: sin programa del ERP antiguo hasta el día de integrarlo (su
 // catálogo PANTALLAS aún no admite pantallas nuevas).
 export const impresion: ModuloWeb = {
@@ -50,31 +48,11 @@ export const impresionConfiguracion: ModuloWeb = {
   id: "impresionConfiguracion",
   permiso: P.administrar,
   paneles: {
-    reglas: {
-      titulo: "Reglas de enrutado",
-      icon: RouteIcon,
-      componente: lazy(() => import("./Reglas")),
-    },
-    umbrales: {
-      titulo: "Umbrales de salud",
-      icon: GaugeIcon,
-      componente: lazy(() => import("./Umbrales")),
-    },
-    telegram: {
-      titulo: "Alertas por Telegram",
-      icon: SendIcon,
-      componente: lazy(() => import("./Telegram")),
-    },
-    pruebas: {
-      titulo: "Pruebas",
-      icon: FlaskConicalIcon,
-      componente: lazy(() => import("./Pruebas")),
+    reglasYAvisos: {
+      titulo: "Reglas y avisos",
+      icon: SlidersHorizontalIcon,
+      componente: lazy(() => import("./ReglasYAvisos")),
     },
   },
-  menu: [
-    { grupo: "Impresión", panel: "reglas" },
-    { grupo: "Impresión", panel: "umbrales" },
-    { grupo: "Impresión", panel: "telegram" },
-    { grupo: "Impresión", panel: "pruebas" },
-  ],
+  menu: [{ grupo: "Impresión", panel: "reglasYAvisos" }],
 }
