@@ -237,6 +237,7 @@ public class ImpresorasDbContext : DbContext
             entity.Property(x => x.DocumentType).HasColumnName("document_type");
             entity.Property(x => x.Channel).HasColumnName("channel");
             entity.Property(x => x.PdfBlob).HasColumnName("pdf_blob");
+            entity.Property(x => x.PdfUrl).HasColumnName("pdf_url");
             entity.Property(x => x.CreatedAtUtc).HasColumnName("created_at_utc");
             entity.Property(x => x.IsProcessed).HasColumnName("is_processed");
             entity.Property(x => x.ClaimedBy).HasColumnName("claimed_by");

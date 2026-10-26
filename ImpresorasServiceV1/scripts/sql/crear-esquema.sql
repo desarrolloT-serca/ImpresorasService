@@ -75,6 +75,7 @@ CREATE TABLE printer_source_print_job (
     document_type varchar(80) NOT NULL,
     channel varchar(40),
     pdf_blob bytea,
+    pdf_url text,
     created_at_utc timestamptz NOT NULL DEFAULT now(),
     is_processed boolean NOT NULL DEFAULT FALSE,
     claimed_by varchar(200),

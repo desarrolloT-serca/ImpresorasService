@@ -56,6 +56,7 @@ Pending → Routed → SpoolAccepted → PrintedConfirmed
 ```
 1. INGESTA  (IngestionBackgroundService, poll 2s)
    printer_source_print_job (la escribe el ERP) → claim/ack 90s lease
+   → PDF en pdf_blob o descargado de pdf_url (Source:PdfUrlHosts; si no sirve, ErrorFinal PDF_DOWNLOAD_FAILED)
    → IngestionService.ProcessAsync() → PrintJob{Pending}
 
 2. ENRUTADO (dentro de IngestionService)

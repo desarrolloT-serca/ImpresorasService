@@ -23,6 +23,15 @@ public class ErpJobSourceAdapter : IJobSourceAdapter
     private string? _lastClaimToken;
     private readonly TimeProvider _timeProvider;
 
+    private const int MaxPdfBytes = 50 * 1024 * 1024;
+
+    // Uno por proceso: el adaptador es Scoped. Sin redirecciones, para no salir de PdfUrlHosts.
+    private static readonly HttpClient Http = new(new SocketsHttpHandler
+    {
+        PooledConnectionLifetime = TimeSpan.FromMinutes(10),
+        AllowAutoRedirect = false
+    }) { Timeout = TimeSpan.FromSeconds(30) };
+
     public ErpJobSourceAdapter(
         IOptions<SourceOptions> options,
         ImpresorasDbContext dbContext,
@@ -96,32 +105,82 @@ public class ErpJobSourceAdapter : IJobSourceAdapter
         await tx.CommitAsync(cancellationToken);
         _lastClaimToken = claimToken;
 
-        // Una fila sin PDF no puede imprimirse. No deberia existir entre las no procesadas -la
-        // retencion solo toca las que ya lo estan-, pero si aparece se descarta con traza en vez de
-        // reventar el lote entero al calcular el hash.
-        var withoutPdf = claimedRows.Where(x => x.PdfBlob is null || x.PdfBlob.Length == 0).ToList();
-        if (withoutPdf.Count > 0)
-            _logger.LogError(
-                "Origen: {Count} filas sin PDF pese a no estar procesadas; se omiten. Ids={Ids}",
-                withoutPdf.Count, string.Join(",", withoutPdf.Select(x => x.Id)));
+        var jobs = new List<IncomingPrintJob>(claimedRows.Count);
+        foreach (var row in claimedRows.OrderBy(x => x.CreatedAtUtc).ThenBy(x => x.Id))
+        {
+            byte[]? pdf = row.PdfBlob is { Length: > 0 } ? row.PdfBlob : null;
+            string? pdfError = null;
 
-        var jobs = claimedRows
-            .Where(x => x.PdfBlob is not null && x.PdfBlob.Length > 0)
-            .OrderBy(x => x.CreatedAtUtc)
-            .ThenBy(x => x.Id)
-            .Select(row => new IncomingPrintJob(
+            if (pdf is null && !string.IsNullOrWhiteSpace(row.PdfUrl))
+            {
+                (pdf, pdfError, var retry) = await DownloadPdfAsync(Http, row.PdfUrl, _options.PdfUrlHosts, cancellationToken);
+                if (retry)
+                {
+                    // Fallo pasajero (red, timeout, 5xx): sin ack; se reintenta cuando expire el lease.
+                    _logger.LogWarning("Origen: no se pudo descargar el PDF de la fila {Id}; se reintentará. {Error}", row.Id, pdfError);
+                    continue;
+                }
+            }
+            else if (pdf is null)
+            {
+                // Una fila sin PDF ni URL no puede imprimirse. No deberia existir entre las no
+                // procesadas -la retencion solo toca las que ya lo estan-, pero si aparece se
+                // descarta con traza en vez de reventar el lote entero al calcular el hash.
+                _logger.LogError("Origen: la fila {Id} no tiene PDF ni pdf_url pese a no estar procesada; se omite.", row.Id);
+                continue;
+            }
+
+            jobs.Add(new IncomingPrintJob(
                 SourceJobId: row.Id,
                 SourceSystem: _sourceSystem,
                 ExternalJobId: row.ExternalJobId,
                 StoreId: row.StoreId,
                 DocumentType: row.DocumentType,
                 Channel: string.IsNullOrWhiteSpace(row.Channel) ? "DEFAULT" : row.Channel,
-                PdfBlob: row.PdfBlob!,
-                CreatedAtUtc: row.CreatedAtUtc))
-            .ToList();
+                PdfBlob: pdf ?? [],
+                CreatedAtUtc: row.CreatedAtUtc,
+                PdfError: pdfError));
+        }
 
         _logger.LogInformation("Ingesta ERP: reclamados {Count} trabajos pendientes.", jobs.Count);
         return jobs;
+    }
+
+    /// <summary>
+    /// Descarga el PDF de pdf_url. Retry=true: fallo pasajero, se vuelve a intentar más tarde; si no,
+    /// el error es definitivo. Los mensajes no llevan la URL: con su id basta para bajarse el documento.
+    /// </summary>
+    public static async Task<(byte[]? Pdf, string? Error, bool Retry)> DownloadPdfAsync(
+        HttpClient http, string url, IReadOnlyCollection<string> allowedHosts, CancellationToken ct)
+    {
+        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
+            return (null, "pdf_url no es una URL https.", false);
+        if (!allowedHosts.Contains(uri.Host, StringComparer.OrdinalIgnoreCase))
+            return (null, $"El host {uri.Host} no está en Source:PdfUrlHosts.", false);
+
+        try
+        {
+            using var response = await http.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, ct);
+            var status = (int)response.StatusCode;
+            if (status >= 500 || status is 408 or 429)
+                return (null, $"{uri.Host} respondió {status}.", true);
+            if (!response.IsSuccessStatusCode)
+                return (null, $"{uri.Host} respondió {status}.", false);
+            // ponytail: sin Content-Length el tope se mira después de leer; el host es nuestro.
+            if (response.Content.Headers.ContentLength > MaxPdfBytes)
+                return (null, $"El PDF de {uri.Host} pasa de {MaxPdfBytes / 1024 / 1024} MB.", false);
+
+            var pdf = await response.Content.ReadAsByteArrayAsync(ct);
+            if (pdf.Length > MaxPdfBytes)
+                return (null, $"El PDF de {uri.Host} pasa de {MaxPdfBytes / 1024 / 1024} MB.", false);
+            if (!pdf.AsSpan().StartsWith("%PDF-"u8))
+                return (null, $"{uri.Host} no devolvió un PDF.", false);
+            return (pdf, null, false);
+        }
+        catch (Exception ex) when ((ex is HttpRequestException or TaskCanceledException) && !ct.IsCancellationRequested)
+        {
+            return (null, $"Sin respuesta de {uri.Host}: {ex.Message}", true);
+        }
     }
 
     public async Task MarkJobsProcessedAsync(
