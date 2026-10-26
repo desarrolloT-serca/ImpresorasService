@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net.Sockets;
 using System.Security.Claims;
 using System.Text.Json;
+using ImpresorasService.Api.Security;
 using ImpresorasService.Domain.Connectivity;
 using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure.Persistence;
@@ -34,8 +35,8 @@ public class PrintersController : ControllerBase
     {
         IQueryable<Printer> query = _dbContext.Printers.AsNoTracking();
 
-        var effectiveStoreId = IsAdmin() ? storeId : GetCurrentUserStoreId();
-        if (!IsAdmin() && !effectiveStoreId.HasValue)
+        var effectiveStoreId = User.VeTodasLasTiendas() ? storeId : GetCurrentUserStoreId();
+        if (!User.VeTodasLasTiendas() && !effectiveStoreId.HasValue)
             return Forbid();
         if (effectiveStoreId.HasValue)
             query = query.Where(x => x.StoreId == effectiveStoreId.Value);
@@ -62,7 +63,7 @@ public class PrintersController : ControllerBase
 
         if (printer is null)
             return NotFound();
-        if (!IsAdmin() && printer.StoreId != GetCurrentUserStoreId())
+        if (!User.VeTodasLasTiendas() && printer.StoreId != GetCurrentUserStoreId())
             return Forbid();
 
         return Ok(ToPrinterDto(printer));
@@ -220,7 +221,7 @@ public class PrintersController : ControllerBase
 
         if (printer is null)
             return NotFound();
-        if (!IsAdmin() && printer.StoreId != GetCurrentUserStoreId())
+        if (!User.VeTodasLasTiendas() && printer.StoreId != GetCurrentUserStoreId())
             return Forbid();
 
         var host = !string.IsNullOrWhiteSpace(printer.Host)

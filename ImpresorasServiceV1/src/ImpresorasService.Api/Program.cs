@@ -118,6 +118,17 @@ var jwtSecret = builder.Configuration["Jwt:Secret"];
 if (IsUnsafeJwtSecret(jwtSecret))
     throw new InvalidOperationException("Jwt:Secret es obligatorio, debe estar definido por entorno y no puede usar valores inseguros/default.");
 var jwtSecretValue = jwtSecret!.Trim();
+var jwtKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecretValue));
+
+// Pase del ERP nuevo (PaseErp). Opcional: sin Erp:Secret la API no acepta pases.
+var erpSecret = builder.Configuration["Erp:Secret"];
+SymmetricSecurityKey? erpKey = null;
+if (!string.IsNullOrWhiteSpace(erpSecret))
+{
+    if (IsUnsafeJwtSecret(erpSecret) || erpSecret.Trim() == jwtSecretValue)
+        throw new InvalidOperationException("Erp:Secret debe tener al menos 32 caracteres y ser distinto de Jwt:Secret.");
+    erpKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(erpSecret.Trim()));
+}
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -125,11 +136,15 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecretValue)),
+            // La clave va por emisor: un pase del ERP solo vale firmado con Erp:Secret y un token
+            // propio solo con Jwt:Secret.
+            IssuerSigningKeyResolver = (_, token, _, _) => token.Issuer == PaseErp.Emisor
+                ? erpKey is null ? [] : [erpKey]
+                : [jwtKey],
             ValidateIssuer = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"] ?? "ImpresorasService",
+            ValidIssuers = [builder.Configuration["Jwt:Issuer"] ?? "ImpresorasService", PaseErp.Emisor],
             ValidateAudience = true,
-            ValidAudience = builder.Configuration["Jwt:Audience"] ?? "ImpresorasService",
+            ValidAudiences = [builder.Configuration["Jwt:Audience"] ?? "ImpresorasService", PaseErp.Audiencia],
             ValidateLifetime = true,
             ClockSkew = TimeSpan.Zero
         };
@@ -146,7 +161,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                     context.Token = context.Request.Cookies[AuthController.SessionCookie];
                 return Task.CompletedTask;
             },
-            OnTokenValidated = UserRevocationValidator.ValidateAsync,
+            OnTokenValidated = context => context.SecurityToken.Issuer == PaseErp.Emisor
+                ? PaseErp.ValidarAsync(context)
+                : UserRevocationValidator.ValidateAsync(context),
             // Si no se pudo comprobar el usuario porque la base no respondía, 503 y no 401: la sesión
             // sigue siendo buena y volver a entrar no arreglaría nada.
             OnChallenge = async context =>

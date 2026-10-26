@@ -1,4 +1,5 @@
 ﻿using System.Security.Claims;
+using ImpresorasService.Api.Security;
 using ImpresorasService.Application.Abstractions;
 using ImpresorasService.Application.Services;
 using ImpresorasService.Domain;
@@ -48,9 +49,9 @@ public class DashboardController : ControllerBase
         [FromQuery] int? storeId,
         CancellationToken cancellationToken)
     {
-        var effectiveStoreId = IsAdmin() ? storeId : GetCurrentUserStoreId();
+        var effectiveStoreId = User.VeTodasLasTiendas() ? storeId : GetCurrentUserStoreId();
         // Sin tienda no se ve ninguna, nunca todas: igual que la cola y las impresoras.
-        if (!IsAdmin() && !effectiveStoreId.HasValue)
+        if (!User.VeTodasLasTiendas() && !effectiveStoreId.HasValue)
             return Forbid();
         var thresholds = await GetThresholdsAsync(cancellationToken);
         var now = _timeProvider.GetUtcNow();
@@ -141,8 +142,8 @@ public class DashboardController : ControllerBase
         [FromQuery] int? storeId,
         CancellationToken cancellationToken)
     {
-        var effectiveStoreId = IsAdmin() ? storeId : GetCurrentUserStoreId();
-        if (!IsAdmin() && !effectiveStoreId.HasValue)
+        var effectiveStoreId = User.VeTodasLasTiendas() ? storeId : GetCurrentUserStoreId();
+        if (!User.VeTodasLasTiendas() && !effectiveStoreId.HasValue)
             return Forbid();
         var now = _timeProvider.GetUtcNow();
         var fromUtc = ResolveWindowStartUtc(window, now);
@@ -706,8 +707,6 @@ public class DashboardController : ControllerBase
         var normalized = (window ?? string.Empty).Trim().ToLowerInvariant();
         return normalized is "7d" or "30d" ? normalized : "today";
     }
-
-    private bool IsAdmin() => User.IsInRole("Admin");
 
     private int? GetCurrentUserStoreId()
     {

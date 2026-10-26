@@ -1,4 +1,5 @@
 ﻿using System.Security.Claims;
+using ImpresorasService.Api.Security;
 using ImpresorasService.Application.Abstractions;
 using ImpresorasService.Application.Services;
 using ImpresorasService.Domain;
@@ -40,8 +41,8 @@ public class PrintJobsController : ControllerBase
     {
         IQueryable<PrintJob> query = _dbContext.PrintJobs.AsNoTracking();
 
-        var effectiveStoreId = IsAdmin() ? storeId : GetCurrentUserStoreId();
-        if (!IsAdmin() && !effectiveStoreId.HasValue)
+        var effectiveStoreId = User.VeTodasLasTiendas() ? storeId : GetCurrentUserStoreId();
+        if (!User.VeTodasLasTiendas() && !effectiveStoreId.HasValue)
             return Forbid();
         if (effectiveStoreId.HasValue)
             query = query.Where(x => x.StoreId == effectiveStoreId.Value);
@@ -131,7 +132,7 @@ public class PrintJobsController : ControllerBase
     [Authorize(Policy = "StoreManagerOrAdmin")]
     public async Task<IActionResult> Route(Guid id, CancellationToken cancellationToken)
     {
-        if (!IsAdmin())
+        if (!User.VeTodasLasTiendas())
         {
             var userStoreId = GetCurrentUserStoreId();
             if (!userStoreId.HasValue)
@@ -187,7 +188,7 @@ public class PrintJobsController : ControllerBase
         if (job is null)
             return NotFound();
 
-        if (!IsAdmin())
+        if (!User.VeTodasLasTiendas())
         {
             var userStoreId = GetCurrentUserStoreId();
             if (!userStoreId.HasValue || job.StoreId != userStoreId.Value)
@@ -251,8 +252,6 @@ public class PrintJobsController : ControllerBase
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { status = "Cancelled" });
     }
-
-    private bool IsAdmin() => User.IsInRole("Admin");
 
     private int? GetCurrentUserStoreId()
     {
