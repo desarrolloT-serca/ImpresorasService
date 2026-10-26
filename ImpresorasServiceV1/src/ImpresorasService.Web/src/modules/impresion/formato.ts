@@ -58,6 +58,34 @@ const fmtFechaHora = new Intl.DateTimeFormat("es-ES", {
 export const fechaHora = (iso: string | null) =>
   iso ? fmtFechaHora.format(new Date(iso)).replace(",", "") : "-"
 
+// Documento del ERP de un trabajo (contrato de la tabla de entrada,
+// crear-esquema.sql): el tipo es el código del ERP antiguo y el id externo, el
+// número, con «-n» en cada reimpresión. Las pruebas no corresponden a ninguno.
+// ponytail: sin enlace hasta que el ERP tenga pantalla de documento; entonces,
+// abrir(<su panel>, `${tipo}-${numero}`) con un Button variant="link".
+export const TIPOS_DOCUMENTO: Record<string, string> = {
+  A: "Albarán",
+  C: "Contado",
+  P: "Presupuesto",
+}
+export function documentoErp(tipo: string, idExterno: string) {
+  const numero = Number(/^(\d{1,10})(?:-\d{1,3})?$/.exec(idExterno)?.[1])
+  return TIPOS_DOCUMENTO[tipo] && numero > 0 && numero <= 2147483647
+    ? { tipo, nombre: TIPOS_DOCUMENTO[tipo], numero }
+    : null
+}
+
+// Lo de hoy, solo la hora; lo de otros días, fecha y hora (decisión del
+// usuario, 26/10/2026). «Hoy» es el de Madrid.
+export const fechaHoraCorta = (iso: string | null, ahora = Date.now()) => {
+  if (!iso) return "-"
+  const completa = fechaHora(iso)
+  return completa.slice(0, 10) ===
+    fechaHora(new Date(ahora).toISOString()).slice(0, 10)
+    ? completa.slice(11)
+    : completa
+}
+
 // Cuánto hace, como el «Desde» del PHP: «ahora mismo», «12 min», «3 h 05 min»,
 // «2 d 4 h». La fecha exacta va en el title.
 export function hace(iso: string | null, ahora = Date.now()) {
@@ -67,7 +95,10 @@ export function hace(iso: string | null, ahora = Date.now()) {
   if (min < 1) return "ahora mismo"
   if (min < 60) return `${min} min`
   const h = Math.floor(min / 60)
-  if (h < 24) return min % 60 ? `${h} h ${String(min % 60).padStart(2, "0")} min` : `${h} h`
+  if (h < 24)
+    return min % 60
+      ? `${h} h ${String(min % 60).padStart(2, "0")} min`
+      : `${h} h`
   return `${Math.floor(h / 24)} d ${h % 24} h`
 }
 
@@ -92,8 +123,12 @@ export function resumen(impresoras: readonly Impresora[]): {
   tono: Tono
   texto: string
 } {
-  const errores = impresoras.filter((i) => i.connectivitySeverity === "critical").length
-  const avisos = impresoras.filter((i) => i.connectivitySeverity === "warning").length
+  const errores = impresoras.filter(
+    (i) => i.connectivitySeverity === "critical"
+  ).length
+  const avisos = impresoras.filter(
+    (i) => i.connectivitySeverity === "warning"
+  ).length
   if (!impresoras.length) return { tono: "neutro", texto: "Sin impresoras" }
   if (errores) return { tono: "error", texto: `${errores} con error` }
   // Aviso: sin host o sin comprobar.

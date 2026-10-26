@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest"
 import { ESTADOS_TRABAJO as E, type Impresora } from "@serca/contratos"
 import {
+  documentoErp,
   fechaHora,
+  fechaHoraCorta,
   puedeCancelar,
   puedeReimprimir,
   puedeReintentar,
@@ -41,6 +43,21 @@ describe("formato", () => {
     expect(fechaHora("2026-07-01T10:05:00+00:00")).toBe("01/07/2026 12:05")
     expect(fechaHora("2026-12-01T23:30:00Z")).toBe("02/12/2026 00:30")
     expect(fechaHora(null)).toBe("-")
+  })
+  it("el documento del ERP sale del tipo y del número; las pruebas no tienen", () => {
+    expect(documentoErp("A", "123456")).toEqual({ tipo: "A", nombre: "Albarán", numero: 123456 })
+    expect(documentoErp("C", "98765-2")).toMatchObject({ nombre: "Contado", numero: 98765 }) // reimpresión
+    expect(documentoErp("PRUEBA", "PRUEBA-IP-115904")).toBeNull()
+    expect(documentoErp("A", "PRUEBA-IP-115904")).toBeNull()
+    expect(documentoErp("A", "0")).toBeNull()
+    expect(documentoErp("A", "99999999999")).toBeNull() // fuera de integer
+  })
+  it("lo de hoy en Madrid, solo con la hora", () => {
+    const ahora = Date.parse("2026-10-26T15:00:00Z") // 16:00 en Madrid
+    expect(fechaHoraCorta("2026-10-26T08:05:00Z", ahora)).toBe("09:05")
+    expect(fechaHoraCorta("2026-10-25T23:30:00Z", ahora)).toBe("00:30") // ya es 26 en Madrid
+    expect(fechaHoraCorta("2026-10-25T22:30:00Z", ahora)).toBe("25/10/2026 23:30")
+    expect(fechaHoraCorta(null, ahora)).toBe("-")
   })
   it("saca el puerto del transporte", () => {
     expect(puerto("tcp/9100")).toBe("9100")

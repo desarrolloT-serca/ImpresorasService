@@ -34,11 +34,14 @@ import {
 import {
   CLASE_TONO,
   ESTADOS,
+  documentoErp,
   fechaHora,
+  fechaHoraCorta,
   nombreTienda,
   puedeCancelar,
   puedeReimprimir,
   puedeReintentar,
+  TIPOS_DOCUMENTO,
 } from "./formato"
 
 const INICIAL: ConsultaCola = { pagina: 1, tamano: 50 }
@@ -46,9 +49,15 @@ const INICIAL: ConsultaCola = { pagina: 1, tamano: 50 }
 // Abierta desde el dashboard, la clave trae los filtros: «tienda=12&vista=sinReenviar».
 const desdeClave = (clave: string): ConsultaCola => {
   const p = new URLSearchParams(clave)
-  const n = (k: string) => (/^\d{1,9}$/.test(p.get(k) ?? "") ? Number(p.get(k)) : undefined)
+  const n = (k: string) =>
+    /^\d{1,9}$/.test(p.get(k) ?? "") ? Number(p.get(k)) : undefined
   const vista = VistaCola.safeParse(p.get("vista"))
-  return { ...INICIAL, tienda: n("tienda"), estado: n("estado"), vista: vista.data }
+  return {
+    ...INICIAL,
+    tienda: n("tienda"),
+    estado: n("estado"),
+    vista: vista.data,
+  }
 }
 
 // Los mismos que el PHP: sin Aceptado ni Impreso, que no piden nada.
@@ -99,7 +108,9 @@ export default function Cola({ clave }: PropsPanel) {
       r.status === "rejected"
         ? [r.reason instanceof ErrorApi ? r.reason.problema.title : "Error"]
         : r.value.status === "ErrorFinal"
-          ? [`Sin impresora para el trabajo (${r.value.errorCode ?? "sin regla"})`]
+          ? [
+              `Sin impresora para el trabajo (${r.value.errorCode ?? "sin regla"})`,
+            ]
           : []
     )
     const hechos = trabajos.length - fallos.length
@@ -137,7 +148,7 @@ export default function Cola({ clave }: PropsPanel) {
         columns={columnas}
         data={cola.data?.value ?? []}
         getRowId={(t) => t.jobId}
-        buscar="Id. externo del trabajo"
+        buscar="Documento"
         buscarEtiqueta="Buscar trabajo"
         emptyContent={
           cola.isPending ? undefined : "No hay trabajos con estos filtros."
@@ -148,7 +159,11 @@ export default function Cola({ clave }: PropsPanel) {
               <CampoFiltro etiqueta="Tienda">
                 <Select
                   items={tiendaItems}
-                  value={consulta.tienda === undefined ? "todas" : String(consulta.tienda)}
+                  value={
+                    consulta.tienda === undefined
+                      ? "todas"
+                      : String(consulta.tienda)
+                  }
                   onValueChange={(v) =>
                     filtrar({ tienda: v === "todas" ? undefined : Number(v) })
                   }
@@ -171,7 +186,9 @@ export default function Cola({ clave }: PropsPanel) {
                 items={ESTADO_ITEMS}
                 value={
                   consulta.vista ??
-                  (consulta.estado === undefined ? "todos" : String(consulta.estado))
+                  (consulta.estado === undefined
+                    ? "todos"
+                    : String(consulta.estado))
                 }
                 onValueChange={(v) =>
                   filtrar(
@@ -227,6 +244,21 @@ export default function Cola({ clave }: PropsPanel) {
   )
 }
 
+const columnaError: ColumnDef<TrabajoCola, unknown> = {
+  id: "error",
+  header: "Error",
+  size: 150,
+  cell: ({ row: { original: t } }) =>
+    t.status === 8 && t.lastErrorCode ? (
+      <span
+        className="block truncate font-mono text-xs text-destructive"
+        title={t.lastErrorMessage ?? undefined}
+      >
+        {t.lastErrorCode}
+      </span>
+    ) : null,
+}
+
 function columnasCola(
   tiendas: readonly Tienda[],
   gestionar: boolean,
@@ -236,20 +268,28 @@ function columnasCola(
   const columnas: ColumnDef<TrabajoCola, unknown>[] = [
     {
       id: "trabajo",
-      header: "Id. externo",
+      header: "Documento",
       size: 0,
-      cell: ({ row: { original: t } }) => (
-        <span className="block truncate font-mono" title={t.externalJobId}>
-          {t.externalJobId}
-        </span>
-      ),
+      cell: ({ row: { original: t } }) => {
+        const d = documentoErp(t.documentType, t.externalJobId)
+        return (
+          <span
+            className="block truncate font-mono"
+            title={d ? `${d.nombre} ${d.numero}` : t.externalJobId}
+          >
+            {t.externalJobId}
+          </span>
+        )
+      },
     },
     {
       id: "tienda",
       header: "Tienda",
       size: 170,
       cell: ({ row: { original: t } }) => (
-        <span className="block truncate">{nombreTienda(t.storeId, tiendas)}</span>
+        <span className="block truncate">
+          {nombreTienda(t.storeId, tiendas)}
+        </span>
       ),
     },
     {
@@ -257,7 +297,9 @@ function columnasCola(
       header: "Tipo",
       size: 120,
       cell: ({ row: { original: t } }) => (
-        <span className="block truncate">{t.documentType}</span>
+        <span className="block truncate" title={t.documentType}>
+          {TIPOS_DOCUMENTO[t.documentType] ?? t.documentType}
+        </span>
       ),
     },
     {
@@ -270,26 +312,14 @@ function columnasCola(
           <Badge
             variant="outline"
             className={cn("border-transparent", CLASE_TONO[e.tono])}
-            title={t.status >= 8 ? (t.lastErrorMessage ?? undefined) : undefined}
+            title={
+              t.status >= 8 ? (t.lastErrorMessage ?? undefined) : undefined
+            }
           >
             {e.etiqueta}
           </Badge>
         )
       },
-    },
-    {
-      id: "error",
-      header: "Error",
-      size: 150,
-      cell: ({ row: { original: t } }) =>
-        t.status === 8 && t.lastErrorCode ? (
-          <span
-            className="block truncate font-mono text-xs text-destructive"
-            title={t.lastErrorMessage ?? undefined}
-          >
-            {t.lastErrorCode}
-          </span>
-        ) : null,
     },
     {
       id: "impresora",
@@ -306,7 +336,9 @@ function columnasCola(
     },
     {
       id: "intentos",
-      header: () => <span className="tracking-normal normal-case">Intentos</span>,
+      header: () => (
+        <span className="tracking-normal normal-case">Intentos</span>
+      ),
       size: 80,
       meta: { num: true },
       cell: ({ row: { original: t } }) => (
@@ -317,12 +349,19 @@ function columnasCola(
       id: "creado",
       header: "Creado",
       size: 140,
-      cell: ({ row: { original: t } }) => fechaHora(t.createdAtUtc),
+      cell: ({ row: { original: t } }) => (
+        <span title={fechaHora(t.createdAtUtc)}>
+          {fechaHoraCorta(t.createdAtUtc)}
+        </span>
+      ),
     },
   ]
-  if (!gestionar) return columnas
+  // Error, la última columna de datos (casi siempre está vacía) y las acciones,
+  // a la derecha del todo (decisión del usuario, 26/10/2026).
+  if (!gestionar) return [...columnas, columnaError]
   return [
     ...columnas,
+    columnaError,
     {
       id: "acciones",
       header: "",
