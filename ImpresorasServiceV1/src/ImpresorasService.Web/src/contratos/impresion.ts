@@ -261,8 +261,9 @@ export const SerieDashboard = z.object({
 export type SerieDashboard = z.infer<typeof SerieDashboard>
 
 // Pruebas (POST /api/sourceprintjobs/test): un trabajo de prueba entra por la
-// misma tabla que los del ERP y se imprime de verdad. pdfBlob en base64; sin
-// él, la API pone un PDF mínimo.
+// misma tabla que los del ERP y se imprime de verdad. pdfBlob en base64, o
+// pdfUrl, que el Worker descarga como la del ERP; sin ninguno, la API pone un
+// PDF mínimo.
 export const ORIGEN_PRUEBA = "PRUEBA"
 export type TrabajoPrueba = {
   sourceSystem: typeof ORIGEN_PRUEBA
@@ -271,6 +272,7 @@ export type TrabajoPrueba = {
   documentType: string
   channel: string
   pdfBlob?: string
+  pdfUrl?: string
 }
 export const PruebaCreada = z.object({ externalJobId: z.string() })
 // POST /api/sourceprintjobs/test/cancel-all[?runId=…]

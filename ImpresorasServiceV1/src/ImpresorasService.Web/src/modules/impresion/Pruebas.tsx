@@ -83,6 +83,8 @@ export default function Pruebas() {
   const [nombre, setNombre] = useState("Prueba")
   const [lotes, setLotes] = useState<Lote[]>([LOTE])
   const [pdf, setPdf] = useState<{ nombre: string; base64: string }>()
+  const [pdfUrl, setPdfUrl] = useState("")
+  const url = pdfUrl.trim()
   const [escenarios, setEscenarios] = useState(leerEscenarios)
   const [prueba, setPrueba] = useState<string>()
   const [progreso, setProgreso] = useState<{ hechos: number; fallos: number; total: number }>()
@@ -97,6 +99,10 @@ export default function Pruebas() {
     const malos = lotes.map(errorDeLote).map((e, i) => (e ? `lote ${i + 1}: ${e}` : null)).filter(Boolean)
     if (malos.length) {
       toast.error(`Revisa ${malos.join("; ")}`)
+      return
+    }
+    if (url && !/^https:\/\/\S+$/i.test(url)) {
+      toast.error("La URL del PDF tiene que empezar por https://")
       return
     }
     if (!window.confirm(`Se crearán ${total} trabajos de prueba. Entran por la misma vía que los del ERP y se imprimen de verdad en las impresoras de esas tiendas.`))
@@ -116,7 +122,7 @@ export default function Pruebas() {
             storeId: Number(l.tienda),
             documentType: l.tipo.trim(),
             channel: l.canal.trim() || "DEFAULT",
-            ...(pdf && { pdfBlob: pdf.base64 }),
+            ...(url ? { pdfUrl: url } : pdf && { pdfBlob: pdf.base64 }),
           })
         } catch {
           fallos++
@@ -149,7 +155,7 @@ export default function Pruebas() {
               type="file"
               accept="application/pdf"
               className="w-72"
-              disabled={lanzando}
+              disabled={lanzando || !!url}
               onChange={async (e) => {
                 const f = e.target.files?.[0]
                 if (!f) return setPdf(undefined)
@@ -162,7 +168,18 @@ export default function Pruebas() {
               }}
             />
           </label>
-          {!pdf && <span className="self-center text-xs text-muted-foreground">Sin PDF, la API manda uno mínimo.</span>}
+          <label className="grid gap-1 text-sm">
+            <span className="text-[11px] font-medium text-muted-foreground">o URL del PDF (la descarga el Worker, como la del ERP)</span>
+            <Input
+              type="url"
+              className="w-96"
+              placeholder="https://facturas.repuestos-serca.es/generate.php?id=…"
+              value={pdfUrl}
+              disabled={lanzando}
+              onChange={(e) => setPdfUrl(e.target.value)}
+            />
+          </label>
+          {!pdf && !url && <span className="self-center text-xs text-muted-foreground">Sin PDF, la API manda uno mínimo.</span>}
         </div>
 
         <div className="space-y-2">
