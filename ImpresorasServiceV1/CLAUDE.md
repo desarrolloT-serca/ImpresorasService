@@ -64,13 +64,17 @@ Pending → Routed → SpoolAccepted → PrintedConfirmed
    → sin match: PrintJob{ErrorFinal, ROUTE_NOT_FOUND}
 
 3. EJECUCIÓN (PrintExecutionBackgroundService, poll 5s, lote 10)
-   Routed | RetryScheduled vencidos → IPrinterSpooler.SendAsync()
+   Routed | RetryScheduled vencidos → primero por IP: IPP Print-Job con el PDF o, si no lo acepta,
+   como imagen PWG (PwgRaster, PDFium) (IppConfirmationService.PrintPdfAsync); si no se puede, cola
+   de Windows (IPrinterSpooler, Sumatra). Lo que sale por IP guarda su número de trabajo (ipp_job_id).
+   Un envío por IP cortado a medias no se repite por la cola: PrintedUnknown
    → éxito: SpoolAccepted
    → error < 4 intentos: RetryScheduled (backoff 15/30/60s)
    → error >= 4 intentos: ErrorFinal
 
 4. CONFIRMACIÓN IPP (SpoolAcceptedWatchdogBackgroundService, poll 10s)
-   SpoolAccepted > 120s → IppConfirmationService.QueryPrinterStateAsync()
+   SpoolAccepted > 120s → con ipp_job_id, estado de ese trabajo (QueryJobStateAsync: terminado,
+   cancelado/abortado → ErrorFinal, detenido); si no, IppConfirmationService.QueryPrinterStateAsync()
    → Idle: PrintedConfirmed
    → Stopped: ErrorFinal (IPP_PRINTER_STOPPED)
    → Unavailable o IPP desactivado: PrintedUnknown

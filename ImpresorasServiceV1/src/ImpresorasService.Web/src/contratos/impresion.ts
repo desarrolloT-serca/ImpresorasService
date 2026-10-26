@@ -287,7 +287,8 @@ export type SeveridadConexion = z.infer<typeof SeveridadConexion>
 export const Impresora = z.object({
   printerId: z.number().int(),
   printerName: z.string(),
-  spoolQueue: z.string(),
+  // Sin cola, solo se imprime por IP (host).
+  spoolQueue: z.string().nullable(),
   host: z.string().nullable(),
   storeId: z.number().int(),
   isActive: z.boolean(),
@@ -306,27 +307,33 @@ export const Impresora = z.object({
 export type Impresora = z.infer<typeof Impresora>
 
 // Alta y edición de impresoras: CreatePrinterRequest y UpdatePrinterRequest,
-// con los mismos límites que la API.
-export const DatosImpresora = z.object({
-  printerName: z
-    .string()
-    .trim()
-    .min(1, "Obligatorio")
-    .max(120, "Máximo 120 caracteres"),
-  spoolQueue: z
-    .string()
-    .trim()
-    .min(1, "Obligatoria")
-    .max(200, "Máximo 200 caracteres"),
-  host: z
-    .string()
-    .trim()
-    .max(255, "Máximo 255 caracteres")
-    .transform((h) => h || null),
-  storeId: z.number({ error: "Elige una tienda" }).int(),
-  isActive: z.boolean(),
-  capabilitiesJson: z.string().nullable(),
-})
+// con los mismos límites que la API. Se imprime primero por IP (host) y la
+// cola de Windows es la alternativa: basta una de las dos.
+export const DatosImpresora = z
+  .object({
+    printerName: z
+      .string()
+      .trim()
+      .min(1, "Obligatorio")
+      .max(120, "Máximo 120 caracteres"),
+    spoolQueue: z
+      .string()
+      .trim()
+      .max(200, "Máximo 200 caracteres")
+      .transform((q) => q || null),
+    host: z
+      .string()
+      .trim()
+      .max(255, "Máximo 255 caracteres")
+      .transform((h) => h || null),
+    storeId: z.number({ error: "Elige una tienda" }).int(),
+    isActive: z.boolean(),
+    capabilitiesJson: z.string().nullable(),
+  })
+  .refine((d) => d.host || d.spoolQueue, {
+    message: "Indica la IP o la cola de Windows",
+    path: ["host"],
+  })
 export type DatosImpresora = z.output<typeof DatosImpresora>
 
 // POST /api/printers/{id}/netconnection

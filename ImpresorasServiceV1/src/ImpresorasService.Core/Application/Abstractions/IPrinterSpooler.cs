@@ -7,7 +7,11 @@ public sealed record PrintSpoolResult(
     bool Success,
     string? ErrorCode,
     string? ErrorMessage,
-    bool IsTransient);
+    bool IsTransient,
+    // Por dónde salió, para el historial del trabajo (impresión por IP).
+    string? Detalle = null,
+    // Número que dio la impresora al imprimir por IP: con él se confirma el trabajo.
+    int? IppJobId = null);
 
 /// <summary>
 /// Abstracción para enviar trabajos al spooler de impresión de Windows.

@@ -14,6 +14,8 @@ public class PrintJob
     public string PdfSha256 { get; set; } = string.Empty;
     public PrintJobStatus Status { get; set; } = PrintJobStatus.Pending;
     public int? PrinterId { get; set; }
+    // Número que dio la impresora al imprimir por IP (IPP): con él se confirma ese trabajo concreto.
+    public int? IppJobId { get; set; }
     public int AttemptCount { get; set; }
     public DateTimeOffset? NextRetryAtUtc { get; set; }
     public string? LastErrorCode { get; set; }

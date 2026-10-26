@@ -175,6 +175,7 @@ public class ImpresorasDbContext : DbContext
             entity.Property(x => x.PdfSha256).HasColumnName("pdf_sha256");
             entity.Property(x => x.Status).HasColumnName("status");
             entity.Property(x => x.PrinterId).HasColumnName("printer_id");
+            entity.Property(x => x.IppJobId).HasColumnName("ipp_job_id");
             entity.Property(x => x.AttemptCount).HasColumnName("attempt_count");
             entity.Property(x => x.NextRetryAtUtc).HasColumnName("next_retry_at_utc");
             entity.Property(x => x.LastErrorCode).HasColumnName("last_error_code");
@@ -276,7 +277,7 @@ public class ImpresorasDbContext : DbContext
             entity.Property(x => x.LastConnectionError).HasColumnName("last_connection_error");
             entity.Property(x => x.PrinterId).ValueGeneratedOnAdd();
             entity.Property(x => x.PrinterName).HasMaxLength(120).IsRequired();
-            entity.Property(x => x.SpoolQueue).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.SpoolQueue).HasMaxLength(200);
             entity.Property(x => x.Host).HasMaxLength(255);
             entity.Property(x => x.StoreId).IsRequired();
             entity.Property(x => x.IsActive).HasDefaultValue(true);

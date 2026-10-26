@@ -27,6 +27,7 @@ public sealed class PrintExecutionService : IPrintExecutionService
     private readonly PrintExecutionOptions _options;
     private readonly IRoutingResolver _routingResolver;
     private readonly TimeProvider _timeProvider;
+    private readonly IIppConfirmationService? _ipp;
 
     public PrintExecutionService(
         ImpresorasDbContext db,
@@ -34,7 +35,9 @@ public sealed class PrintExecutionService : IPrintExecutionService
         ILogger<PrintExecutionService> logger,
         IOptions<PrintExecutionOptions> options,
         IRoutingResolver routingResolver,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        // ponytail: opcional para no tocar las pruebas que no imprimen por IP; en la app siempre está.
+        IIppConfirmationService? ipp = null)
     {
         _db = db;
         _spooler = spooler;
@@ -42,6 +45,7 @@ public sealed class PrintExecutionService : IPrintExecutionService
         _options = options.Value;
         _routingResolver = routingResolver;
         _timeProvider = timeProvider;
+        _ipp = ipp;
     }
 
     public async Task<int> ExecuteBatchAsync(int batchSize, CancellationToken cancellationToken = default)
@@ -241,7 +245,7 @@ public sealed class PrintExecutionService : IPrintExecutionService
             if (job.PdfBlob is null || job.PdfBlob.Length == 0)
                 result = new PrintSpoolResult(false, "PDF_MISSING", "PDF no disponible en la base de datos.", false);
             else
-                result = await _spooler.SendToPrinterAsync(job.PdfBlob, printer.SpoolQueue, ct);
+                result = await EnviarAsync(job, job.PdfBlob, printer, ct);
         }
         catch (OperationCanceledException)
         {
@@ -261,11 +265,17 @@ public sealed class PrintExecutionService : IPrintExecutionService
         // trabajaba, su decisión manda y aquí no se pisa.
         if (result.Success)
         {
-            await TryTransitionAsync(
+            var aceptado = await TryTransitionAsync(
                 jobId, [PrintJobStatus.Printing], PrintJobStatus.SpoolAccepted,
                 errorCode: null, errorMessage: null,
                 nextRetryAtUtc: null, newAttemptCount: null, ct,
-                eventMessage: "Spooler aceptó el trabajo");
+                eventMessage: result.Detalle ?? "Spooler aceptó el trabajo");
+
+            // Aparte de la transición: si fallara, el watchdog confirma por el estado de la impresora.
+            // Por la cola queda null, para que no se confirme con el número de un envío anterior.
+            if (aceptado)
+                await _db.PrintJobs.Where(j => j.JobId == jobId)
+                    .ExecuteUpdateAsync(s => s.SetProperty(x => x.IppJobId, result.IppJobId), ct);
 
             return true;
         }
@@ -304,13 +314,31 @@ public sealed class PrintExecutionService : IPrintExecutionService
         var errCode = result.ErrorCode ?? "UNKNOWN";
         var errMsg = result.ErrorMessage ?? "Error desconocido";
         _logger.LogWarning("Impresion fallida JobId={JobId} Printer={Printer} Code={Code} Msg={Msg}",
-            jobId, printer.SpoolQueue, errCode, errMsg);
+            jobId, printer.PrinterName, errCode, errMsg);
 
         await TryTransitionAsync(
             jobId, [PrintJobStatus.Printing], PrintJobStatus.ErrorFinal,
             errCode, errMsg, nextRetryAtUtc: null, newAttemptCount: null, ct);
 
         return true;
+    }
+
+    // Primero por IP (IPP: sin cola, driver ni Sumatra); si la impresora no acepta PDF por IPP, no
+    // responde o rechaza el trabajo, por su cola de Windows (decisión del usuario, 26/10/2026). Si
+    // el envío por IP se corta a medias no se prueba la cola: podría salir dos veces.
+    private async Task<PrintSpoolResult> EnviarAsync(PrintJob job, byte[] pdf, Printer printer, CancellationToken ct)
+    {
+        if (_ipp is not null && !string.IsNullOrWhiteSpace(printer.Host))
+        {
+            var porIp = await _ipp.PrintPdfAsync(printer.Host, pdf, $"{job.DocumentType} {job.ExternalJobId}", ct);
+            if (porIp is not null)
+                return porIp;
+        }
+
+        return string.IsNullOrWhiteSpace(printer.SpoolQueue)
+            ? new PrintSpoolResult(false, "NO_PRINT_ROUTE",
+                "La impresora no acepta PDF por IP ahora y no tiene cola de Windows.", true)
+            : await _spooler.SendToPrinterAsync(pdf, printer.SpoolQueue, ct);
     }
 
     private async Task<bool> RescuePendingJobAsync(

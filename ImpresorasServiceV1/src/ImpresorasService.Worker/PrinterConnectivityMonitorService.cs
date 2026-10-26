@@ -277,7 +277,7 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
         return trimmed;
     }
 
-    private static string? ExtractHostFromSpoolQueue(string spoolQueue)
+    private static string? ExtractHostFromSpoolQueue(string? spoolQueue)
     {
         if (string.IsNullOrWhiteSpace(spoolQueue))
             return null;
@@ -290,7 +290,7 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
 
     private sealed record PrinterConnectivityCandidate(
         int PrinterId,
-        string SpoolQueue,
+        string? SpoolQueue,
         string? Host,
         int ConnectionFailuresStreak,
         bool? IppSupported);

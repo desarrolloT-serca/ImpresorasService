@@ -100,6 +100,7 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
                 LastErrorCode  = j.LastErrorCode,
                 LastErrorMessage = j.LastErrorMessage,
                 NextRetryAtUtc = j.NextRetryAtUtc,
+                IppJobId       = j.IppJobId,
             })
             .Take(batchSize)
             .ToListAsync(ct);
@@ -118,7 +119,10 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
         foreach (var job in candidates)
         {
             var oldStatus = job.Status;
-            var ippResult = ResolveIppResult(job, printerHosts, ippResults);
+            // Lo que salió por IP se confirma por su número de trabajo; si la impresora ya no lo
+            // recuerda, por su estado, como lo que salió por la cola de Windows.
+            var ippResult = await QueryJobAsync(job, printerHosts, ct)
+                ?? ResolveIppResult(job, printerHosts, ippResults);
             if (!ApplyOutcome(job, ippResult, maxAgeSeconds, now))
             {
                 _logger.LogInformation(
@@ -213,6 +217,18 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
         return results.ToDictionary(r => r.host, r => r.result);
     }
 
+    private async Task<IppQueryResult?> QueryJobAsync(
+        WatchdogJob job,
+        Dictionary<int, (string Host, bool? IppSupported)> printerHosts,
+        CancellationToken ct)
+    {
+        if (!_options.Value.IppConfirmationEnabled || job.IppJobId is null || !job.PrinterId.HasValue)
+            return null;
+        return printerHosts.TryGetValue(job.PrinterId.Value, out var printerInfo)
+            ? await _ippService.QueryJobStateAsync(printerInfo.Host, job.IppJobId.Value, ct)
+            : null;
+    }
+
     private IppQueryResult? ResolveIppResult(
         WatchdogJob job,
         Dictionary<int, (string Host, bool? IppSupported)> printerHosts,
@@ -278,6 +294,15 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
                     return false;
                 goto giveUp;
 
+            case IppOutcome.JobAborted:
+                // La impresora canceló o abortó el trabajo enviado por IP: no salió.
+                job.NextRetryAtUtc = null;
+                job.UpdatedAtUtc = now;
+                job.Status = PrintJobStatus.ErrorFinal;
+                job.LastErrorCode = ippResult.ErrorCode ?? "IPP_JOB_ABORTED";
+                job.LastErrorMessage = ippResult.ErrorMessage ?? "La impresora abortó el trabajo.";
+                return true;
+
             giveUp:
                 job.NextRetryAtUtc = null;
                 job.UpdatedAtUtc = now;
@@ -336,5 +361,6 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
         public string? LastErrorCode { get; set; }
         public string? LastErrorMessage { get; set; }
         public DateTimeOffset? NextRetryAtUtc { get; set; }
+        public int? IppJobId { get; init; }
     }
 }

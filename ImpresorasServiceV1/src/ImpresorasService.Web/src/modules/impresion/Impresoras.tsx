@@ -90,10 +90,13 @@ export default function Impresoras({ clave }: PropsPanel) {
   const [editando, setEditando] = useState<Impresora | "nueva">()
   // Abierta desde el dashboard, la clave trae los filtros: «tienda=12&conexion=problemas».
   const [tienda, setTienda] = useState(
-    () => new URLSearchParams(clave).get("tienda")?.match(/^\d{1,9}$/)?.[0] ?? TODAS
+    () =>
+      new URLSearchParams(clave).get("tienda")?.match(/^\d{1,9}$/)?.[0] ?? TODAS
   )
   const [conexion, setConexion] = useState(() =>
-    new URLSearchParams(clave).get("conexion") === "problemas" ? "problemas" : TODAS
+    new URLSearchParams(clave).get("conexion") === "problemas"
+      ? "problemas"
+      : TODAS
   )
   const [reinicio, setReinicio] = useState(0)
   // Esc: quita lo buscado; los filtros se quedan (regla del ERP).
@@ -102,8 +105,7 @@ export default function Impresoras({ clave }: PropsPanel) {
   const lista = impresoras.data ?? []
   const deTienda =
     tienda === TODAS ? lista : lista.filter((i) => String(i.storeId) === tienda)
-  const visibles =
-    conexion === TODAS ? deTienda : deTienda.filter(conProblema)
+  const visibles = conexion === TODAS ? deTienda : deTienda.filter(conProblema)
   const total = resumen(deTienda)
   const tiendaItems = [
     { value: TODAS, label: "Todas" },
@@ -134,7 +136,9 @@ export default function Impresoras({ clave }: PropsPanel) {
                 : toast.error(`Sin conexión: ${r.connectivityLabel}`),
             onError: (e) =>
               toast.error(
-                e instanceof ErrorApi ? e.problema.title : "No se pudo comprobar"
+                e instanceof ErrorApi
+                  ? e.problema.title
+                  : "No se pudo comprobar"
               ),
           }),
         onEditar: setEditando,
@@ -152,7 +156,15 @@ export default function Impresoras({ clave }: PropsPanel) {
       }),
     // comprobar.mutate y borrar.mutate son estables.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tiendas, verTodas, tienda, admin, gestionar, comprobar.isPending, comprobar.variables]
+    [
+      tiendas,
+      verTodas,
+      tienda,
+      admin,
+      gestionar,
+      comprobar.isPending,
+      comprobar.variables,
+    ]
   )
 
   return (
@@ -194,7 +206,10 @@ export default function Impresoras({ clave }: PropsPanel) {
                         <SelectItem key={i.value} value={i.value}>
                           <span
                             aria-hidden
-                            className={cn("size-2 shrink-0 rounded-full", COLOR_PUNTO[r.tono])}
+                            className={cn(
+                              "size-2 shrink-0 rounded-full",
+                              COLOR_PUNTO[r.tono]
+                            )}
                           />
                           <span className="truncate">{i.label}</span>
                           {r.tono !== "ok" && (
@@ -301,12 +316,15 @@ function columnasImpresoras({
       id: "cola",
       header: "Cola",
       size: 200,
-      accessorKey: "spoolQueue",
-      cell: ({ row: { original: i } }) => (
-        <span className="block truncate font-mono" title={i.spoolQueue}>
-          {i.spoolQueue}
-        </span>
-      ),
+      accessorFn: (i) => i.spoolQueue ?? "",
+      cell: ({ row: { original: i } }) =>
+        i.spoolQueue ? (
+          <span className="block truncate font-mono" title={i.spoolQueue}>
+            {i.spoolQueue}
+          </span>
+        ) : (
+          <span className="text-muted-foreground">Solo IP</span>
+        ),
     },
     {
       id: "host",
@@ -404,7 +422,11 @@ function columnasImpresoras({
               <Button size="xs" variant="outline" onClick={() => onEditar(i)}>
                 Editar
               </Button>
-              <Button size="xs" variant="destructive" onClick={() => onBorrar(i)}>
+              <Button
+                size="xs"
+                variant="destructive"
+                onClick={() => onBorrar(i)}
+              >
                 Eliminar
               </Button>
             </>

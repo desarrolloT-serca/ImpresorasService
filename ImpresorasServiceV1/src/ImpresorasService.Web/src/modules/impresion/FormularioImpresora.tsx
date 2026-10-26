@@ -54,7 +54,11 @@ export function FormularioImpresora({
     >
       {({ valores, errores, enviando, cambiar, id }) => (
         <>
-          <Campo id={id("printerName")} etiqueta="Nombre" error={errores.printerName}>
+          <Campo
+            id={id("printerName")}
+            etiqueta="Nombre"
+            error={errores.printerName}
+          >
             <Input
               id={id("printerName")}
               autoFocus
@@ -67,11 +71,17 @@ export function FormularioImpresora({
           <Campo id={id("storeId")} etiqueta="Tienda" error={errores.storeId}>
             <Select
               items={items}
-              value={valores.storeId === undefined ? null : String(valores.storeId)}
+              value={
+                valores.storeId === undefined ? null : String(valores.storeId)
+              }
               disabled={enviando}
               onValueChange={(v) => cambiar("storeId", Number(v))}
             >
-              <SelectTrigger id={id("storeId")} className="w-full" aria-invalid={!!errores.storeId}>
+              <SelectTrigger
+                id={id("storeId")}
+                className="w-full"
+                aria-invalid={!!errores.storeId}
+              >
                 <SelectValue placeholder="Elige una tienda" />
               </SelectTrigger>
               <SelectContent>
@@ -84,25 +94,10 @@ export function FormularioImpresora({
             </Select>
           </Campo>
           <Campo
-            id={id("spoolQueue")}
-            etiqueta="Cola de Windows"
-            error={errores.spoolQueue}
-            ayuda="Nombre exacto de la impresora en el servidor del Worker (Get-Printer)."
-          >
-            <Input
-              id={id("spoolQueue")}
-              className="font-mono"
-              value={valores.spoolQueue}
-              disabled={enviando}
-              aria-invalid={!!errores.spoolQueue}
-              onChange={(e) => cambiar("spoolQueue", e.target.value)}
-            />
-          </Campo>
-          <Campo
             id={id("host")}
-            etiqueta="Host"
+            etiqueta="IP"
             error={errores.host}
-            ayuda="IP o nombre para comprobar la conexión. Cambiarlo vuelve a comprobar IPP."
+            ayuda="Se imprime primero por aquí (IPP), sin cola ni driver. También sirve para comprobar la conexión."
           >
             <Input
               id={id("host")}
@@ -111,6 +106,21 @@ export function FormularioImpresora({
               disabled={enviando}
               aria-invalid={!!errores.host}
               onChange={(e) => cambiar("host", e.target.value)}
+            />
+          </Campo>
+          <Campo
+            id={id("spoolQueue")}
+            etiqueta="Cola de Windows (alternativa)"
+            error={errores.spoolQueue}
+            ayuda="Opcional si hay IP: se usa cuando la impresora no acepta PDF por IP o no responde. Nombre exacto en el servidor del Worker (Get-Printer)."
+          >
+            <Input
+              id={id("spoolQueue")}
+              className="font-mono"
+              value={valores.spoolQueue}
+              disabled={enviando}
+              aria-invalid={!!errores.spoolQueue}
+              onChange={(e) => cambiar("spoolQueue", e.target.value)}
             />
           </Campo>
           <label className="flex items-center gap-2 text-sm">

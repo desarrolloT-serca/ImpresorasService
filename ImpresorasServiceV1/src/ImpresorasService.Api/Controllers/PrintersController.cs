@@ -366,7 +366,7 @@ public class PrintersController : ControllerBase
         return trimmed;
     }
 
-    private static string? ExtractHostFromSpoolQueue(string spoolQueue)
+    private static string? ExtractHostFromSpoolQueue(string? spoolQueue)
     {
         if (string.IsNullOrWhiteSpace(spoolQueue))
             return null;
@@ -405,15 +405,16 @@ public class PrintersController : ControllerBase
         if (normalizedName.Length > 120)
             return (null, "El nombre de impresora no puede superar 120 caracteres.");
 
-        var normalizedSpoolQueue = spoolQueue?.Trim();
-        if (string.IsNullOrWhiteSpace(normalizedSpoolQueue))
-            return (null, "La cola de impresion es obligatoria.");
-        if (normalizedSpoolQueue.Length > 200)
+        // Se imprime primero por IP (host) y la cola de Windows es la alternativa: basta una de las dos.
+        var normalizedSpoolQueue = string.IsNullOrWhiteSpace(spoolQueue) ? null : spoolQueue.Trim();
+        if (normalizedSpoolQueue?.Length > 200)
             return (null, "La cola de impresion no puede superar 200 caracteres.");
 
         var normalizedHost = string.IsNullOrWhiteSpace(host) ? null : host.Trim();
         if (normalizedHost?.Length > 255)
             return (null, "El host no puede superar 255 caracteres.");
+        if (normalizedSpoolQueue is null && normalizedHost is null)
+            return (null, "Indica la IP de la impresora o su cola de Windows.");
 
         var normalizedCapabilitiesJson = string.IsNullOrWhiteSpace(capabilitiesJson) ? null : capabilitiesJson.Trim();
         if (normalizedCapabilitiesJson is not null)
@@ -469,7 +470,7 @@ public class PrintersController : ControllerBase
     private sealed record PrinterDto(
         int PrinterId,
         string PrinterName,
-        string SpoolQueue,
+        string? SpoolQueue,
         string? Host,
         int StoreId,
         bool IsActive,
@@ -533,14 +534,14 @@ public class PrintersController : ControllerBase
 
     private sealed record NormalizedPrinterInput(
         string PrinterName,
-        string SpoolQueue,
+        string? SpoolQueue,
         string? Host,
         string? CapabilitiesJson);
 }
 
 public record CreatePrinterRequest(
     string PrinterName,
-    string SpoolQueue,
+    string? SpoolQueue,
     string? Host,
     int StoreId,
     bool IsActive = true,
@@ -548,7 +549,7 @@ public record CreatePrinterRequest(
 
 public record UpdatePrinterRequest(
     string PrinterName,
-    string SpoolQueue,
+    string? SpoolQueue,
     string? Host,
     int StoreId,
     bool IsActive,

@@ -315,6 +315,21 @@ public sealed class PrintersControllerTests : IntegrationTestBase
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    // Se imprime primero por IP: con IP, la cola de Windows es opcional (26/10/2026).
+    [Fact]
+    public async Task Create_WithHostAndNoSpoolQueue_Returns201()
+    {
+        var host = $"10.9.{Random.Shared.Next(1, 250)}.{Random.Shared.Next(1, 250)}";
+        var request = new { printerName = "Solo IP", spoolQueue = "", host, storeId = 1, isActive = true };
+
+        var response = await Client.PostAsJsonAsync("/api/printers", request);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var printer = await response.Content.ReadFromJsonAsync<PrinterDto>();
+        Assert.Null(printer!.SpoolQueue);
+        Assert.Equal(host, printer.Host);
+    }
+
     [Fact]
     public async Task Create_WithInvalidCapabilitiesJson_Returns400()
     {
@@ -586,7 +601,7 @@ public sealed class PrintersControllerTests : IntegrationTestBase
     private sealed record PrinterDto(
         int PrinterId,
         string PrinterName,
-        string SpoolQueue,
+        string? SpoolQueue,
         string? Host,
         int StoreId,
         bool IsActive,
