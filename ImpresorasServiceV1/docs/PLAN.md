@@ -31,12 +31,12 @@ Hecho el 23/10/2026: esquema creado (`scripts/crear-esquema.ps1`), 29 tiendas (a
 
 | # | Acción | Estado |
 |---|---|---|
-| B0.1 | **El ERP escribe en `printer_source_print_job`.** Mínimo: `external_job_id`, `store_id`, `document_type`, `pdf_blob` (contrato en el comentario de la tabla en `crear-esquema.sql`). Un `external_job_id` repetido se descarta como duplicado: cada reimpresión necesita uno nuevo | ⏳ Sin esto no entra ningún trabajo |
-| B0.2 | Impresoras, reglas de enrutado y Telegram | ⏳ Los configura el usuario. Telegram: `install-windows-services.ps1 -SkipPublish -ConfigureTelegram` |
+| B0.1 | **El ERP escribe en `printer_source_print_job`.** Mínimo: `external_job_id`, `store_id`, `document_type` y `pdf_url` (o `pdf_blob`); contrato en el comentario de la tabla en `crear-esquema.sql`. Un `external_job_id` repetido se descarta como duplicado: cada reimpresión necesita uno nuevo. **Documento (26/10/2026):** `document_type` con el código del ERP antiguo (A albarán y C contado, los de `fdalba_c.tipo`; P presupuesto) y `external_job_id` = número del documento, con `-n` en cada reimpresión (123456, 123456-2); la cola lo usa en «Documento» y el enlace amarillo se activa cuando el ERP tenga pantalla de documento. **PDF por URL (usuario, 26/10/2026), hecho:** el ERP deja la URL de `facturas.repuestos-serca.es/generate.php?id=…` (`inline=0` descarga, `inline=1` muestra: al servicio le da igual) y la ingesta (`ErpJobSourceAdapter`) la descarga una vez: solo https, hosts de `Source:PdfUrlHosts`, sin redirecciones, 30 s, 50 MB, tiene que empezar por `%PDF`. Red, timeout, 408/429 y 5xx: sin ack, se reintenta al vencer el lease. El resto: `ErrorFinal` con `PDF_DOWNLOAD_FAILED`. El `id` de la URL basta para bajarse la factura: no sale en logs ni en errores. Probado contra el servidor real. Falta aplicar `migraciones/2026-10-26-pdf-url.sql` en la BD | ⏳ Sin esto no entra ningún trabajo |
+| B0.2 | Impresoras, reglas de enrutado y Telegram. Las impresoras se dan de alta como impresoras de Windows **en el servidor del Worker** (su nombre es `spool_queue`); los PC de las tiendas no instalan nada | ⏳ Los configura el usuario. Telegram: `install-windows-services.ps1 -SkipPublish -ConfigureTelegram`. SumatraPDF 3.6.1 portable (firma comprobada) en `C:\ImpresorasService\SumatraPDF` desde el 26/10/2026 (`-SumatraExe`); sin él cada trabajo acaba en `SPOOLER_DOWN` |
 | B0.3 | Esquema definitivo. Hoy **`admon`, provisional**: `pb8_xp57` no puede crear esquemas. Para mover: el DBA crea el destino (`CREATE SCHEMA impresoras AUTHORIZATION pb8_xp57`), `ALTER TABLE admon.<tabla> SET SCHEMA impresoras;` en las 12 `printer_*` (arrastra índices y secuencias) y cambiar `Search Path` en la cadena (`.env` y servicios) | ⏳ Decisión |
 | B0.4 | Usuarios con contraseña = login (decisión temporal). Varias no cumplen el mínimo de 6 de la Api: se insertaron por SQL con el mismo BCrypt. Al embeber la app en el ERP, el login automático debería usar un secreto del ERP, no estas contraseñas | ⏳ Temporal |
 | B0.5 | Permisos: las `printer_*` solo las lee `pb8_xp57` (dueño) y los superusuarios; `admon` no tiene permisos por defecto. Si el ERP conecta con otro usuario: `GRANT SELECT, INSERT ON admon.printer_source_print_job TO <usuario>` | ⏳ Según el usuario del ERP |
-| B0.6 | **Servidor del frontend con PHP 8.5.12 o superior** (corrige PHP2Shell, CVE-2026-109618/109619, explotado desde el 21/10/2026). El proyecto exige `^8.5` desde el 23/10/2026; la 8.2 deja de recibir parches el 31/12/2026 | ⏳ Al montar el servidor |
+| B0.6 | **Servidor del frontend con PHP 8.5.12 o superior** (corrige PHP2Shell, CVE-2026-109618/109619, explotado desde el 21/10/2026). El proyecto exige `^8.5` desde el 23/10/2026; la 8.2 deja de recibir parches el 31/12/2026 | ⏳ Al montar el servidor. En este equipo, PHP 8.5.12 y Laravel 12.70.1 (el último de la 12), sin avisos de `composer audit` (26/10/2026). Laravel 12 solo recibe parches de seguridad hasta febrero de 2027: si el PHP sigue después, subir a la 13 |
 
 ### ~~B6 · Simplificar lo heredado de HANA~~ ✅ COMPLETO 2026-10-23
 
@@ -85,11 +85,12 @@ para poder abrirlo en un iframe o copiarlo dentro del ERP el día que se decida
 | B7.1 | Sesión: la API .NET deja el token en una cookie `httpOnly` (como el ERP); se entra con los usuarios actuales | ✅ 23/10/2026: `login` abre la sesión, `me` y `logout` nuevos, sin límite de intentos en esos dos |
 | B7.2 | Cola e impresoras; las tiendas pasan a la app nueva y el PHP queda para administración | 🟡 Pantallas hechas el 23/10/2026 y despliegue preparado (`DESPLIEGUE-WEB.md`, `nginx/impresion-web.conf`, sin probar contra un nginx). La API que necesita está en los servicios de Windows desde el 26/10/2026 (compatible con el PHP). Falta desplegar la web en el servidor |
 | B7.3 | Dashboard y administración; se retira el PHP (y con él B0.6) | 🟡 Pantallas hechas el 23/10/2026: dashboard, alta/edición/baja de impresoras, reglas, umbrales, Telegram y pruebas, todas en el grupo «Impresión» del menú (las cuatro últimas, juntas en «Reglas y avisos» desde el 26/10/2026); Tiendas y Usuarios, aparte y solo para la transición (`src/app/transicion`). Falta retirar el PHP (B7.3a), después de desplegar B7.2 |
-| B7.4 | Paso al ERP: integración, con un pase de entrada firmado por el ERP | 🟡 En curso desde el 26/10/2026, rama `cayetanoImpresion` de ERP_SERCA (sin commit): el módulo web copiado tal cual en su grupo «Impresión»; permisos por departamento (tabla de abajo); pasarela `/api/impresion` en su API, que firma un pase (JWT HS256, 2 min) con operador, departamento, almacén y claves. Lado .NET: `Security/PaseErp.cs` lo acepta si hay `Erp:Secret` (la clave va por emisor; los tokens propios siguen igual) y lo traduce a rol y tienda; `VeTodasLasTiendas` separa ver todas de ser administrador. Probado de punta a punta contra esta API. El módulo se cambia aquí y se vuelve a copiar al ERP. Falta: `Erp__Secret` en el servicio Api (`install-windows-services.ps1`) e `IMPRESION_API_URL`/`IMPRESION_SECRETO` en el ERP; comprobar que `printer_store.store_id` es el `cod_alm` de `fdalmacen`; confirmación al imprimir fuera del almacén propio; y, al apagar el PHP y la web independiente, quitar `printer_user`, `POST /api/auth/login` y las pantallas Tiendas y Usuarios |
+| B7.4 | Paso al ERP: integración, con un pase de entrada firmado por el ERP | 🟡 En curso desde el 26/10/2026, rama `cayetanoImpresion` de ERP_SERCA (`4a22fc9`; aquí `d0ab406`): el módulo web copiado tal cual en su grupo «Impresión»; permisos por departamento (tabla de abajo); pasarela `/api/impresion` en su API, que firma un pase (JWT HS256, 2 min) con operador, departamento, almacén y claves. Lado .NET: `Security/PaseErp.cs` lo acepta si hay `Erp:Secret` (la clave va por emisor; los tokens propios siguen igual) y lo traduce a rol y tienda; `VeTodasLasTiendas` separa ver todas de ser administrador. Probado de punta a punta contra esta API. El módulo se cambia aquí y se vuelve a copiar al ERP. Desplegado el 26/10/2026: la API acepta pases (`Erp__Secret` lo genera `install-windows-services.ps1`) y el ERP de desarrollo de este equipo apunta a ella (`IMPRESION_API_URL`/`IMPRESION_SECRETO` en su `.env`). Falta: las mismas dos variables en el servidor del ERP; confirmación al imprimir fuera del almacén propio; y, al apagar el PHP y la web independiente, quitar `printer_user`, `POST /api/auth/login` y las pantallas Tiendas y Usuarios |
 
-**B7.3a · Retirar el PHP.** Solo con la web nueva desplegada y comprobada en producción, y las
-tiendas avisadas de la dirección nueva: hasta entonces el PHP es lo que funciona, y borrarlo de
-`main` impediría volver a desplegarlo.
+**B7.3a · Retirar el PHP.** Los dos sistemas conviven (decisión del usuario): el PHP y el ERP usan
+la misma API, la misma base y el mismo Worker, a la vez o indistintamente; lo que se hace en uno se ve
+en el otro. El PHP se retira solo cuando el usuario lo decida, con el ERP comprobado en producción y
+las tiendas avisadas: borrarlo de `main` impediría volver a desplegarlo.
 
 1. Borrar `src/ImpresorasService.Web.PHP/` (134 ficheros versionados).
 2. Borrar `DESPLIEGUE-PHP.md`, `SMOKE-TESTS-PHP.md`, `FRONTEND-WEB-PHP-GIT.md`, `GUIA-ESTILO-DBX-UI.md` y
@@ -127,6 +128,20 @@ con el usuario el 26/10/2026; entre paréntesis, operadores activos ese día. Se
   (`ERP_SERCA/docs/12_acceso_akamai_dispositivos.md`, y `tipo_acceso` en docs/15): detrás de
   Akamai el servidor solo ve la IP real si llega en una cabecera.
 
+### B9 · Imprimir primero por IP
+
+Decisión del usuario (26/10/2026): conviven los dos caminos y siempre se intenta primero por IP. Así
+dar de alta una impresora es poner su IP, sin cola, driver ni Sumatra en el servidor, y la impresora
+devuelve un número de trabajo con el que se puede confirmar de verdad. Consulta IPP del 26/10/2026:
+la HP LaserJet 400 M401dne y la Canon imageFORCE 1643 aceptan PDF; la Brother MFC-L2800DW, solo
+imagen (IPP Everywhere y AirPrint).
+
+| # | Acción | Estado |
+|---|---|---|
+| B9.1 | Por IPP (Print-Job) si la impresora acepta PDF o imagen PWG; si no hay IP, no responde o rechaza el trabajo, por la cola de Windows. Un envío por IP cortado a medias no se repite por la cola (`PrintedUnknown`). La cola pasa a ser opcional si hay IP (API, web, ERP y PHP). Las consultas IPP prueban `/ipp/print` y `/ipp/printer` (la Canon solo responde en la primera) | ✅ Desplegado el 26/10/2026, con las migraciones `cola-opcional` e `ipp-job-id` aplicadas. Falta probar en real el camino del PDF directo (HP M401dne o Canon de la tienda 25) |
+| B9.2 | Confirmación por trabajo: se guarda el número que da la impresora (`ipp_job_id`) y el watchdog pregunta por ese trabajo (Get-Job-Attributes): terminado → `PrintedConfirmed`, cancelado o abortado → `ErrorFinal` con el motivo, detenido → `PrinterBlocked`. Si la impresora ya no lo recuerda, por su estado, como antes | ✅ Desplegado y probado el 26/10/2026: un trabajo cancelado en la Brother quedó en `ErrorFinal` con el motivo y uno terminado, en `PrintedConfirmed` (a los 2 min). Resuelve B3.1 y B3.2 para lo que sale por IP |
+| B9.3 | Impresoras sin PDF: el servicio dibuja el PDF con PDFium (Docnet.Core, única dependencia nueva) y lo manda como imagen PWG (IPP Everywhere): escala de grises si la admite, 300 ppp | ✅ Probado el 26/10/2026 en la Brother de Informática: 1 hoja, confirmada. La primera prueba sacó 18 hojas en blanco hasta cancelarla: la cabecera llevaba `NumCopies` a 0 y la Brother lo tomó como copias sin fin; ahora va a 1, como en CUPS (`PwgRasterTests` lo comprueba) |
+
 ### ~~B8 · Caídas de la base de datos~~ ✅ 26/10/2026
 
 El 26/10/2026 la base dejó de responder desde las 07:53: la Api no arrancaba (leía los usuarios al
@@ -144,6 +159,9 @@ arrancar), respondía 500 sin motivo y el Worker registraba una traza en cada ci
 ---
 
 ## 3. Decisiones abiertas
+
+Se van viendo sobre la marcha (usuario, 26/10/2026): B3.2, B0.3, el servidor beta con MD5, la tienda
+por IP y varias tiendas por operador (B7) y la deuda de B5.
 
 | Decisión | Quién |
 |---|---|

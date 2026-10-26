@@ -64,7 +64,9 @@ CREATE TABLE printer_routing_rule (
 CREATE INDEX ix_printer_routing_rule_resolve ON printer_routing_rule (is_active, priority, store_id, document_type, channel);
 
 -- Entrada de trabajos: la escribe el ERP. Basta con
---   INSERT INTO printer_source_print_job (external_job_id, store_id, document_type, pdf_blob)
+--   INSERT INTO printer_source_print_job (external_job_id, store_id, document_type, pdf_url)
+-- o, en vez de pdf_url (que el Worker descarga al ingerir; solo https y hosts de Source:PdfUrlHosts),
+-- el PDF en pdf_blob.
 -- external_job_id identifica el trabajo, no el albaran: si se repite, se descarta como duplicado,
 -- asi que una reimpresion necesita un id nuevo. Lo demas lo rellenan los DEFAULT y el Worker.
 CREATE TABLE printer_source_print_job (
