@@ -65,6 +65,10 @@ public sealed class PdfRetentionBackgroundService : BackgroundService
             {
                 break;
             }
+            catch (Exception ex) when (FallosBd.EsFalloDeConexion(ex))
+            {
+                // La base no responde: lo anota EstadoBd, una vez y con el motivo.
+            }
             catch (Exception ex)
             {
                 // El fallo tipico es que pdf_blob siga siendo NOT NULL en el esquema.

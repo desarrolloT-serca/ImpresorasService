@@ -19,7 +19,7 @@ namespace ImpresorasService.Api.IntegrationTests.Controllers;
 /// Como <see cref="ApiWebApplicationFactory"/>, pero autentica con el JWT real en vez del usuario de
 /// prueba: aquí se prueba justo cómo llega el token.
 /// </summary>
-public sealed class JwtApiWebApplicationFactory : ApiWebApplicationFactory
+public class JwtApiWebApplicationFactory : ApiWebApplicationFactory
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {

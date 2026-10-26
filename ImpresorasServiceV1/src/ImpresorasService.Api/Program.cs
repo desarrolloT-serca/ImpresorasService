@@ -37,23 +37,16 @@ static bool IsUnsafeJwtSecret(string? value)
         || string.Equals(normalized, "changeme", StringComparison.OrdinalIgnoreCase);
 }
 
-static async Task NormalizeLegacyUserRolesAsync(ImpresorasDbContext db)
+// La base caída no es un fallo del programa: 503 con el motivo y cuándo reintentar. EstadoBd ya
+// lo anota en el registro, una vez.
+static Task EscribirBdNoDisponible(HttpResponse response)
 {
-    var users = await db.Users.ToListAsync();
-    var changed = false;
-
-    foreach (var user in users)
+    response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+    response.Headers.RetryAfter = "10";
+    return response.WriteAsJsonAsync(new
     {
-        var normalized = RoleCatalog.Normalize(user.Role);
-        if (!string.Equals(user.Role, normalized, StringComparison.Ordinal))
-        {
-            user.Role = normalized;
-            changed = true;
-        }
-    }
-
-    if (changed)
-        await db.SaveChangesAsync();
+        error = "La base de datos no responde. Se reconecta sola: vuelve a probar en unos segundos."
+    });
 }
 
 static async Task SeedDefaultUsersAsync(ImpresorasDbContext db)
@@ -153,7 +146,17 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                     context.Token = context.Request.Cookies[AuthController.SessionCookie];
                 return Task.CompletedTask;
             },
-            OnTokenValidated = UserRevocationValidator.ValidateAsync
+            OnTokenValidated = UserRevocationValidator.ValidateAsync,
+            // Si no se pudo comprobar el usuario porque la base no respondía, 503 y no 401: la sesión
+            // sigue siendo buena y volver a entrar no arreglaría nada.
+            OnChallenge = async context =>
+            {
+                if (context.AuthenticateFailure is { } fallo && FallosBd.EsFalloDeConexion(fallo))
+                {
+                    context.HandleResponse();
+                    await EscribirBdNoDisponible(context.Response);
+                }
+            }
         };
     });
 
@@ -235,7 +238,9 @@ await using (var scope = app.Services.CreateAsyncScope())
     // El esquema lo crea scripts/crear-esquema.ps1; solo los tests lo generan desde el modelo.
     if (app.Environment.IsEnvironment("Testing"))
         await dbContext.Database.EnsureCreatedAsync();
-    await NormalizeLegacyUserRolesAsync(dbContext);
+    // Fuera de las pruebas, arrancar no toca la base: con ella caída la Api arranca, responde 503 y
+    // se recupera sola. Aquí se normalizaban los roles antiguos (Supervisor), una migración ya
+    // hecha; RoleCatalog.Normalize los sigue entendiendo al leerlos.
 
     var seedDefaultUsers = app.Configuration.GetValue<bool>("Bootstrap:SeedDefaultUsers");
     if (seedDefaultUsers)
@@ -268,6 +273,20 @@ app.Use(async (context, next) =>
     context.Response.Headers.Append("X-Correlation-Id", cid.ToString());
     using (app.Logger.BeginScope("CorrelationId:{CorrelationId}", cid.ToString()))
         await next(context);
+});
+
+// Base caída durante una petición: 503 con el motivo, sin traza. En cuanto responde, la siguiente
+// petición funciona: no hay que reiniciar nada.
+app.Use(async (context, next) =>
+{
+    try
+    {
+        await next(context);
+    }
+    catch (Exception ex) when (FallosBd.EsFalloDeConexion(ex) && !context.Response.HasStarted)
+    {
+        await EscribirBdNoDisponible(context.Response);
+    }
 });
 
 app.UseHttpsRedirection();

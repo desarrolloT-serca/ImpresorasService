@@ -26,12 +26,19 @@ export function Acceso({ children }: { children: ReactNode }) {
   if (sesion.error instanceof ErrorApi && sesion.error.problema.status === 401)
     return <Login />
   // Un fallo del sondeo con la sesión ya cargada (API reiniciándose, 502)
-  // no desmonta el escritorio: se reintenta en el siguiente minuto.
+  // no desmonta el escritorio: se reintenta en el siguiente minuto. Sin sesión
+  // cargada se dice el motivo (la base caída da 503 con él) y también se
+  // reintenta solo cada minuto.
   if (sesion.isError && !sesion.data)
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-4">
-        <p role="alert">No se pudo comprobar la sesión.</p>
-        <Button onClick={() => void sesion.refetch()}>Reintentar</Button>
+      <div className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center">
+        <p role="alert">
+          {sesion.error instanceof ErrorApi && sesion.error.problema.status === 503
+            ? sesion.error.problema.title
+            : "No se pudo comprobar la sesión."}
+        </p>
+        <p className="text-sm text-muted-foreground">Se vuelve a intentar cada minuto.</p>
+        <Button onClick={() => void sesion.refetch()}>Reintentar ahora</Button>
       </div>
     )
   return children

@@ -60,6 +60,10 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
             {
                 break;
             }
+            catch (Exception ex) when (FallosBd.EsFalloDeConexion(ex))
+            {
+                // La base no responde: lo anota EstadoBd, una vez y con el motivo.
+            }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Fallo en monitor de conectividad de impresoras.");

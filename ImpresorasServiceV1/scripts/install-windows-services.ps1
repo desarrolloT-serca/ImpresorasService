@@ -224,6 +224,16 @@ Set-ServiceEnv $WorkerSvc @{
     "Telegram__BotToken"            = $telegramToken
 }
 
+# ── 7b. Recuperación ─────────────────────────────────────────────────────────
+# Si un servicio se cae, Windows lo vuelve a arrancar: a los 30 s, al minuto y después cada 2 min;
+# el contador se reinicia cada día. failureflag: también si se para con código de error, no solo
+# si el proceso revienta. La base caída ya no tumba la Api (EstadoBd); esto cubre lo imprevisto.
+foreach ($svc in @($ApiSvc, $WorkerSvc)) {
+    sc.exe failure $svc reset= 86400 actions= restart/30000/restart/60000/restart/120000 | Out-Null
+    sc.exe failureflag $svc 1 | Out-Null
+}
+Write-Host "  Recuperacion: reinicio automatico si el servicio cae." -ForegroundColor DarkGray
+
 # ── 8. Arrancar ──────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "-- Arrancando servicios --" -ForegroundColor Cyan
