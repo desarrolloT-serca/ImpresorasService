@@ -174,12 +174,16 @@ export const useResumen = (ventana: VentanaDashboard, tienda?: number) =>
     refetchInterval: REFRESCO_MS,
   })
 
-export const useSerie = (ventana: VentanaDashboard, tienda?: number) =>
+export const useSerie = (
+  ventana: VentanaDashboard,
+  tienda?: number,
+  franja = 0
+) =>
   useQuery({
-    queryKey: ["impresion", "dashboard", "serie", ventana, tienda],
+    queryKey: ["impresion", "dashboard", "serie", ventana, tienda, franja],
     queryFn: ({ signal }) =>
       api(
-        `/impresion/dashboard/timeseries?${params({ window: ventana, storeId: tienda })}`,
+        `/impresion/dashboard/timeseries?${params({ window: ventana, storeId: tienda, bucketMinutes: franja })}`,
         SerieDashboard,
         { signal }
       ),

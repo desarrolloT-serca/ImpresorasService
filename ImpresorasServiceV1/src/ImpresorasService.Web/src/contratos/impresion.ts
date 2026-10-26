@@ -244,10 +244,13 @@ export const ResumenDashboard = z.object({
 })
 export type ResumenDashboard = z.infer<typeof ResumenDashboard>
 
-// Tramos por hora (hoy) o por día (7 y 30 días). queueDepth es la cola al
-// final de cada tramo, reconstruida desde la de ahora.
+// Tramos de la franja pedida (bucketMinutes; 0 = automática) o, sin pedirla,
+// por hora hoy y por día en 7 y 30 días. queueDepth es la cola al final de cada
+// tramo, reconstruida desde la de ahora.
 export const SerieDashboard = z.object({
   bucket: z.enum(["hour", "day"]),
+  // Opcional: las API anteriores al 26/10/2026 no lo mandan (solo bucket).
+  bucketMinutes: z.number().int().optional(),
   points: z.array(
     z.object({
       startUtc: z.string(),

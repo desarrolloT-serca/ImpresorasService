@@ -4,6 +4,7 @@ import {
   documentoErp,
   fechaHora,
   fechaHoraCorta,
+  franjasDe,
   puedeCancelar,
   puedeReimprimir,
   puedeReintentar,
@@ -43,6 +44,12 @@ describe("formato", () => {
     expect(fechaHora("2026-07-01T10:05:00+00:00")).toBe("01/07/2026 12:05")
     expect(fechaHora("2026-12-01T23:30:00Z")).toBe("02/12/2026 00:30")
     expect(fechaHora(null)).toBe("-")
+  })
+  it("cada periodo ofrece las franjas con 2 a 500 tramos, y siempre la automática", () => {
+    const minutos = (v: Parameters<typeof franjasDe>[0]) => franjasDe(v).map((f) => f.minutos)
+    expect(minutos("today")).toEqual([0, 15, 30, 60, 120, 240, 720])
+    expect(minutos("7d")).toEqual([0, 30, 60, 120, 240, 720, 1440])
+    expect(minutos("30d")).toEqual([0, 120, 240, 720, 1440])
   })
   it("el documento del ERP sale del tipo y del número; las pruebas no tienen", () => {
     expect(documentoErp("A", "123456")).toEqual({ tipo: "A", nombre: "Albarán", numero: 123456 })

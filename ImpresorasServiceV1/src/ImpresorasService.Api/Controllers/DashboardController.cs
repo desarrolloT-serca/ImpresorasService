@@ -140,6 +140,7 @@ public class DashboardController : ControllerBase
     public async Task<IActionResult> GetTimeseries(
         [FromQuery] string? window,
         [FromQuery] int? storeId,
+        [FromQuery] int? bucketMinutes,
         CancellationToken cancellationToken)
     {
         var effectiveStoreId = User.VeTodasLasTiendas() ? storeId : GetCurrentUserStoreId();
@@ -148,7 +149,20 @@ public class DashboardController : ControllerBase
         var now = _timeProvider.GetUtcNow();
         var fromUtc = ResolveWindowStartUtc(window, now);
         var normalized = NormalizeWindow(window);
+        // Sin bucketMinutes, como siempre (lo usa el PHP): por horas hoy y por días en 7 y 30 días.
+        // Con él, la franja que se pida (0 = automática) y alineada a la hora de negocio.
         var bucket = normalized == "today" ? TimeSpan.FromHours(1) : TimeSpan.FromDays(1);
+        if (bucketMinutes is not null)
+        {
+            var minutos = ElegirFranja(bucketMinutes.Value, now - fromUtc);
+            if (minutos is null)
+                return BadRequest(new
+                {
+                    error = $"Franja no válida para el periodo: {string.Join(", ", Franjas)} minutos, " +
+                            $"0 para la automática, y como mucho {MaxTramos} tramos."
+                });
+            bucket = TimeSpan.FromMinutes(minutos.Value);
+        }
 
         var activeStores = _dbContext.Stores.Where(s => s.IsActive);
         var jobs = _dbContext.PrintJobs.AsNoTracking().Where(x => activeStores.Any(s => s.StoreId == x.StoreId));
@@ -193,18 +207,38 @@ public class DashboardController : ControllerBase
             j => DashboardPrintJobPredicates.QueueStatuses.Contains(j.Status), cancellationToken);
 
         var starts = new List<DateTimeOffset>();
-        for (var t = FloorTo(fromUtc, bucket); t <= now; t = t + bucket)
-            starts.Add(t);
+        if (bucketMinutes is null)
+            for (var t = FloorTo(fromUtc, bucket); t <= now; t = t + bucket)
+                starts.Add(t);
+        else
+        {
+            // Fronteras en hora de negocio, pasadas a UTC una a una: con cambio de hora los días siguen
+            // empezando a las 00:00 y los tramos de 4 h, a las 00, 04, 08... (el 25/10/2026 el día salía
+            // a las 23:00). La hora que se salta en marzo no tiene tramo.
+            // ponytail: en la hora que se repite en octubre, sus dos pasadas caen en el mismo tramo.
+            for (var local = FloorTo(TimeZoneInfo.ConvertTime(fromUtc, _businessTimeZone), bucket).DateTime; ; local += bucket)
+            {
+                if (_businessTimeZone.IsInvalidTime(local))
+                    continue;
+                var t = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(local, _businessTimeZone));
+                if (t > now)
+                    break;
+                starts.Add(t);
+            }
+        }
         if (starts.Count == 0)
             starts.Add(FloorTo(now, bucket));
 
+        // Por búsqueda y no dividiendo: con cambio de hora los tramos no miden todos lo mismo.
         int[] Bucketize(List<DateTimeOffset> stamps)
         {
             var counts = new int[starts.Count];
             foreach (var stamp in stamps)
             {
-                var index = (int)Math.Floor((stamp - starts[0]) / bucket);
-                if (index >= 0 && index < counts.Length)
+                var index = starts.BinarySearch(stamp);
+                if (index < 0)
+                    index = ~index - 1;
+                if (index >= 0)
                     counts[index]++;
             }
             return counts;
@@ -239,9 +273,24 @@ public class DashboardController : ControllerBase
         {
             generatedAtUtc = now,
             appliedFilters = new { window = normalized, storeId = effectiveStoreId },
-            bucket = normalized == "today" ? "hour" : "day",
+            bucket = bucket < TimeSpan.FromDays(1) ? "hour" : "day",
+            bucketMinutes = (int)bucket.TotalMinutes,
             points
         });
+    }
+
+    // Franjas de la gráfica, en minutos. La automática es la menor que deja el periodo en
+    // MaxTramosAuto tramos o menos: hoy, de 15 min a 1 h según la hora; 7 días, 4 h; 30 días, un día.
+    internal static readonly int[] Franjas = [15, 30, 60, 120, 240, 720, 1440];
+    private const int MaxTramosAuto = 48;
+    internal const int MaxTramos = 500;
+
+    public static int? ElegirFranja(int pedida, TimeSpan periodo)
+    {
+        int Tramos(int minutos) => (int)Math.Ceiling(periodo.TotalMinutes / minutos);
+        if (pedida == 0)
+            return Franjas.FirstOrDefault(f => Tramos(f) <= MaxTramosAuto, Franjas[^1]);
+        return Franjas.Contains(pedida) && Tramos(pedida) <= MaxTramos ? pedida : null;
     }
 
     private static DateTimeOffset FloorTo(DateTimeOffset value, TimeSpan bucket) =>

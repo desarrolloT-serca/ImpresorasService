@@ -4,6 +4,7 @@ import {
   type Salud,
   type SeveridadConexion,
   type Tienda,
+  type VentanaDashboard,
 } from "@serca/contratos"
 
 export type Tono = "ok" | "aviso" | "error" | "info" | "neutro"
@@ -74,6 +75,32 @@ export function documentoErp(tipo: string, idExterno: string) {
     ? { tipo, nombre: TIPOS_DOCUMENTO[tipo], numero }
     : null
 }
+
+// Franjas de la gráfica, en minutos (las de la API; 0 = automática, que la
+// elige la API según el periodo). Cada periodo ofrece las que dan al menos 2
+// tramos y como mucho 500.
+export const FRANJAS = [
+  { minutos: 0, etiqueta: "Automática" },
+  { minutos: 15, etiqueta: "15 min" },
+  { minutos: 30, etiqueta: "30 min" },
+  { minutos: 60, etiqueta: "1 h" },
+  { minutos: 120, etiqueta: "2 h" },
+  { minutos: 240, etiqueta: "4 h" },
+  { minutos: 720, etiqueta: "12 h" },
+  { minutos: 1440, etiqueta: "1 día" },
+]
+const MINUTOS_PERIODO: Record<VentanaDashboard, number> = {
+  today: 1440,
+  "7d": 7 * 1440,
+  "30d": 30 * 1440,
+}
+export const franjasDe = (ventana: VentanaDashboard) =>
+  FRANJAS.filter(
+    ({ minutos: f }) =>
+      f === 0 ||
+      (MINUTOS_PERIODO[ventana] / f >= 2 &&
+        Math.ceil(MINUTOS_PERIODO[ventana] / f) <= 500)
+  )
 
 // Lo de hoy, solo la hora; lo de otros días, fecha y hora (decisión del
 // usuario, 26/10/2026). «Hoy» es el de Madrid.

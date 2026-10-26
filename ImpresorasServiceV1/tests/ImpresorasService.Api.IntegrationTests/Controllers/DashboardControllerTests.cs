@@ -349,7 +349,7 @@ public sealed class DashboardControllerTests : IntegrationTestBase
         };
 
         Assert.IsType<ForbidResult>(await controller.GetOverview("today", DashboardTestStoreId, CancellationToken.None));
-        Assert.IsType<ForbidResult>(await controller.GetTimeseries("today", DashboardTestStoreId, CancellationToken.None));
+        Assert.IsType<ForbidResult>(await controller.GetTimeseries("today", DashboardTestStoreId, null, CancellationToken.None));
     }
 
     [Fact]
