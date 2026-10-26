@@ -164,6 +164,7 @@ contra un PostgreSQL real.
 - **Health check `worker`** en la Api (`WorkerActivityHealthCheck`): delata un Worker inerte usando la huella del monitor de conectividad. Reporta `Degraded`, sin tag `ready`.
 - **Retención de PDF** (`PdfRetentionBackgroundService`): **activa, 90 días** (decisión del 19/08/2026). Libera el blob de los trabajos en estado terminal y de las filas de origen ya procesadas, conservando fila, `pdf_sha256` y metadatos.
 - **Revocación de acceso**: `User.IsActive` y `User.TokenVersion` comprobados en cada petición (`UserRevocationValidator`, enganchado a `OnTokenValidated`). Desactivar, borrar o cambiar la contraseña corta el acceso en la siguiente petición; el frontend ya redirige al login ante un 401.
+- **Caídas de la BD** (`Infrastructure/Persistence/EstadoBd.cs`): un fallo de conexión se anota una vez con su motivo y su vuelta con lo que duró; la Api arranca sin base y responde 503 (no 500 ni 401); el Worker se reconecta al renovar el lock. Para detectar «la base no responde» usar `FallosBd.EsFalloDeConexion`, no comparar mensajes. Servicios de Windows con reinicio automático (`docs/PLAN.md` B8).
 
 ### Pendiente
 **Ver `docs/PLAN.md`** — fuente de verdad única del trabajo pendiente, en bloques por dependencia.

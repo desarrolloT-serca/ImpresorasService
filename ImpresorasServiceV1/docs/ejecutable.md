@@ -100,6 +100,17 @@ Pide la password de esa cuenta con `Get-Credential` y la mete en el grupo local 
 | `-SkipPublish` | switch | off | No recompila/republica, solo (re)instala/arranca servicios con los binarios ya presentes |
 | `-ConfigureTelegram` | switch | off | Pide/actualiza el Bot Token de Telegram |
 
+### Si se cae la base de datos o un servicio
+
+- El script deja los dos servicios con **reinicio automático** si se caen (a los 30 s, al minuto y
+  después cada 2 min; el contador se pone a cero cada día). Comprobar: `sc.exe qfailure ImpresorasServiceApi`.
+- Con la base caída, la Api **arranca igual** y responde 503 («La base de datos no responde…»); el
+  Worker deja de procesar. Los dos vuelven solos cuando la base responde: no hace falta reiniciar.
+- En el **registro de eventos** (Aplicación, orígenes `ImpresorasService.Api` y `.Worker`) queda el
+  corte una vez con su motivo («Base de datos no disponible: Failed to connect to …»), un
+  recordatorio cada 5 min mientras dura y la vuelta («Base de datos recuperada tras …»).
+- `GET http://localhost:5105/health`: `database` dice si la Api llega a la base.
+
 ---
 
 ## 4. Dónde y cómo se guardan las credenciales

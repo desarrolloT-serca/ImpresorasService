@@ -2,7 +2,7 @@
 
 **Fuente de verdad única del trabajo pendiente.**
 
-**Estado a 2026-10-23**, rama `feat/postgres`. `dotnet test` 185/185.
+**Estado a 2026-10-26**, rama `feat/web-erp` (desplegada en los servicios de Windows). `dotnet test` 189/189.
 
 El 23/10/2026 la cola pasó de SAP HANA a PostgreSQL y el origen de los trabajos pasó de SAP al ERP
 propio. La documentación y los scripts de la etapa HANA se retiraron del repositorio; siguen en el
@@ -71,6 +71,7 @@ etiqueta «Impreso» y el KPI `printed` incluye además `SpoolAccepted` y `Print
 | Lanzamiento real del proceso de impresión e IPP sin tests | Necesitan spooler o impresora reales. `WindowsPrintSpooler.ClassifyFailedExit` sí está cubierto |
 | Reclamar entre la lectura y el UPDATE (409 de `cancel`) sin test | Exige interponerse en el comando SQL |
 | Ruido en el registro de eventos | Cada `dotnet test` escribe avisos y errores en el Event Log de Windows: el entorno `Testing` no debería registrar ese proveedor |
+| `GetHealth_ReturnsDatabaseCheck` intermitente | A veces da `degraded`: los checks `database` y `worker` corren en paralelo sobre la única conexión SQLite en memoria de las pruebas. Visto el 26/10/2026 (1 de 4 ejecuciones) |
 
 ### B7 · Frontend React con las piezas del ERP
 
@@ -82,7 +83,7 @@ para poder abrirlo en un iframe o copiarlo dentro del ERP el día que se decida
 |---|---|---|
 | B7.0 | Base: app, piezas del ERP copiadas (commit `064b912`), contenedor con pestañas, `api()` | ✅ 23/10/2026, rama `feat/web-erp` |
 | B7.1 | Sesión: la API .NET deja el token en una cookie `httpOnly` (como el ERP); se entra con los usuarios actuales | ✅ 23/10/2026: `login` abre la sesión, `me` y `logout` nuevos, sin límite de intentos en esos dos |
-| B7.2 | Cola e impresoras; las tiendas pasan a la app nueva y el PHP queda para administración | 🟡 Pantallas hechas el 23/10/2026 y despliegue preparado (`DESPLIEGUE-WEB.md`, `nginx/impresion-web.conf`, sin probar contra un nginx). Falta desplegarlo en el servidor |
+| B7.2 | Cola e impresoras; las tiendas pasan a la app nueva y el PHP queda para administración | 🟡 Pantallas hechas el 23/10/2026 y despliegue preparado (`DESPLIEGUE-WEB.md`, `nginx/impresion-web.conf`, sin probar contra un nginx). La API que necesita está en los servicios de Windows desde el 26/10/2026 (compatible con el PHP). Falta desplegar la web en el servidor |
 | B7.3 | Dashboard y administración; se retira el PHP (y con él B0.6) | 🟡 Pantallas hechas el 23/10/2026: dashboard, alta/edición/baja de impresoras, reglas, umbrales, Telegram y pruebas, todas en el grupo «Impresión» del menú; Tiendas y Usuarios, aparte y solo para la transición (`src/app/transicion`). Falta retirar el PHP (B7.3a), después de desplegar B7.2 |
 | B7.4 | Paso al ERP: iframe o integración, con un pase de entrada firmado por el ERP | ⏳ Decisión con el equipo del ERP. Lado .NET: la identidad pasa a ser el operador (`fdopera`) y las tiendas, los almacenes (`fdalmacen`, por vista o sincronización de `printer_store`); con eso sobran `printer_user`, `POST /api/auth/login` y las pantallas Tiendas y Usuarios |
 
@@ -111,6 +112,20 @@ final), por `fdopera.cod_dep`:
   todas las tiendas. Sin tienda válida no se ve ninguna, nunca todas.
 - Varias tiendas por operador: se diseña junto con la decisión D1 del ERP. Imprimir fuera del
   almacén propio pide confirmación.
+
+### ~~B8 · Caídas de la base de datos~~ ✅ 26/10/2026
+
+El 26/10/2026 la base dejó de responder desde las 07:53: la Api no arrancaba (leía los usuarios al
+arrancar), respondía 500 sin motivo y el Worker registraba una traza en cada ciclo. Ahora:
+
+- `EstadoBd` + `EstadoBdInterceptor` (Core): anotan el corte una vez con su motivo, lo recuerdan cada
+  5 min y anotan la vuelta con lo que duró (registro de eventos). `FallosBd` distingue «la base no
+  responde» de los errores de consulta. Los avisos de EF de cada fallo bajan a Debug.
+- Api: arranca sin base; durante el corte responde 503 con el motivo y `Retry-After` (también con
+  sesión: antes daba 401 y mandaba al login); vuelve sola en la siguiente petición.
+- Worker: ya se reconectaba al renovar el lock; ahora sin traza por ciclo y sin culpar a los permisos.
+- Servicios de Windows: reinicio automático si se caen (`install-windows-services.ps1`).
+- Probado contra una base inalcanzable real y en `BdCaidaTests`/`EstadoBdTests`.
 
 ---
 
