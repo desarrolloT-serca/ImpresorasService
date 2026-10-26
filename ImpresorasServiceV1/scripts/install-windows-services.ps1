@@ -22,6 +22,9 @@
 #     -> activa/actualiza las alertas de Telegram (opcional; sin token, TelegramNotifierService
 #        no-opea solo, no rompe nada).
 #
+#   .\scripts\install-windows-services.ps1 -SumatraExe C:\descargas\SumatraPDF-3.6.1-64.exe
+#     -> copia SumatraPDF portable (sin instalador) a <InstallDir>\SumatraPDF: el Worker imprime con el.
+#
 param(
     [string]$InstallDir        = "C:\ImpresorasService",
     [string]$DbHost            = "",             # vacio = se pregunta al capturar credenciales
@@ -33,7 +36,8 @@ param(
     [string]$ServiceAccount    = "",             # ej. ".\svc_impresoras"; vacio = LocalSystem
     [switch]$Reconfigure,                        # fuerza repedir/regenerar credenciales aunque ya existan
     [switch]$SkipPublish,                        # reutiliza binarios ya publicados, solo (re)instala servicios
-    [switch]$ConfigureTelegram                   # pide/actualiza el Telegram Bot Token (opcional)
+    [switch]$ConfigureTelegram,                  # pide/actualiza el Telegram Bot Token (opcional)
+    [string]$SumatraExe        = ""              # SumatraPDF portable que se copia a <InstallDir>\SumatraPDF
 )
 
 $ErrorActionPreference = "Stop"
@@ -199,6 +203,18 @@ if ($Reconfigure -or -not $jwtSecret) {
     Write-Host "  Jwt__Secret ya configurado (usa -Reconfigure para regenerarlo)." -ForegroundColor DarkGray
 }
 
+# Secreto compartido con la pasarela de impresion del ERP nuevo (su IMPRESION_SECRETO; PaseErp en la
+# Api). Se genera una vez: cambiarlo obliga a cambiarlo tambien en el ERP.
+$erpSecret = Get-ServiceEnvVar $ApiSvc "Erp__Secret"
+if (-not $erpSecret) {
+    $bytes = New-Object byte[] 48
+    (New-Object System.Security.Cryptography.RNGCryptoServiceProvider).GetBytes($bytes)
+    $erpSecret = [Convert]::ToBase64String($bytes)
+    Write-Host "  Erp__Secret generado (el ERP lo necesita en IMPRESION_SECRETO)." -ForegroundColor Green
+} else {
+    Write-Host "  Erp__Secret ya configurado." -ForegroundColor DarkGray
+}
+
 if ($ConfigureTelegram) {
     $telegramSecure = Read-Host "Telegram Bot Token (no se muestra)" -AsSecureString
     $telegramToken  = ConvertFrom-SecureStringPlain $telegramSecure
@@ -216,12 +232,28 @@ if ($ConfigureTelegram) {
 Set-ServiceEnv $ApiSvc @{
     "ConnectionStrings__PrintQueue" = $printQueueConn
     "Jwt__Secret"                   = $jwtSecret
+    "Erp__Secret"                   = $erpSecret
     "ASPNETCORE_URLS"               = "http://+:5105"
     "Telegram__BotToken"            = $telegramToken
 }
 Set-ServiceEnv $WorkerSvc @{
     "ConnectionStrings__PrintQueue" = $printQueueConn
     "Telegram__BotToken"            = $telegramToken
+}
+
+# SumatraPDF portable junto a los servicios, fuera de las carpetas que se republican: sin instalador.
+$sumatraDir = Join-Path $InstallDir "SumatraPDF"
+$sumatra    = Join-Path $sumatraDir "SumatraPDF.exe"
+if ($SumatraExe) {
+    if ((Get-AuthenticodeSignature $SumatraExe).Status -ne "Valid") { throw "SumatraPDF sin firma valida: $SumatraExe" }
+    New-Item -ItemType Directory -Force -Path $sumatraDir | Out-Null
+    Copy-Item $SumatraExe $sumatra -Force
+    Write-Host "  SumatraPDF copiado a $sumatra." -ForegroundColor Green
+}
+if (Test-Path $sumatra) {
+    Set-ServiceEnv $WorkerSvc @{ "PrintExecution__PdfPrinterExecutablePath" = $sumatra }
+} else {
+    Write-Host "  AVISO: sin SumatraPDF en $sumatra los trabajos fallan (SPOOLER_DOWN). Usa -SumatraExe." -ForegroundColor Yellow
 }
 
 # ── 7b. Recuperación ─────────────────────────────────────────────────────────
@@ -244,4 +276,4 @@ foreach ($svc in @($ApiSvc, $WorkerSvc)) {
 
 Write-Host ""
 Write-Host "Listo. Comprueba: Invoke-RestMethod http://localhost:5105/health" -ForegroundColor Cyan
-Write-Host "Pendiente manual (no automatizable desde aqui): esquema creado (scripts\crear-esquema.ps1), SumatraPDF, impresoras instaladas con el nombre de spool_queue." -ForegroundColor DarkYellow
+Write-Host "Pendiente manual (no automatizable desde aqui): esquema creado (scripts\crear-esquema.ps1), SumatraPDF (con -SumatraExe), impresoras instaladas con el nombre de spool_queue." -ForegroundColor DarkYellow

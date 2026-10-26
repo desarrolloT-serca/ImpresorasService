@@ -16,7 +16,7 @@ No cubre el frontend Laravel (`ImpresorasService.Web.PHP`) ni PostgreSQL/impreso
 | Windows 10/Server 2016+ | Necesario para `sc`/SCM, `New-Service`, `Print Operators` | — |
 | Acceso de red al PostgreSQL (`-DbHost`/`-DbPort`) | Api/Worker conectan a la BD en el arranque | `Test-NetConnection 10.110.46.121 -Port 5433` |
 | Esquema creado (`scripts\crear-esquema.ps1`) | Las tablas no las crea la aplicación | Desde cualquier equipo con `psql` (viene con PostgreSQL) |
-| **SumatraPDF** en `C:\Program Files\SumatraPDF\SumatraPDF.exe` | El Worker lo invoca para imprimir (`PrintExecution:PdfPrinterExecutablePath`) | Comprobar que el .exe existe en esa ruta, o cambiar la ruta en `C:\ImpresorasService\Worker\appsettings.json` |
+| **SumatraPDF** portable en `C:\ImpresorasService\SumatraPDF\SumatraPDF.exe`, solo en este servidor (los PC de las tiendas no instalan nada) | El Worker lo invoca para imprimir. Sin él cada trabajo acaba en `SPOOLER_DOWN` | Descargar el zip portable de 64 bits de sumatrapdfreader.org y pasar el .exe con `-SumatraExe` (comprueba la firma y lo copia). Si no está ahí, se busca en `C:\Program Files\SumatraPDF` |
 | `C:\ImpresorasService\dashboard-threshold-rules.json` (G5.3) | Reglas de severidad de dashboard (1-3 niveles), compartidas por Api y Worker (`Dashboard:ThresholdRulesFilePath` en ambos `appsettings.json`) — si falta, se usan valores por defecto embebidos, no hace falta crearlo a mano | Se crea solo al guardar umbrales desde `/ajustes`; para verificar que Api y Worker comparten el mismo fichero, confirma que ambos `appsettings.json` apuntan a la misma ruta |
 | Impresoras instaladas en Windows con el mismo nombre que `spool_queue` (tabla `printer_printer`) | El Worker imprime contra la cola de Windows por nombre exacto | `Get-Printer \| Select Name` |
 | Cuenta de servicio en el grupo local **Print Operators** (si usas `-ServiceAccount`) | Necesario para que el proceso pueda hablar con el spooler de Windows | El script lo intenta automáticamente vía `Add-LocalGroupMember` |
@@ -99,6 +99,7 @@ Pide la password de esa cuenta con `Get-Credential` y la mete en el grupo local 
 | `-Reconfigure` | switch | off | Fuerza volver a pedir/regenerar la conexión a la BD + Jwt secret aunque ya existan |
 | `-SkipPublish` | switch | off | No recompila/republica, solo (re)instala/arranca servicios con los binarios ya presentes |
 | `-ConfigureTelegram` | switch | off | Pide/actualiza el Bot Token de Telegram |
+| `-SumatraExe` | string | (vacío) | SumatraPDF portable que se copia a `<InstallDir>\SumatraPDF` (exige firma válida) |
 
 ### Si se cae la base de datos o un servicio
 
@@ -136,6 +137,8 @@ Variables que gestiona el script:
 | `Jwt__Secret` | Api | Generado aleatoriamente (48 bytes, base64) si no existe |
 | `ASPNETCORE_URLS` | Api | Fijo a `http://+:5105` — sin esto, Kestrel cae al puerto 5000 por defecto, que en muchos equipos ya está ocupado (en las pruebas, por un servicio de VPN preexistente) |
 | `Telegram__BotToken` | Api + Worker | Vacío si no se usó `-ConfigureTelegram` |
+| `Erp__Secret` | Api | Generado una vez (48 bytes, base64). Es el `IMPRESION_SECRETO` de la pasarela del ERP nuevo (`docs/PLAN.md` B7.4): cambiarlo obliga a cambiarlo también allí |
+| `PrintExecution__PdfPrinterExecutablePath` | Worker | Ruta de SumatraPDF, si está en `<InstallDir>\SumatraPDF` |
 
 Para verlas manualmente (necesita admin):
 
