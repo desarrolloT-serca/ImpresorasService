@@ -1,6 +1,11 @@
 using System.Net;
 using System.Net.Http.Json;
 using ImpresorasService.Api.IntegrationTests;
+using ImpresorasService.Domain;
+using ImpresorasService.Domain.Entities;
+using ImpresorasService.Infrastructure.Persistence;
+using ImpresorasService.Infrastructure.Services;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace ImpresorasService.Api.IntegrationTests.Controllers;
@@ -25,6 +30,50 @@ public sealed class PrintJobsControllerTests : IntegrationTestBase
         Assert.NotNull(jobs);
         Assert.Empty(jobs);
     }
+
+    [Fact]
+    public async Task GetQueue_TrasReimprimir_DaLaHoraDelUltimoEnvioYCuantasReimpresiones()
+    {
+        await Factory.ResetDatabaseAsync();
+        var jobId = await Factory.SeedPendingPrintJobAsync();
+        var primero = DateTimeOffset.UtcNow.AddHours(-2);
+        var segundo = primero.AddHours(1);
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
+            PrintJobEvent Evento(string tipo, PrintJobStatus? estado, DateTimeOffset cuando) => new()
+            {
+                JobId = jobId, EventType = tipo, NewStatus = estado, ActorType = "system", OccurredAtUtc = cuando
+            };
+            db.PrintJobEvents.AddRange(
+                Evento("StatusChanged", PrintJobStatus.SpoolAccepted, primero),
+                Evento("StatusChanged", PrintJobStatus.ErrorFinal, primero.AddMinutes(5)),
+                Evento(RoutingService.RetryRouteEvent, PrintJobStatus.Routed, segundo.AddMinutes(-1)),
+                Evento("StatusChanged", PrintJobStatus.SpoolAccepted, segundo));
+            await db.SaveChangesAsync();
+        }
+
+        var jobs = await Client.GetFromJsonAsync<List<TrabajoEnCola>>("/api/printjobs");
+
+        var job = Assert.Single(jobs!);
+        // SQLite (tests) guarda la fecha sin fracciones de segundo; el primer envío fue 1 h antes.
+        Assert.Equal(segundo, job.SentAtUtc!.Value, TimeSpan.FromSeconds(1));
+        Assert.Equal(1, job.Reprints);
+    }
+
+    [Fact]
+    public async Task GetQueue_SinEnviar_NoTieneHoraDeEnvio()
+    {
+        await Factory.ResetDatabaseAsync();
+        await Factory.SeedPendingPrintJobAsync();
+
+        var job = Assert.Single((await Client.GetFromJsonAsync<List<TrabajoEnCola>>("/api/printjobs"))!);
+
+        Assert.Null(job.SentAtUtc);
+        Assert.Equal(0, job.Reprints);
+    }
+
+    private sealed record TrabajoEnCola(DateTimeOffset? SentAtUtc, int Reprints);
 
     [Fact]
     public async Task Route_WhenJobNotExists_Returns400()

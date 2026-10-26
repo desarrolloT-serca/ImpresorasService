@@ -44,6 +44,11 @@ export const TrabajoCola = z.object({
   lastErrorMessage: z.string().nullable(),
   createdAtUtc: z.string(),
   updatedAtUtc: z.string(),
+  // Una reimpresión reutiliza el trabajo: createdAtUtc es cuándo llegó y
+  // sentAtUtc, cuándo salió hacia la impresora la última vez. Opcionales: las
+  // API anteriores al 26/10/2026 no los mandan.
+  sentAtUtc: z.string().nullish(),
+  reprints: z.number().int().optional(),
 })
 export type TrabajoCola = z.infer<typeof TrabajoCola>
 

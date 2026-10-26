@@ -5,6 +5,7 @@ using ImpresorasService.Application.Services;
 using ImpresorasService.Domain;
 using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure.Persistence;
+using ImpresorasService.Infrastructure.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -95,7 +96,16 @@ public class PrintJobsController : ControllerBase
                 job.LastErrorCode,
                 job.LastErrorMessage,
                 job.CreatedAtUtc,
-                job.UpdatedAtUtc
+                job.UpdatedAtUtc,
+                // Una reimpresión reutiliza el trabajo: CreatedAtUtc es cuándo llegó y esto, cuándo
+                // salió hacia la impresora la última vez. Del log de eventos, sin columna propia.
+                SentAtUtc = _dbContext.PrintJobEvents
+                    .Where(e => e.JobId == job.JobId && e.NewStatus == PrintJobStatus.SpoolAccepted)
+                    .OrderByDescending(e => e.EventId)
+                    .Select(e => (DateTimeOffset?)e.OccurredAtUtc)
+                    .FirstOrDefault(),
+                Reprints = _dbContext.PrintJobEvents
+                    .Count(e => e.JobId == job.JobId && e.EventType == RoutingService.RetryRouteEvent)
             };
 
         if (includeTotal == true)

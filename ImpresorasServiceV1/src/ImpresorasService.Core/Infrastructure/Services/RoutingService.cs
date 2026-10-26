@@ -12,6 +12,8 @@ public class RoutingService : IRoutingService
     private readonly IRoutingResolver _resolver;
 
     public const string RouteNotFoundCode = "ROUTE_NOT_FOUND";
+    /// <summary>Evento de la reimpresión que pide un operador (la cola los cuenta).</summary>
+    public const string RetryRouteEvent = "RETRY_ROUTE";
 
     public RoutingService(ImpresorasDbContext db, IRoutingResolver resolver)
     {
@@ -59,7 +61,7 @@ public class RoutingService : IRoutingService
             _db.PrintJobEvents.Add(new PrintJobEvent
             {
                 JobId = jobId,
-                EventType = "RETRY_ROUTE",
+                EventType = RetryRouteEvent,
                 OldStatus = previousStatus,
                 NewStatus = PrintJobStatus.Pending,
                 ActorType = "user",

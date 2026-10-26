@@ -349,9 +349,22 @@ function columnasCola(
       id: "creado",
       header: "Creado",
       size: 140,
+      // Reimpreso: debajo de cuándo llegó, cuándo salió la última vez.
       cell: ({ row: { original: t } }) => (
-        <span title={fechaHora(t.createdAtUtc)}>
+        <span
+          title={
+            `Llegó ${fechaHora(t.createdAtUtc)}` +
+            (t.reprints
+              ? `\nReimpreso ${t.reprints === 1 ? "1 vez" : `${t.reprints} veces`}; último envío ${fechaHora(t.sentAtUtc ?? null)}`
+              : "")
+          }
+        >
           {fechaHoraCorta(t.createdAtUtc)}
+          {!!t.reprints && (
+            <span className="block text-[11px] text-muted-foreground">
+              Reimpreso {t.sentAtUtc ? fechaHoraCorta(t.sentAtUtc) : "(pendiente)"}
+            </span>
+          )}
         </span>
       ),
     },
