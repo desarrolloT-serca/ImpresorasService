@@ -84,8 +84,8 @@ para poder abrirlo en un iframe o copiarlo dentro del ERP el día que se decida
 | B7.0 | Base: app, piezas del ERP copiadas (commit `064b912`), contenedor con pestañas, `api()` | ✅ 23/10/2026, rama `feat/web-erp` |
 | B7.1 | Sesión: la API .NET deja el token en una cookie `httpOnly` (como el ERP); se entra con los usuarios actuales | ✅ 23/10/2026: `login` abre la sesión, `me` y `logout` nuevos, sin límite de intentos en esos dos |
 | B7.2 | Cola e impresoras; las tiendas pasan a la app nueva y el PHP queda para administración | 🟡 Pantallas hechas el 23/10/2026 y despliegue preparado (`DESPLIEGUE-WEB.md`, `nginx/impresion-web.conf`, sin probar contra un nginx). La API que necesita está en los servicios de Windows desde el 26/10/2026 (compatible con el PHP). Falta desplegar la web en el servidor |
-| B7.3 | Dashboard y administración; se retira el PHP (y con él B0.6) | 🟡 Pantallas hechas el 23/10/2026: dashboard, alta/edición/baja de impresoras, reglas, umbrales, Telegram y pruebas, todas en el grupo «Impresión» del menú; Tiendas y Usuarios, aparte y solo para la transición (`src/app/transicion`). Falta retirar el PHP (B7.3a), después de desplegar B7.2 |
-| B7.4 | Paso al ERP: iframe o integración, con un pase de entrada firmado por el ERP | ⏳ Decisión con el equipo del ERP. Lado .NET: la identidad pasa a ser el operador (`fdopera`) y las tiendas, los almacenes (`fdalmacen`, por vista o sincronización de `printer_store`); con eso sobran `printer_user`, `POST /api/auth/login` y las pantallas Tiendas y Usuarios |
+| B7.3 | Dashboard y administración; se retira el PHP (y con él B0.6) | 🟡 Pantallas hechas el 23/10/2026: dashboard, alta/edición/baja de impresoras, reglas, umbrales, Telegram y pruebas, todas en el grupo «Impresión» del menú (las cuatro últimas, juntas en «Reglas y avisos» desde el 26/10/2026); Tiendas y Usuarios, aparte y solo para la transición (`src/app/transicion`). Falta retirar el PHP (B7.3a), después de desplegar B7.2 |
+| B7.4 | Paso al ERP: integración, con un pase de entrada firmado por el ERP | 🟡 En curso desde el 26/10/2026, rama `cayetanoImpresion` de ERP_SERCA (sin commit): el módulo web copiado tal cual en su grupo «Impresión»; permisos por departamento (tabla de abajo); pasarela `/api/impresion` en su API, que firma un pase (JWT HS256, 2 min) con operador, departamento, almacén y claves. Lado .NET: `Security/PaseErp.cs` lo acepta si hay `Erp:Secret` (la clave va por emisor; los tokens propios siguen igual) y lo traduce a rol y tienda; `VeTodasLasTiendas` separa ver todas de ser administrador. Probado de punta a punta contra esta API. El módulo se cambia aquí y se vuelve a copiar al ERP. Falta: `Erp__Secret` en el servicio Api (`install-windows-services.ps1`) e `IMPRESION_API_URL`/`IMPRESION_SECRETO` en el ERP; comprobar que `printer_store.store_id` es el `cod_alm` de `fdalmacen`; confirmación al imprimir fuera del almacén propio; y, al apagar el PHP y la web independiente, quitar `printer_user`, `POST /api/auth/login` y las pantallas Tiendas y Usuarios |
 
 **B7.3a · Retirar el PHP.** Solo con la web nueva desplegada y comprobada en producción, y las
 tiendas avisadas de la dirección nueva: hasta entonces el PHP es lo que funciona, y borrarlo de
@@ -103,15 +103,29 @@ tiendas avisadas de la dirección nueva: hasta entonces el PHP es lo que funcion
 Diferencias con el PHP que quedan a propósito: Pruebas guarda los escenarios en el navegador y pide
 el PDF en cada prueba (el PHP los guardaba en su disco); la cola ya no deja ocultar columnas.
 
-Reglas de acceso para cuando la identidad sea el operador del ERP (propuesta del usuario, no
-final), por `fdopera.cod_dep`:
+Acceso en el ERP: sin login propio (todo sale de la sesión del ERP) y por departamento
+(`fdopera.cod_dep`), no por el catálogo `PANTALLAS` ni por programas del ERP antiguo. Acordado
+con el usuario el 26/10/2026; entre paréntesis, operadores activos ese día. Se hace en la rama
+`cayetanoImpresion` de ERP_SERCA.
 
-- Admin: 200 INFORMATICA. Jefe de su tienda: 10 RESPONSABLE TIENDA. Empleado: 1, 2, 3, 5, 11,
-  106, 108, 113 y 114. El resto, sin acceso.
-- Rol (qué hace) y tiendas (qué ve) van por separado: el call center (113) es empleado pero ve
-  todas las tiendas. Sin tienda válida no se ve ninguna, nunca todas.
+| Acceso | Departamentos | Tiendas |
+|---|---|---|
+| Administrador | 200 INFORMATICA (9) | Todas |
+| Jefe de tienda | 10 RESPONSABLE TIENDA (25) | La suya |
+| Usuario (solo ver) | 1 MOSTRADOR (54), 2 ALMACEN (86), 3 REPARTO (142), 5 NOTAS (9), 11 SUSTITUTO REPARTO (33), 116 COMODIN (6) | La suya |
+| Usuario, todas las tiendas | 113 CALL-CENTER (47), 108 COORDINADOR CALL CENTER (0), 114 COMPRAS-URGENCIAS (6), 17 CARROCERIAS (15), 100 GERENCIA (4) | Todas |
+
+- Cerrado por defecto: cualquier otro departamento, también los que se creen, no ve nada (el
+  grupo «Impresión» no sale en su menú y la API responde 403).
+- Rol (qué hace) y tiendas (qué ve) van por separado. «La suya» es `fdopera.cod_alm`; sin tienda
+  válida no se ve ninguna, nunca todas.
 - Varias tiendas por operador: se diseña junto con la decisión D1 del ERP. Imprimir fuera del
   almacén propio pide confirmación.
+- **Para más adelante (no hacer aún):** reparto, sustituto de reparto y comodín trabajan a veces
+  en otra tienda que la de su `cod_alm`. Para ellos, la tienda debería salir de la IP del
+  dispositivo con el que entran al ERP. Va con el acceso por IP y tienda que ya prevé el ERP
+  (`ERP_SERCA/docs/12_acceso_akamai_dispositivos.md`, y `tipo_acceso` en docs/15): detrás de
+  Akamai el servidor solo ve la IP real si llega en una cabecera.
 
 ### ~~B8 · Caídas de la base de datos~~ ✅ 26/10/2026
 
