@@ -17,6 +17,7 @@ historial de git (hasta el commit `602018f`).
 | **`PLAN.md`** (este) | Qué hacer y en qué orden |
 | `contrato-kpi-dashboard.md` | Contrato de los KPI del dashboard |
 | `gate-i1-ipp-por-trabajo.md` | Medición del parque: por qué no se puede confirmar la impresión por trabajo |
+| `auditoria-2026-10-26.md` | Auditoría del 26/10/2026: hallazgos, decisiones abiertas (D1-D7) y hoja de ruta. Lo que se decida pasa a este plan |
 | `ejecutable.md`, `DESPLIEGUE-PHP.md`, `DESPLIEGUE-WEB.md`, `SMOKE-TESTS-PHP.md`, `GUIA-ESTILO-DBX-UI.md`, `FRONTEND-WEB-PHP-GIT.md` | Guías operativas |
 | `RESUMEN-PROYECTO.md` | Orientación rápida en el código |
 
@@ -141,6 +142,20 @@ imagen (IPP Everywhere y AirPrint).
 | B9.1 | Por IPP (Print-Job) si la impresora acepta PDF o imagen PWG; si no hay IP, no responde o rechaza el trabajo, por la cola de Windows. Un envío por IP cortado a medias no se repite por la cola (`PrintedUnknown`). La cola pasa a ser opcional si hay IP (API, web, ERP y PHP). Las consultas IPP prueban `/ipp/print` y `/ipp/printer` (la Canon solo responde en la primera) | ✅ Desplegado el 26/10/2026, con las migraciones `cola-opcional` e `ipp-job-id` aplicadas. Falta probar en real el camino del PDF directo (HP M401dne o Canon de la tienda 25) |
 | B9.2 | Confirmación por trabajo: se guarda el número que da la impresora (`ipp_job_id`) y el watchdog pregunta por ese trabajo (Get-Job-Attributes): terminado → `PrintedConfirmed`, cancelado o abortado → `ErrorFinal` con el motivo, detenido → `PrinterBlocked`. Si la impresora ya no lo recuerda, por su estado, como antes | ✅ Desplegado y probado el 26/10/2026: un trabajo cancelado en la Brother quedó en `ErrorFinal` con el motivo y uno terminado, en `PrintedConfirmed` (a los 2 min). Resuelve B3.1 y B3.2 para lo que sale por IP |
 | B9.3 | Impresoras sin PDF: el servicio dibuja el PDF con PDFium (Docnet.Core, única dependencia nueva) y lo manda como imagen PWG (IPP Everywhere): escala de grises si la admite, 300 ppp | ✅ Probado el 26/10/2026 en la Brother de Informática: 1 hoja, confirmada. La primera prueba sacó 18 hojas en blanco hasta cancelarla: la cabecera llevaba `NumCopies` a 0 y la Brother lo tomó como copias sin fin; ahora va a 1, como en CUPS (`PwgRasterTests` lo comprueba) |
+| B9.4 | Errores para la gente y más motivos de IPP (26/10/2026). `Domain/ErroresTrabajo.cs`: texto corto y qué hacer de cada código (también los motivos de IPP tal cual, `media-jam-error`…); la API los manda en la cola (`lastErrorText`, `lastErrorHint`) y la web, el ERP y el PHP los enseñan, también en bloqueado y sin confirmar. Por IPP, el rechazo de la impresora queda con su motivo (`IPP_NO_RESPONSE`, `IPP_PRINTER_BUSY`, `IPP_NOT_AUTHORIZED`, `IPP_TOO_LARGE`, `IPP_DOCUMENT_ERROR`, `IPP_FORMAT_NOT_SUPPORTED`, `IPP_REJECTED`) y, si hay cola de Windows, se sigue probando por ella; si no sabe leer el PDF, se reenvía como imagen. Un trabajo terminado con errores queda sin confirmar (`IPP_COMPLETED_WITH_ERRORS`) y uno abortado por el documento, `IPP_DOCUMENT_ERROR` | ✅ Hecho y probado (`ErroresTrabajoTests`, que exige texto para cada código del código fuente; `ImpresionPorIpTests`, `ColaErroresTests`), sin desplegar |
+
+### B10 · Reimprimir lo ya impreso, con control
+
+Decisión del usuario (26/10/2026): un documento que ya salió (`PrintedConfirmed` o `PrintedUnknown`)
+se puede reimprimir, porque se imprime mal, se pierde o se moja; pero cada copia puede ser un
+duplicado, así que todo queda registrado. Sin límite de veces; el motivo, obligatorio.
+
+| # | Acción | Estado |
+|---|---|---|
+| B10.1 | `POST /api/printjobs/{id}/reprint` con motivo (Mal impreso, Perdido, Dañado o mojado, Atasco o sin papel, Otro con nota obligatoria). Evento `REPRINT` con quién (`actor_id`: «ERP código nombre»), estado anterior, motivo, nota e impresora (`metadata_json`). `/route` ya solo reintenta lo que no salió (`ErrorFinal`): ninguna copia sin registrar, tampoco desde el reintento masivo del PHP. El reintento apunta también quién. Reimprimir y reintentar limpian `ipp_job_id`, que si no confirmaría la copia por el trabajo anterior. Sin PDF (retención de 90 días) no se puede: lo vuelve a mandar el ERP | ✅ 26/10/2026 (`ReimpresionTests`) |
+| B10.2 | Web: ventana de aviso (puede salir duplicado, veces que ya se reimprimió), motivo y casilla «Entiendo…»; en la cola, icono ámbar y el detalle en el title | ✅ 26/10/2026 |
+| B10.3 | Registro «Reimpresiones» (`GET /api/printjobs/reprints`): quién, cuándo, motivo, documento, tienda e impresora, por periodo, tienda y motivo. Para quien puede reimprimir; cada uno ve su tienda. KPI «Reimpresiones» del periodo en el dashboard, que abre el registro. Por SQL: `printer_print_job_event` con `event_type = 'REPRINT'` (`metadata_json::jsonb->>'reason'`) | ✅ 26/10/2026 |
+| B10.4 | Migraciones del 27/10/2026 (`scripts/sql/migraciones/`), estado en `admon` comprobado el 27/10: `telegram-bot-token` aplicada; `orden-cola` aplicada (con el relleno desde REPRINT/RETRY_ROUTE); `indice-reimpresiones` sin aplicar (no hace falta para desplegar); `reimpresiones-antiguas` (opcional) sin filas que cambiar; `impresora-falla-desde` (el «Desde» de las incidencias de conexión) **sin aplicar**. `telegram-bot-token`, `orden-cola` e `impresora-falla-desde` son necesarias para la Api y el Worker de esta rama | ⏳ `impresora-falla-desde` (antes de desplegar), `indice-reimpresiones` |
 
 ### ~~B8 · Caídas de la base de datos~~ ✅ 26/10/2026
 
@@ -169,6 +184,7 @@ por IP y varias tiendas por operador (B7) y la deuda de B5.
 | El servidor es PostgreSQL **19beta4** (beta) y autentica con MD5 (obsoleto) | Infraestructura |
 | Contraseñas = login (B0.4) | Usuario, cuando se embeba en el ERP |
 | ¿Se revocó con BotFather el token de Telegram que quedó escrito en un documento? El documento ya no está, pero el token sigue en el historial de git | Operaciones |
+| Notificaciones del ERP por usuario u operador, además de Telegram (anunciado el 27/10/2026, sin empezar). Para avisar a quien mandó el documento, el contrato de entrada tendrá que decir quién lo pidió (`auditoria-2026-10-26.md`, D8) | Usuario y ERP |
 
 ---
 

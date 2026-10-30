@@ -29,7 +29,12 @@ Pending → Routed → SpoolAccepted → PrintedConfirmed
                               ↘ PrintedUnknown
        ↘ RetryScheduled → (Routed de nuevo) → ErrorFinal
        ↘ ErrorFinal  (si ROUTE_NOT_FOUND o max reintentos)
+
+ErrorFinal → (reintento, POST route, evento RETRY_ROUTE) → Pending
+PrintedConfirmed | PrintedUnknown → (reimpresión con motivo, POST reprint, evento REPRINT) → Pending
 ```
+Toda reimpresión de lo ya salido queda en `printer_print_job_event` (`REPRINT`, quién y por qué):
+es el registro de reimpresiones (`docs/PLAN.md` B10).
 
 **Campos críticos**: `Status`, `PrinterId`, `AttemptCount`, `NextRetryAtUtc`, `LastErrorCode`, `PdfBlob`
 
@@ -47,7 +52,7 @@ Pending → Routed → SpoolAccepted → PrintedConfirmed
 - **TelegramChat**: ChatId (long) + IsActive; uno por destinatario
 - **StoreAlertState**: último estado notificado por tienda (evita spam)
 - **User**: autenticación JWT; roles Admin/Supervisor/Operator
-- **PrintJobEvent**: log inmutable de transiciones de estado
+- **PrintJobEvent**: log inmutable de transiciones de estado. Guarda además, sin trabajo detrás, el historial de avisos de Telegram (`TELEGRAM_ALERT`, con `job_id` fijo por tienda = `TelegramMensajes.JobIdHistorial(storeId)`; decisión del 27/10/2026 para no crear tabla). Una consulta que recorra eventos sin cruzar con `printer_print_job` debe filtrar por `event_type`; al purgar una tienda se borran también los suyos
 
 ---
 
@@ -125,7 +130,7 @@ Pending → Routed → SpoolAccepted → PrintedConfirmed
 // Worker — sección Telegram
 {
   "Enabled": false,              // activar en producción con BotToken real
-  "BotToken": ""                 // NUNCA en repo; usar variable de entorno
+  "BotToken": ""                 // NUNCA en repo; usar variable de entorno (o ponerlo desde la pantalla)
 }
 
 // Worker — sección PrinterConnectivity
@@ -139,6 +144,12 @@ Pending → Routed → SpoolAccepted → PrintedConfirmed
 
 Variables de entorno que sobreescriben appsettings (patrón `Section__Key`):
 - `Telegram__BotToken`, `Jwt__Secret`, `ConnectionStrings__PrintQueue`
+
+**Token del bot de Telegram**: el que se pone desde la pantalla de Telegram (`PUT /api/telegram/token`,
+Admin; se comprueba con `getMe` antes de guardarlo) va a `printer_telegram_config.bot_token` y **manda
+sobre** `Telegram:BotToken`; vacío, vuelve el del servicio (`TelegramToken.ResolverAsync`, lo usan el
+Worker y la prueba de envío). La API nunca lo devuelve: solo de dónde sale y sus 4 últimos caracteres.
+En la BD se guarda en claro (27/10/2026): lo protege el acceso a la base.
 
 `ConnectionStrings:PrintQueue` es la **única** configuración de BD (host, puerto, BD, usuario y esquema
 vía `Search Path`); Api, Worker y `scripts/crear-esquema.ps1` la leen de ahí. En local va en el `.env` de la
@@ -169,6 +180,7 @@ contra un PostgreSQL real.
 - **Health check `worker`** en la Api (`WorkerActivityHealthCheck`): delata un Worker inerte usando la huella del monitor de conectividad. Reporta `Degraded`, sin tag `ready`.
 - **Retención de PDF** (`PdfRetentionBackgroundService`): **activa, 90 días** (decisión del 19/08/2026). Libera el blob de los trabajos en estado terminal y de las filas de origen ya procesadas, conservando fila, `pdf_sha256` y metadatos.
 - **Revocación de acceso**: `User.IsActive` y `User.TokenVersion` comprobados en cada petición (`UserRevocationValidator`, enganchado a `OnTokenValidated`). Desactivar, borrar o cambiar la contraseña corta el acceso en la siguiente petición; el frontend ya redirige al login ante un 401.
+- **Errores para la gente** (`Domain/ErroresTrabajo.cs`): texto y qué hacer de cada `last_error_code`, que la API manda en la cola. Un código nuevo necesita su entrada: `ErroresTrabajoTests` lo exige.
 - **Caídas de la BD** (`Infrastructure/Persistence/EstadoBd.cs`): un fallo de conexión se anota una vez con su motivo y su vuelta con lo que duró; la Api arranca sin base y responde 503 (no 500 ni 401); el Worker se reconecta al renovar el lock. Para detectar «la base no responde» usar `FallosBd.EsFalloDeConexion`, no comparar mensajes. Servicios de Windows con reinicio automático (`docs/PLAN.md` B8).
 
 ### Pendiente
@@ -191,6 +203,10 @@ Copia del esquema real: `pg_dump --schema-only -n <esquema>`. Puesta en marcha y
 - Sin migraciones EF automáticas; si cambias el modelo, añade DDL en `scripts/sql/`
 - Tests usan SQLite en memoria; no mockear la BD (lección aprendida: divergencia de mocks vs producción)
 
+### Frontend React (`ImpresorasService.Web`, módulo copiado en el ERP)
+- **Gráficas: siempre con shadcn/ui chart** (`src/components/ui/chart.tsx`, Recharts 3), instalado en los dos proyectos. Colores solo con tokens (`var(--chart-1…5)`, `--destructive`, `--success`, `--warning`) para que el estilo y el modo oscuro sigan los del ERP; no añadir otra librería de gráficas. Mapa de calor y diagramas de nodos (reglas de enrutado), a mano con CSS o SVG. Regla también en `ERP_SERCA/erp/README.md` («Reglas de la base»), 27/10/2026.
+- Un cambio en `src/modules/impresion` se copia igual a `ERP_SERCA/erp/apps/web/src/modules/impresion` (mismo código; allí las líneas acaban en CRLF).
+
 ### Frontend PHP
 - Cliente API en `app/Http/Controllers/` → llama a `ApiClient` que envuelve todas las peticiones al backend .NET
 - Blade templates en `resources/views/`; estilos en `resources/css/dbx.css`
@@ -198,7 +214,7 @@ Copia del esquema real: `pg_dump --schema-only -n <esquema>`. Puesta en marcha y
 
 ### Git
 - Rama principal: `main`
-- Rama activa: `feat/postgres`
+- Rama activa: `feat/web-erp`
 - Commits convencionales: `feat:`, `fix:`, `chore:`, `refactor:`
 
 ---
