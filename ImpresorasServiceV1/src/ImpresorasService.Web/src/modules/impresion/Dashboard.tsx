@@ -1,6 +1,12 @@
 import { useMemo, useState, type ReactNode } from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 import {
+  CircleCheckIcon,
+  OctagonAlertIcon,
+  TriangleAlertIcon,
+} from "lucide-react"
+import { Line, LineChart, YAxis } from "recharts"
+import {
   PERMISOS_IMPRESION as P,
   type Impresora,
   type ReglasUmbral,
@@ -13,6 +19,7 @@ import { Panel } from "@/components/ficha"
 import { CampoFiltro } from "@/components/filtro-lista"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { ChartContainer } from "@/components/ui/chart"
 import {
   Select,
   SelectContent,
@@ -24,7 +31,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { usePermiso } from "@/core/sesion"
 import { num } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import { useWorkspace } from "@/workspace/modulo"
+import { useWorkspace, type IdPanel } from "@/workspace/modulo"
 import {
   useImpresoras,
   useResumen,
@@ -42,6 +49,7 @@ import {
   TONO_SEVERIDAD,
   type Tono,
 } from "./formato"
+import { SinActualizar } from "./formulario"
 import { Grafica } from "./Grafica"
 import {
   incidencias,
@@ -61,7 +69,7 @@ const SIN_IMPRESORAS: Impresora[] = []
 
 const umbral = (
   r: ReglasUmbral | undefined,
-  m: keyof ReglasUmbral,
+  m: Exclude<keyof ReglasUmbral, "horario">,
   s: string
 ) => r?.[m].find((u) => u.severity === s)?.min
 
@@ -73,6 +81,52 @@ const Etiqueta = ({ tono, children }: { tono: Tono; children: ReactNode }) => (
     {children}
   </Badge>
 )
+
+// Estado general, lo primero que se ve: una frase que vale igual para una
+// tienda que para todas («1 tienda crítica» con una tienda elegida no dice nada;
+// decisión del usuario, 27/10/2026) y, debajo, el porqué.
+const ESTADO_GENERAL = {
+  error: {
+    titulo: "Acción urgente requerida",
+    Icono: OctagonAlertIcon,
+    clase: "border-destructive/40 bg-destructive/10 text-destructive",
+  },
+  aviso: {
+    titulo: "Operación con avisos",
+    Icono: TriangleAlertIcon,
+    clase: "border-warning/40 bg-warning/10 text-warning",
+  },
+  ok: {
+    titulo: "Operación normal",
+    Icono: CircleCheckIcon,
+    clase: "border-success/40 bg-success/10 text-success",
+  },
+} as const
+
+function EstadoGeneral({
+  tono,
+  detalle,
+}: {
+  tono: keyof typeof ESTADO_GENERAL
+  detalle: string
+}) {
+  const { titulo, Icono, clase } = ESTADO_GENERAL[tono]
+  return (
+    <div
+      role="status"
+      className={cn(
+        "flex items-center gap-3 rounded-lg border px-4 py-3",
+        clase
+      )}
+    >
+      <Icono aria-hidden className="size-7 shrink-0" />
+      <div className="min-w-0">
+        <p className="text-lg leading-tight font-semibold">{titulo}</p>
+        <p className="text-sm text-foreground/80">{detalle}</p>
+      </div>
+    </div>
+  )
+}
 
 function Seccion({
   titulo,
@@ -98,41 +152,101 @@ function Seccion({
   )
 }
 
+// Las cifras de una sección en una franja: una celda por cifra, separadas por
+// una línea (el gap-px deja ver el borde del fondo), en vez de cuadros sueltos
+// con hueco dentro (decisión del usuario, 27/10/2026). Se reparten por el ancho
+// del panel (@container), no de la ventana.
+const Cifras = ({ children }: { children: ReactNode }) => (
+  <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border bg-border @3xl:auto-cols-fr @3xl:grid-flow-col @3xl:grid-cols-none">
+    {children}
+  </div>
+)
+
 function Cifra({
   etiqueta,
   valor,
   nota,
   alerta,
+  tendencia,
+  color = "var(--chart-1)",
+  onClick,
 }: {
   etiqueta: string
   valor: string
   nota?: string
   alerta?: boolean
+  // Valores del periodo por franja: se dibujan como una mini-gráfica.
+  tendencia?: number[]
+  color?: string
+  // Con onClick es un botón: abre el detalle de la cifra.
+  onClick?: () => void
 }) {
+  const Caja = onClick ? "button" : "div"
   return (
-    <div
+    <Caja
+      {...(onClick && { type: "button" as const, onClick })}
       className={cn(
-        "rounded-md border p-3",
-        alerta && "border-destructive/40 bg-destructive/5"
+        "flex min-w-0 flex-col gap-1 bg-card px-4 py-3 text-left",
+        onClick && "transition-colors hover:bg-accent",
+        // Opaco: con transparencia se ve el gris de las líneas de la franja.
+        alerta && "bg-[color-mix(in_oklab,var(--destructive)_6%,var(--card))]"
       )}
     >
-      <div className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+      <div className="truncate text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
         {etiqueta}
       </div>
-      <div
-        className={cn(
-          "text-2xl font-semibold tabular-nums",
-          alerta && "text-destructive"
+      <div className="flex min-w-0 items-baseline gap-2">
+        <span
+          className={cn(
+            "text-2xl font-semibold tabular-nums",
+            alerta && "text-destructive"
+          )}
+        >
+          {valor}
+        </span>
+        {nota && (
+          <span className="truncate text-xs text-muted-foreground" title={nota}>
+            {nota}
+          </span>
         )}
-      >
-        {valor}
       </div>
-      {nota && (
-        <div className="truncate text-xs text-muted-foreground" title={nota}>
-          {nota}
-        </div>
+      {tendencia && tendencia.length > 1 && (
+        <Tendencia
+          valores={tendencia}
+          color={alerta ? "var(--destructive)" : color}
+        />
       )}
-    </div>
+    </Caja>
+  )
+}
+
+// Mini-gráfica sin ejes: solo la forma del periodo. Decorativa: el dato está
+// en la gráfica grande y en «Ver como tabla»; sin ratón (Recharts pintaba un
+// punto bajo el cursor al pasar por la cifra).
+function Tendencia({ valores, color }: { valores: number[]; color: string }) {
+  return (
+    <ChartContainer
+      aria-hidden
+      config={{ v: { color } }}
+      className="pointer-events-none aspect-auto h-8 w-full"
+    >
+      <LineChart
+        data={valores.map((v, i) => ({ i, v }))}
+        margin={{ top: 2, right: 0, bottom: 2, left: 0 }}
+      >
+        {/* De 0 a, como poco, 1: todo a cero queda como una línea abajo. */}
+        <YAxis hide domain={[0, (max: number) => Math.max(max, 1)]} />
+        <Line
+          dataKey="v"
+          type="monotone"
+          stroke="var(--color-v)"
+          strokeWidth={1.5}
+          dot={false}
+          activeDot={false}
+          isAnimationActive={false}
+        />
+      </LineChart>
+    </ChartContainer>
   )
 }
 
@@ -144,6 +258,7 @@ function Cifra({
 export default function Dashboard() {
   const verTodas = usePermiso(P.todasLasTiendas)
   const admin = usePermiso(P.administrar)
+  const verReimpresiones = usePermiso(P.reimprimir)
   const { abrir } = useWorkspace()
   const [ventana, setVentana] = useState<VentanaDashboard>("today")
   const [tienda, setTienda] = useState<number>()
@@ -210,6 +325,31 @@ export default function Dashboard() {
   const sinComprobar = enAmbito.length - sinConexion - sinHost - porEstado("ok")
   const criticas = datos.stores.filter((t) => t.health === "critical").length
   const enAviso = datos.stores.filter((t) => t.health === "warning").length
+  const estado = criticas > 0 ? "error" : enAviso > 0 ? "aviso" : "ok"
+  // Con una sola tienda (elegida o la del usuario), su motivo; con varias,
+  // cuántas hay en cada estado.
+  const unaTienda = datos.stores.length === 1 ? datos.stores[0] : undefined
+  const detalleEstado = unaTienda
+    ? estado === "ok"
+      ? `${unaTienda.storeName}: sin incidencias`
+      : `${unaTienda.storeName}: ${unaTienda.healthReason || `${lista.length} incidencias abiertas`}`
+    : estado === "ok"
+      ? datos.stores.length === 0
+        ? "No hay tiendas activas"
+        : `Las ${datos.stores.length} tiendas funcionan con normalidad`
+      : [
+          criticas > 0 &&
+            (criticas === 1
+              ? "1 tienda crítica"
+              : `${criticas} tiendas críticas`),
+          enAviso > 0 &&
+            (enAviso === 1
+              ? "1 tienda en aviso"
+              : `${enAviso} tiendas en aviso`),
+          `${datos.stores.length - criticas - enAviso} sin problemas`,
+        ]
+          .filter(Boolean)
+          .join(" · ")
   const tasa =
     k.received > 0 ? Math.round((k.printed / k.received) * 100) : null
   const ordenadas = [...datos.stores].sort(
@@ -228,8 +368,19 @@ export default function Dashboard() {
       })),
   ]
 
+  // Valores de la serie del periodo, para las mini-gráficas de las cifras.
+  const tramos = serie.data?.points ?? []
+  const de = (c: "received" | "printed" | "failed") => tramos.map((p) => p[c])
+  // En cola, la mayor de cada tramo (sin queuePeak, API anterior: la del final).
+  const picosCola = tramos.map((p) => p.queuePeak ?? p.queueDepth)
+  const picoCola = picosCola.length ? Math.max(...picosCola) : 0
+  // La cola es una foto del instante: por días no se puede dibujar.
+  const colaPorTramos =
+    (serie.data?.bucketMinutes ?? (serie.data?.bucket === "hour" ? 60 : 1440)) <
+    1440
+
   return (
-    <Panel>
+    <Panel className="@container">
       <div className="flex flex-wrap items-end gap-2 border-b pb-3">
         <CampoFiltro etiqueta="Periodo">
           <Select
@@ -280,32 +431,22 @@ export default function Dashboard() {
             : `Actualizado ${fechaHora(datos.generatedAtUtc).slice(11)}`}
         </span>
       </div>
+      <SinActualizar consultas={[resumen, serie]} />
 
-      <Seccion
-        titulo="Estado actual de la operación"
-        meta={
-          criticas > 0 ? (
-            <Etiqueta tono="error">
-              {criticas === 1
-                ? "1 tienda crítica"
-                : `${criticas} tiendas críticas`}
-            </Etiqueta>
-          ) : enAviso > 0 ? (
-            <Etiqueta tono="aviso">
-              {enAviso === 1
-                ? "1 tienda en aviso"
-                : `${enAviso} tiendas en aviso`}
-            </Etiqueta>
-          ) : (
-            <Etiqueta tono="ok">Operación normal</Etiqueta>
-          )
-        }
-      >
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <EstadoGeneral tono={estado} detalle={detalleEstado} />
+
+      <Seccion titulo="Estado actual de la operación">
+        <Cifras>
           <Cifra
             etiqueta="En cola"
             valor={num(k.queueCurrent)}
-            nota="trabajos esperando"
+            nota={
+              colaPorTramos && picoCola > 0
+                ? `máx. ${num(picoCola)} en el periodo`
+                : "trabajos esperando"
+            }
+            color="var(--chart-3)"
+            tendencia={colaPorTramos ? picosCola : undefined}
           />
           <Cifra
             etiqueta="Sin reenviar"
@@ -332,7 +473,7 @@ export default function Dashboard() {
             valor={num(sinImpresora)}
             nota="trabajos sin asignar"
           />
-        </div>
+        </Cifras>
       </Seccion>
 
       <Seccion
@@ -374,19 +515,49 @@ export default function Dashboard() {
             : "sin trabajos recibidos en el periodo"
         }
       >
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Cifra etiqueta="Recibidos" valor={num(k.received)} />
-          <Cifra etiqueta="Impresos" valor={num(k.printed)} />
+        <Cifras>
+          <Cifra
+            etiqueta="Recibidos"
+            valor={num(k.received)}
+            tendencia={de("received")}
+          />
+          <Cifra
+            etiqueta="Impresos"
+            valor={num(k.printed)}
+            tendencia={de("printed")}
+            color="var(--success)"
+          />
           <Cifra
             etiqueta="Fallidos"
             valor={num(k.failed)}
             alerta={k.failed > 0}
+            tendencia={de("failed")}
+            color="var(--destructive)"
           />
           <Cifra
             etiqueta="Tasa de éxito"
             valor={tasa === null ? "—" : `${tasa} %`}
           />
-        </div>
+          {/* Reimpresiones de lo que ya había salido: el control de que los
+              duplicados no se disparen (sin dato con una API anterior). */}
+          {k.reprints !== undefined && (
+            <Cifra
+              etiqueta="Reimpresiones"
+              valor={num(k.reprints)}
+              nota={
+                verReimpresiones ? "ver el registro" : "copias de lo ya impreso"
+              }
+              onClick={
+                verReimpresiones
+                  ? // La misma pestaña que el menú, sin clave: con el periodo y
+                    // la tienda en la clave abría otra «Reimpresiones» igual
+                    // (decisión del usuario, 27/10/2026).
+                    () => abrir("impresionControl.reimpresiones" as IdPanel)
+                  : undefined
+              }
+            />
+          )}
+        </Cifras>
         {serie.data && serie.data.points.length > 1 && (
           <Grafica
             serie={serie.data}

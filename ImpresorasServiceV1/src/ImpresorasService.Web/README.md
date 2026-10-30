@@ -47,6 +47,8 @@ Cambios sobre la copia (lo único que hay que conservar al actualizarla):
   (decisión del 23/10/2026). Al integrar, el ERP lo añade a su `GrupoMenu`.
 - `components/data-table.tsx`: prop `getRowId`, para que la selección vaya por fila y no por
   posición (la cola selecciona trabajos y se refresca sola). Sirve también al ERP: proponérselo.
+- `components/ui/{chart,card}.tsx` y `recharts`: gráficas de shadcn/ui (`npx shadcn add chart`),
+  añadidas a la vez aquí y en el ERP el 27/10/2026. Toda gráfica nueva se hace con ellas.
 
 Para actualizar, se vuelve a copiar desde el ERP, se reaplican esos cambios y se anota
 aquí el commit nuevo.

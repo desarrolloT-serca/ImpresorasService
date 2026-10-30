@@ -1,4 +1,11 @@
 import { useState, type ComponentType } from "react"
+import {
+  FlaskConicalIcon,
+  GaugeIcon,
+  RouteIcon,
+  SendIcon,
+  type LucideIcon,
+} from "lucide-react"
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { PropsPanel } from "@/workspace/modulo"
@@ -14,12 +21,23 @@ import Umbrales from "./Umbrales"
 const SECCIONES: {
   id: string
   nombre: string
+  Icono: LucideIcon
   C: ComponentType<PropsPanel>
 }[] = [
-  { id: "reglas", nombre: "Reglas de enrutado", C: Reglas },
-  { id: "umbrales", nombre: "Umbrales de salud", C: Umbrales },
-  { id: "telegram", nombre: "Alertas por Telegram", C: Telegram },
-  { id: "pruebas", nombre: "Pruebas", C: Pruebas },
+  { id: "reglas", nombre: "Reglas de enrutado", Icono: RouteIcon, C: Reglas },
+  {
+    id: "umbrales",
+    nombre: "Umbrales de salud",
+    Icono: GaugeIcon,
+    C: Umbrales,
+  },
+  {
+    id: "telegram",
+    nombre: "Alertas por Telegram",
+    Icono: SendIcon,
+    C: Telegram,
+  },
+  { id: "pruebas", nombre: "Pruebas", Icono: FlaskConicalIcon, C: Pruebas },
 ]
 
 export default function ReglasYAvisos({ clave }: PropsPanel) {
@@ -35,12 +53,14 @@ export default function ReglasYAvisos({ clave }: PropsPanel) {
       onValueChange={setSeccion}
       className="h-full min-h-0 gap-0"
     >
-      {/* El subrayado de la sección activa cae sobre la línea de abajo. */}
-      <div className="border-b px-4 pt-2">
-        <TabsList variant="line" aria-label="Sección">
-          {SECCIONES.map((s) => (
-            <TabsTrigger key={s.id} value={s.id} className="px-2.5">
-              {s.nombre}
+      {/* Pestañas en cápsula, como las del Extracto contable del ERP
+          (decisión del usuario, 27/10/2026: el subrayado no parecía un menú). */}
+      <div className="border-b px-4 py-2">
+        <TabsList aria-label="Sección">
+          {SECCIONES.map(({ id, nombre, Icono }) => (
+            <TabsTrigger key={id} value={id} className="px-3">
+              <Icono />
+              {nombre}
             </TabsTrigger>
           ))}
         </TabsList>

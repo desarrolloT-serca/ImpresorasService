@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import type { ColumnDef } from "@tanstack/react-table"
-import { PlusIcon } from "lucide-react"
+import { PencilIcon, PlusIcon, Trash2Icon } from "lucide-react"
 import { toast } from "sonner"
 import { z } from "zod"
 import { DatosRegla, type ReglaEnrutado, type Tienda } from "@serca/contratos"
@@ -8,7 +8,6 @@ import { DatosRegla, type ReglaEnrutado, type Tienda } from "@serca/contratos"
 import { DataTable } from "@/components/data-table"
 import { Panel } from "@/components/ficha"
 import { CampoFiltro } from "@/components/filtro-lista"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
@@ -29,7 +28,8 @@ import {
   useReglas,
   useTiendas,
 } from "./api"
-import { CLASE_TONO, nombreTienda } from "./formato"
+import { EsquemaReglas, TarjetaReglas } from "./EsquemaReglas"
+import { agrupar, condicion, nombreTienda, porQueNo } from "./formato"
 import { Campo, DialogoFormulario } from "./formulario"
 
 const TODAS = "todas"
@@ -40,9 +40,14 @@ const nombreDe = (storeId: number | null, tiendas: readonly Tienda[]) =>
 // Reglas de enrutado (reglas/index.blade.php del PHP): a qué impresora va
 // cada trabajo según tienda, tipo de documento y canal. La tienda se elige en
 // un selector, como en Impresoras; «Globales» son las que valen para todas.
+// La tabla, a la izquierda, y su esquema con el simulador, a la derecha
+// (decisión del usuario, 27/10/2026): la tabla sola dejaba media pantalla
+// vacía. Siempre una al lado de la otra; solo con el panel por debajo de
+// 48rem (pantalla partida) van una encima de la otra.
 export default function Reglas({ clave }: PropsPanel) {
   const reglas = useReglas()
   const tiendas = useTiendas().data ?? []
+  const impresoras = useImpresoras().data ?? []
   const borrar = useBorrarRegla()
   // Abierta desde el dashboard, la clave trae la tienda: «tienda=12».
   const [tienda, setTienda] = useState(
@@ -50,14 +55,31 @@ export default function Reglas({ clave }: PropsPanel) {
       new URLSearchParams(clave).get("tienda")?.match(/^\d{1,9}$/)?.[0] ?? TODAS
   )
   const [editando, setEditando] = useState<ReglaEnrutado | "nueva">()
+  // La regla marcada en la tabla o en el esquema: se resalta en los dos.
+  const [elegida, setElegida] = useState<number>()
   const [reinicio, setReinicio] = useState(0)
-  useEsc(() => setReinicio((n) => n + 1))
+  useEsc(() => {
+    setReinicio((n) => n + 1)
+    setElegida(undefined)
+  })
 
   const lista = reglas.data ?? []
   const visibles =
     tienda === TODAS
       ? lista
       : lista.filter((r) => String(r.storeId ?? GLOBAL) === tienda)
+  // En el esquema de una tienda van también las globales: son su último
+  // recurso.
+  const grupos = agrupar(
+    tienda === TODAS || tienda === GLOBAL
+      ? visibles
+      : [...visibles, ...lista.filter((r) => r.storeId === null)]
+  )
+  // La tabla, en el mismo orden y con el mismo número que el esquema.
+  const filas = agrupar(visibles).flatMap((g) => g.reglas)
+  const numero = new Map(
+    grupos.flatMap((g) => g.reglas.map((r, i) => [r.ruleId, i + 1] as const))
+  )
   const items = [
     { value: TODAS, label: "Todas" },
     { value: GLOBAL, label: "Globales" },
@@ -76,7 +98,7 @@ export default function Reglas({ clave }: PropsPanel) {
             {
               id: "tienda",
               header: "Tienda",
-              size: 170,
+              size: 104,
               accessorFn: (r: ReglaEnrutado) => nombreDe(r.storeId, tiendas),
               cell: ({ getValue }) => (
                 <span className="block truncate">{getValue<string>()}</span>
@@ -85,11 +107,28 @@ export default function Reglas({ clave }: PropsPanel) {
           ]
         : []),
       {
+        id: "condicion",
+        header: "Documento y canal",
+        size: 0,
+        accessorFn: (r) => `${r.documentType ?? ""} ${r.channel ?? ""}`,
+        // El número, el mismo que en el esquema: orden en que se prueba.
+        cell: ({ row: { original: r } }) => (
+          <span className="block truncate" title={condicion(r)}>
+            <span className="mr-1.5 font-mono text-xs text-muted-foreground">
+              #{numero.get(r.ruleId)}
+            </span>
+            {condicion(r)}
+          </span>
+        ),
+      },
+      {
         id: "prioridad",
         header: () => (
-          <span className="tracking-normal normal-case">Prioridad</span>
+          <span className="tracking-normal normal-case" title="Prioridad">
+            Prio.
+          </span>
         ),
-        size: 90,
+        size: 60,
         accessorKey: "priority",
         meta: { num: true },
         cell: ({ row: { original: r } }) => (
@@ -97,67 +136,58 @@ export default function Reglas({ clave }: PropsPanel) {
         ),
       },
       {
-        id: "tipo",
-        header: "Tipo de documento",
-        size: 160,
-        accessorFn: (r) => r.documentType ?? "",
-        cell: ({ row: { original: r } }) =>
-          r.documentType ?? (
-            <span className="text-muted-foreground">Cualquiera</span>
-          ),
-      },
-      {
-        id: "canal",
-        header: "Canal",
-        size: 130,
-        accessorFn: (r) => r.channel ?? "",
-        cell: ({ row: { original: r } }) =>
-          r.channel ?? (
-            <span className="text-muted-foreground">Cualquiera</span>
-          ),
-      },
-      {
         id: "impresora",
         header: "Impresora",
-        size: 0,
+        size: 124,
         accessorFn: (r) => r.printer?.printerName ?? `Impresora ${r.printerId}`,
-        cell: ({ getValue }) => (
-          <span className="block truncate">{getValue<string>()}</span>
-        ),
-      },
-      {
-        id: "activa",
-        header: "Activa",
-        size: 80,
-        cell: ({ row: { original: r } }) => (
-          <Badge
-            variant="outline"
-            className={cn(
-              "border-transparent",
-              CLASE_TONO[r.isActive ? "ok" : "neutro"]
-            )}
-          >
-            {r.isActive ? "Sí" : "No"}
-          </Badge>
-        ),
+        cell: ({ row: { original: r }, getValue }) => {
+          const motivo = porQueNo(r, impresoras)
+          return (
+            <span className="block truncate" title={motivo ?? undefined}>
+              {getValue<string>()}
+              {motivo && (
+                <span className="text-xs text-muted-foreground">
+                  {" "}
+                  · {r.isActive ? "no se aplica" : "inactiva"}
+                </span>
+              )}
+            </span>
+          )
+        },
       },
       {
         id: "acciones",
         header: "",
-        size: 150,
+        size: 64,
         enableSorting: false,
         cell: ({ row: { original: r } }) => (
           <div className="flex justify-end gap-1">
-            <Button size="xs" variant="outline" onClick={() => setEditando(r)}>
-              Editar
+            <Button
+              size="icon-xs"
+              variant="ghost"
+              aria-label="Editar regla"
+              title="Editar"
+              onClick={(e) => {
+                e.stopPropagation()
+                setEditando(r)
+              }}
+            >
+              <PencilIcon />
             </Button>
             <Button
-              size="xs"
-              variant="destructive"
-              onClick={() =>
-                window.confirm(
-                  `Se eliminará la regla de prioridad ${r.priority} (${r.documentType ?? "cualquier tipo"}, ${r.channel ?? "cualquier canal"}).`
-                ) &&
+              size="icon-xs"
+              variant="ghost"
+              className="text-destructive hover:text-destructive"
+              aria-label="Eliminar regla"
+              title="Eliminar"
+              onClick={(e) => {
+                e.stopPropagation()
+                if (
+                  !window.confirm(
+                    `Se eliminará la regla de prioridad ${r.priority} (${r.documentType ?? "cualquier tipo"}, ${r.channel ?? "cualquier canal"}).`
+                  )
+                )
+                  return
                 borrar.mutate(r.ruleId, {
                   onSuccess: () => toast.success("Regla eliminada"),
                   onError: (e) =>
@@ -167,60 +197,93 @@ export default function Reglas({ clave }: PropsPanel) {
                         : "No se pudo eliminar"
                     ),
                 })
-              }
+              }}
             >
-              Eliminar
+              <Trash2Icon />
             </Button>
           </div>
         ),
       },
     ],
-    // borrar.mutate es estable.
+    // borrar.mutate es estable; numero sale de las reglas y del filtro.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tienda, tiendas]
+    [tienda, tiendas, impresoras, reglas.data]
   )
 
   return (
-    <Panel className="[&_table]:min-w-[56rem] [&_table]:table-fixed">
-      <DataTable
-        key={reinicio}
-        columns={columnas}
-        data={visibles}
-        paginar={false}
-        buscar="Tipo, canal o impresora"
-        buscarEtiqueta="Buscar regla"
-        emptyContent={reglas.isPending ? undefined : "No hay reglas."}
-        toolbar={
-          <>
-            <CampoFiltro etiqueta="Tienda">
-              <Select
-                items={items}
-                value={tienda}
-                onValueChange={(v) => setTienda(v as string)}
-              >
-                <SelectTrigger className="w-64">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {items.map((i) => (
-                    <SelectItem key={i.value} value={i.value}>
-                      {i.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </CampoFiltro>
-            <span className="ml-auto self-center text-xs text-muted-foreground">
-              Gana la regla más específica; entre iguales, la de menor
-              prioridad.
-            </span>
-            <Button size="sm" onClick={() => setEditando("nueva")}>
-              <PlusIcon data-icon="inline-start" />
-              Nueva regla
-            </Button>
-          </>
-        }
-      />
+    <Panel className="@container">
+      <div className="grid min-h-0 flex-1 gap-4 @3xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+        <TarjetaReglas
+          titulo="Reglas"
+          descripcion="Gana la más específica; entre iguales, la de menor prioridad."
+          meta={filas.length === 1 ? "1 regla" : `${filas.length} reglas`}
+        >
+          <div className="flex min-h-0 flex-1 flex-col [&_table]:table-fixed">
+            <DataTable
+              key={reinicio}
+              columns={columnas}
+              data={filas}
+              getRowId={(r) => String(r.ruleId)}
+              paginar={false}
+              buscar="Tipo, canal o impresora"
+              buscarEtiqueta="Buscar regla"
+              buscarClassName="w-40"
+              onRowClick={(r) =>
+                setElegida((e) => (e === r.ruleId ? undefined : r.ruleId))
+              }
+              rowClassName={(r) =>
+                cn(
+                  r.ruleId === elegida && "bg-primary/5",
+                  porQueNo(r, impresoras) && "text-muted-foreground"
+                )
+              }
+              emptyContent={reglas.isPending ? undefined : "No hay reglas."}
+              toolbar={
+                <>
+                  <CampoFiltro etiqueta="Tienda">
+                    <Select
+                      items={items}
+                      value={tienda}
+                      onValueChange={(v) => {
+                        setTienda(v as string)
+                        setElegida(undefined)
+                      }}
+                    >
+                      <SelectTrigger className="w-44">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {items.map((i) => (
+                          <SelectItem key={i.value} value={i.value}>
+                            {i.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </CampoFiltro>
+                  <Button
+                    className="ml-auto"
+                    onClick={() => setEditando("nueva")}
+                  >
+                    <PlusIcon data-icon="inline-start" />
+                    Nueva regla
+                  </Button>
+                </>
+              }
+            />
+          </div>
+        </TarjetaReglas>
+        <EsquemaReglas
+          grupos={grupos}
+          tiendas={tiendas}
+          impresoras={impresoras}
+          tiendaFija={
+            tienda === TODAS || tienda === GLOBAL ? undefined : Number(tienda)
+          }
+          elegida={elegida}
+          onElegir={setElegida}
+        />
+      </div>
       {editando && (
         <FormularioRegla
           regla={editando === "nueva" ? undefined : editando}

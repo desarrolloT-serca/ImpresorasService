@@ -1,5 +1,6 @@
 import { lazy } from "react"
 import {
+  CopyIcon,
   LayoutDashboardIcon,
   ListOrderedIcon,
   PrinterIcon,
@@ -10,11 +11,12 @@ import type { ModuloWeb } from "@/workspace/modulo"
 
 // Cola de impresión de las tiendas. Escrito como un módulo del ERP
 // (apps/web/src/modules): para integrarlo se copia esta carpeta y se registran
-// sus dos manifiestos en su workspace/registro.ts. No importa nada de src/app.
-// Todas sus pantallas van en el grupo «Impresión» del menú. Son dos
+// sus tres manifiestos en su workspace/registro.ts. No importa nada de src/app.
+// Todas sus pantallas van en el grupo «Impresión» del menú. Son tres
 // manifiestos porque cada uno da un solo permiso: la operación, a quien lee;
-// «Reglas y avisos» (reglas, umbrales, Telegram y pruebas en una sola
-// pestaña), solo a quien administra. El menú los junta por grupo.
+// el registro de reimpresiones, a quien puede reimprimir; «Reglas y avisos»
+// (reglas, umbrales, Telegram y pruebas en una sola pestaña), solo a quien
+// administra. El menú los junta por grupo.
 // ponytail: sin programa del ERP antiguo hasta el día de integrarlo (su
 // catálogo PANTALLAS aún no admite pantallas nuevas).
 export const impresion: ModuloWeb = {
@@ -42,6 +44,21 @@ export const impresion: ModuloWeb = {
     { grupo: "Impresión", panel: "cola" },
     { grupo: "Impresión", panel: "impresoras" },
   ],
+}
+
+// Registro de reimpresiones: quién reimprimió qué y por qué. Para quien puede
+// reimprimir (jefes de tienda) y administración, cada uno con su tienda.
+export const impresionControl: ModuloWeb = {
+  id: "impresionControl",
+  permiso: P.reimprimir,
+  paneles: {
+    reimpresiones: {
+      titulo: "Reimpresiones",
+      icon: CopyIcon,
+      componente: lazy(() => import("./Reimpresiones")),
+    },
+  },
+  menu: [{ grupo: "Impresión", panel: "reimpresiones" }],
 }
 
 export const impresionConfiguracion: ModuloWeb = {

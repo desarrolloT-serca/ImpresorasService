@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+import { entero, fechaFiltro, lista } from "./comun.js"
+
 // Contratos del módulo de impresión: lo que devuelve la API .NET, tal cual
 // (camelCase de ASP.NET). Al integrar el módulo en el ERP pasan a
 // packages/contratos y su pasarela los valida en los dos extremos.
@@ -14,6 +16,10 @@ export const PERMISOS_IMPRESION = {
   // Ver todas las tiendas va aparte del rol: el call center será empleado y
   // las verá todas (docs/PLAN.md, B7).
   todasLasTiendas: "impresion.tiendas.todas",
+  // Con un perfil de tienda, que es de todos los operadores de esa tienda,
+  // reimprimir pide el código y la contraseña de quien lo hace: si no, no se
+  // sabría qué persona fue (decisión del usuario, 27/10/2026).
+  identificarse: "impresion.reimprimir.identificarse",
 } as const
 
 // PrintJobStatus de la API.
@@ -42,21 +48,85 @@ export const TrabajoCola = z.object({
   attemptCount: z.number().int(),
   lastErrorCode: z.string().nullable(),
   lastErrorMessage: z.string().nullable(),
+  // El código, para la gente, y qué hacer (ErroresTrabajo en la API). Opcionales:
+  // las API anteriores al 26/10/2026 no los mandan.
+  lastErrorText: z.string().nullable().optional(),
+  lastErrorHint: z.string().nullable().optional(),
   createdAtUtc: z.string(),
   updatedAtUtc: z.string(),
-  // Una reimpresión reutiliza el trabajo: createdAtUtc es cuándo llegó y
-  // sentAtUtc, cuándo salió hacia la impresora la última vez. Opcionales: las
-  // API anteriores al 26/10/2026 no los mandan.
+  // Reintentar o reimprimir reutiliza el trabajo: createdAtUtc es cuándo llegó
+  // y sentAtUtc, cuándo salió después del último reintento (null si aún no).
+  // retries: reintentos tras un error (no había salido); reprints:
+  // reimpresiones de algo sin confirmar (puede ser un duplicado). Opcionales:
+  // las API anteriores al 26/10/2026 no los mandan.
   sentAtUtc: z.string().nullish(),
+  // Última vez que se volvió a mandar (reintento o reimpresión); la cola ordena
+  // por ella o, sin ella, por createdAtUtc. Opcional: API anterior al 27/10/2026.
+  lastRequeuedAtUtc: z.string().nullish(),
+  retries: z.number().int().optional(),
   reprints: z.number().int().optional(),
 })
 export type TrabajoCola = z.infer<typeof TrabajoCola>
 
-// POST /api/printjobs/{id}/route y /cancel. Reintentar sin regla aplicable
-// devuelve 200 con status ErrorFinal y su código.
+// POST /api/printjobs/{id}/reprint: reimprimir lo que ya salió (impreso o sin
+// confirmar). Motivo obligatorio, las claves de RoutingService.ReprintReasons;
+// con «Otro», la nota también.
+export const MOTIVOS_REIMPRESION = {
+  MAL_IMPRESO: "Mal impreso",
+  PERDIDO: "Perdido",
+  DANADO: "Dañado o mojado",
+  ATASCO: "Atasco o sin papel",
+  OTRO: "Otro",
+} as const
+export type MotivoReimpresion = keyof typeof MOTIVOS_REIMPRESION
+export const MAX_NOTA_REIMPRESION = 500
+// Con perfil de tienda (PERMISOS_IMPRESION.identificarse), quién reimprime: la
+// pasarela del ERP lo comprueba y lo quita antes de pasarlo a la API .NET.
+export type PeticionReimpresion = {
+  reason: MotivoReimpresion
+  note?: string
+  operador?: string
+  contrasena?: string
+}
+
+// GET /api/printjobs/reprints: el registro, lo más reciente primero. Cada uno
+// ve su tienda; quien ve todas, todas (o la del filtro).
+export const Reimpresion = z.object({
+  eventId: z.number().int(),
+  jobId: z.string(),
+  externalJobId: z.string(),
+  documentType: z.string(),
+  storeId: z.number().int(),
+  occurredAtUtc: z.string(),
+  actor: z.string().nullable(),
+  previousStatus: EstadoTrabajo.nullable(),
+  reason: z.string().nullable(),
+  reasonText: z.string().nullable(),
+  note: z.string().nullable(),
+  printerName: z.string().nullable(),
+})
+export type Reimpresion = z.infer<typeof Reimpresion>
+// Con page: una página (25, 50 o 100) y cuántas hay de cada motivo en el
+// periodo, antes de filtrar por motivo ("" = sin motivo). WEB-2, 27/10/2026.
+export const PaginaReimpresiones = z.object({
+  value: z.array(Reimpresion),
+  count: z.number().int(),
+  page: z.number().int(),
+  pageSize: z.number().int(),
+  byReason: z.record(z.string(), z.number().int()),
+})
+export type PaginaReimpresiones = z.infer<typeof PaginaReimpresiones>
+
+// POST /api/printjobs/{id}/route, /reprint y /cancel. Reintentar sin regla
+// aplicable devuelve 200 con status ErrorFinal y su código.
 export const ResultadoAccion = z.object({
   status: z.string(),
   errorCode: z.string().nullish(),
+  // Al cancelar: qué pasó en la cola de la impresora (CancelacionEnImpresora
+  // o «SinNumero») y el texto para quien lo pidió. Sin ellos, no había
+  // llegado a la impresora.
+  printerCancel: z.string().nullish(),
+  printerMessage: z.string().nullish(),
 })
 
 // GET /api/printjobs?includeTotal=true
@@ -79,7 +149,29 @@ export type ConsultaCola = {
   tienda?: number
   estado?: number
   vista?: VistaCola
+  // Búsqueda avanzada (27/10/2026): días «AAAA-MM-DD» de la zona de negocio,
+  // incluidos los dos, sobre la hora por la que se ordena; impresoras y tipos,
+  // varios a la vez. Vacío = sin filtrar.
+  desde?: string
+  hasta?: string
+  impresoras?: number[]
+  tipos?: string[]
 }
+
+// Los de la búsqueda avanzada (botón de arriba a la derecha): se usan poco y
+// no van en la barra (decisión del usuario, 27/10/2026).
+export const CriteriosAvanzadosCola = z
+  .object({
+    impresoras: lista(entero(1, 2_147_483_647), 200),
+    tipos: lista(z.string().min(1).max(40), 50),
+    desde: fechaFiltro.optional(),
+    hasta: fechaFiltro.optional(),
+  })
+  .refine((c) => !c.desde || !c.hasta || c.desde <= c.hasta, {
+    message: "no puede ser anterior a la de «desde»",
+    path: ["hasta"],
+  })
+export type CriteriosAvanzadosCola = z.output<typeof CriteriosAvanzadosCola>
 
 export const Tienda = z.object({
   storeId: z.number().int(),
@@ -128,6 +220,15 @@ export const DatosRegla = z.object({
 })
 export type DatosRegla = z.output<typeof DatosRegla>
 
+// POST /api/routing/resolve (solo administración): la regla que ganaría para un
+// trabajo, con la lógica real del RoutingResolver (simulador de la pantalla de
+// reglas). 404 = ninguna: el trabajo quedaría en Error (ROUTE_NOT_FOUND).
+export const ResolucionRegla = z.object({
+  printerId: z.number().int(),
+  ruleId: z.number().int(),
+})
+export type ResolucionRegla = z.infer<typeof ResolucionRegla>
+
 // Umbrales de salud (GET/PUT /api/dashboard/threshold-rules): de 1 a 3 por
 // métrica, crecientes con la severidad. Los usan el dashboard y las alertas
 // de Telegram; la API los valida (ThresholdRuleEngine).
@@ -138,21 +239,45 @@ export const Umbral = z.object({
   severity: SeveridadUmbral,
 })
 export type Umbral = z.infer<typeof Umbral>
+// Horario de tienda común (hora de negocio) en el que cuenta «sin recibir»:
+// días ISO (1 = lunes … 7 = domingo) y "HH:mm".
+export const HorarioTienda = z.object({
+  dias: z.array(z.number().int().min(1).max(7)),
+  desde: z.string(),
+  hasta: z.string(),
+})
+export type HorarioTienda = z.infer<typeof HorarioTienda>
 export const ReglasUmbral = z.object({
   queue: z.array(Umbral),
   failed: z.array(Umbral),
   missingHost: z.array(Umbral),
   conn: z.array(Umbral),
+  // Opcionales (27/10/2026): vacías = desactivadas. Con una API anterior no
+  // vienen y quedan así.
+  silent: z.array(Umbral).default([]),
+  reprints: z.array(Umbral).default([]),
+  horario: HorarioTienda.default({
+    dias: [1, 2, 3, 4, 5, 6],
+    desde: "09:00",
+    hasta: "21:00",
+  }),
 })
 export type ReglasUmbral = z.infer<typeof ReglasUmbral>
 
-// Telegram. enabled y el token van en la configuración del servidor
-// (Telegram:Enabled, Telegram:BotToken), no aquí.
+// Telegram. enabled va en la configuración del servidor (Telegram:Enabled).
+// El token se pone en PUT /telegram/token y nunca vuelve: solo de dónde sale
+// (pantalla o Telegram:BotToken del servidor) y sus 4 últimos caracteres.
 export const ConfigTelegram = z.object({
   enabled: z.boolean(),
   minSeverity: z.enum(["warning", "critical"]),
   notifyOnRecovery: z.boolean(),
   checkIntervalMinutes: z.number().int(),
+  // Solo avisar dentro del horario de tienda (el de Umbrales, que viene para
+  // enseñarlo). Opcionales: una API anterior no los manda (27/10/2026).
+  soloEnHorario: z.boolean().optional(),
+  horario: HorarioTienda.optional(),
+  tokenOrigen: z.enum(["pantalla", "servidor"]).nullable().optional(),
+  tokenFinal: z.string().nullable().optional(),
 })
 export type ConfigTelegram = z.infer<typeof ConfigTelegram>
 
@@ -170,6 +295,12 @@ export const DatosChat = z.object({
   chatId: z
     .string()
     .trim()
+    // Con letras suele ser el código de un enlace de invitación (t.me/+…),
+    // que no sirve: Telegram pide el número del chat.
+    .refine(
+      (v) => !/[a-z]/i.test(v),
+      "Eso parece un enlace de invitación, no el número del chat: añade el bot al grupo y saca su número (empieza por -100)"
+    )
     .regex(
       /^-?[1-9]\d{0,15}$/,
       "Número de chat de Telegram (los grupos son negativos)"
@@ -182,6 +313,34 @@ export const DatosChat = z.object({
     .transform((v) => v || null),
   storeId: z.number().int().nullable(),
 })
+
+// PUT /api/telegram/chats/{chatId}: descripción, tienda y si está activo
+// (pausarlo sin borrarlo). El número del chat no cambia.
+export const EdicionChat = z.object({
+  description: DatosChat.shape.description,
+  storeId: z.number().int().nullable(),
+  isActive: z.boolean(),
+})
+export type EdicionChat = z.output<typeof EdicionChat>
+
+// GET /api/telegram/preview: el aviso tal como lo manda el Worker (HTML de
+// Telegram: b, i y code), con una tienda de ejemplo.
+export const VistaPreviaTelegram = z.object({
+  alerta: z.string(),
+  recuperada: z.string(),
+})
+
+// GET /api/telegram/history: avisos mandados (o que no llegaron), lo más
+// reciente primero.
+export const AvisoTelegram = z.object({
+  occurredAtUtc: z.string(),
+  storeId: z.number().int().nullable(),
+  storeName: z.string().nullable(),
+  health: z.string(),
+  reason: z.string().nullable(),
+  delivered: z.boolean(),
+})
+export type AvisoTelegram = z.infer<typeof AvisoTelegram>
 
 export const PruebaTelegram = z.object({
   results: z.array(z.object({ chatId: z.number(), ok: z.boolean() })),
@@ -210,6 +369,10 @@ export const TiendaDashboard = z.object({
   unassignedQueueCurrent: z.number().int(),
   oldestQueuedAtUtc: z.string().nullable(),
   oldestFailedWithoutRetryAtUtc: z.string().nullable(),
+  // Umbrales opcionales (27/10/2026; no vienen con una API anterior): minutos
+  // sin recibir en horario de tienda (null fuera de él) y reimpresiones de hoy.
+  silentMinutes: z.number().int().nullable().optional(),
+  reprintsToday: z.number().int().optional(),
   // Impresoras activas de la tienda; sus datos (nombre, conexión) van en /printers.
   printers: z.array(
     z.object({
@@ -239,6 +402,9 @@ export const ResumenDashboard = z.object({
     received: z.number().int(),
     printed: z.number().int(),
     failed: z.number().int(),
+    // Reimpresiones de lo que ya había salido, del periodo. Opcional: las API
+    // anteriores al 26/10/2026 no lo mandan.
+    reprints: z.number().int().optional(),
     queueCurrent: z.number().int(),
     failedWithoutRetryCurrent: z.number().int(),
     activePrinters: z.number().int(),
@@ -251,7 +417,8 @@ export type ResumenDashboard = z.infer<typeof ResumenDashboard>
 
 // Tramos de la franja pedida (bucketMinutes; 0 = automática) o, sin pedirla,
 // por hora hoy y por día en 7 y 30 días. queueDepth es la cola al final de cada
-// tramo, reconstruida desde la de ahora.
+// tramo, reconstruida desde la de ahora; queuePeak, la mayor que hubo dentro
+// (un trabajo espera segundos: al cerrar el tramo la cola casi siempre es 0).
 export const SerieDashboard = z.object({
   bucket: z.enum(["hour", "day"]),
   // Opcional: las API anteriores al 26/10/2026 no lo mandan (solo bucket).
@@ -263,6 +430,19 @@ export const SerieDashboard = z.object({
       printed: z.number().int(),
       failed: z.number().int(),
       queueDepth: z.number().int(),
+      // Opcional: las API anteriores al 27/10/2026 no lo mandan.
+      queuePeak: z.number().int().optional(),
+      // Lo que llegó en el tramo por su estado de ahora: cada trabajo una vez; un
+      // fallo sin resolver sigue ahí hasta que se resuelve. Opcional: API anterior
+      // al 27/10/2026.
+      outcome: z
+        .object({
+          printed: z.number().int(),
+          failed: z.number().int(),
+          cancelled: z.number().int(),
+          active: z.number().int(),
+        })
+        .optional(),
     })
   ),
 })
@@ -308,6 +488,9 @@ export const Impresora = z.object({
   lastConnectionCheckAtUtc: z.string().nullable(),
   lastConnectionTransport: z.string().nullable(),
   lastConnectionError: z.string().nullable(),
+  // Desde cuándo falla sin interrupción (sin conexión o sin host): el «Desde»
+  // de las incidencias. Opcional: API anterior al 27/10/2026.
+  connectionFailingSinceUtc: z.string().nullable().optional(),
   connectivityStatus: z.string(),
   connectivityLabel: z.string(),
   connectivitySeverity: SeveridadConexion,
@@ -315,6 +498,14 @@ export const Impresora = z.object({
   ippSupported: z.boolean().nullable(),
 })
 export type Impresora = z.infer<typeof Impresora>
+
+// Como la API (PrintersController.HostValido): se imprime por ipp://{host}:631.
+// Lo que solo tiene cifras y puntos ha de ser una IPv4 entera.
+const IPV4 = /^((25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(25[0-5]|2[0-4]\d|1?\d?\d)$/
+const NOMBRE_HOST =
+  /^[a-z\d]([a-z\d-]*[a-z\d])?(\.[a-z\d]([a-z\d-]*[a-z\d])?)*$/i
+const hostValido = (h: string) =>
+  (/^[\d.]+$/.test(h) ? IPV4 : NOMBRE_HOST).test(h)
 
 // Alta y edición de impresoras: CreatePrinterRequest y UpdatePrinterRequest,
 // con los mismos límites que la API. Se imprime primero por IP (host) y la
@@ -335,6 +526,10 @@ export const DatosImpresora = z
       .string()
       .trim()
       .max(255, "Máximo 255 caracteres")
+      .refine(
+        (h) => !h || hostValido(h),
+        "Solo la IP o el nombre, sin http://, puerto ni ruta"
+      )
       .transform((h) => h || null),
     storeId: z.number({ error: "Elige una tienda" }).int(),
     isActive: z.boolean(),

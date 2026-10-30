@@ -1,9 +1,13 @@
 import {
   ESTADOS_TRABAJO as E,
+  MAX_NOTA_REIMPRESION,
   type Impresora,
+  type MotivoReimpresion,
+  type ReglaEnrutado,
   type Salud,
   type SeveridadConexion,
   type Tienda,
+  type TrabajoCola,
   type VentanaDashboard,
 } from "@serca/contratos"
 
@@ -39,11 +43,39 @@ export const CLASE_TONO: Record<Tono, string> = {
   neutro: "border-border text-muted-foreground",
 }
 
+// Punto de color (semáforo) de cada tono: selector de tienda, esquema de reglas.
+export const COLOR_PUNTO: Record<Tono, string> = {
+  ok: "bg-success",
+  aviso: "bg-warning",
+  error: "bg-destructive",
+  info: "bg-secondary-foreground",
+  neutro: "bg-muted-foreground/40",
+}
+
 // Reintentar es seguro si el trabajo no ha salido (pendiente o error). Sin
 // confirmar: el sistema no sabe si salió, reimprimir puede duplicarlo.
 // Cancelar, en esos y en bloqueado (como el PHP).
 export const puedeReintentar = (s: number) => s === E.pendiente || s === E.error
-export const puedeReimprimir = (s: number) => s === E.sinConfirmar
+// Reimprimir es lo que ya salió, con o sin confirmación (mal impreso, perdido,
+// mojado...): puede duplicarlo, así que va con aviso y motivo. Lo que acaba de
+// salir y espera confirmación (aceptado), no.
+export const puedeReimprimir = (s: number) =>
+  s === E.sinConfirmar || s === E.impreso
+
+// Qué falta para poder reimprimir, o null: motivo; con «Otro», explicarlo; y
+// aceptar que puede salir duplicado. Mismas reglas que RoutingService.
+export function faltaParaReimprimir(d: {
+  motivo: MotivoReimpresion | ""
+  nota: string
+  entiendo: boolean
+}) {
+  if (!d.motivo) return "Elige el motivo"
+  if (d.motivo === "OTRO" && !d.nota.trim()) return "Explica el motivo"
+  if (d.nota.trim().length > MAX_NOTA_REIMPRESION)
+    return `La nota admite como mucho ${MAX_NOTA_REIMPRESION} caracteres`
+  if (!d.entiendo) return "Confirma que entiendes que puede salir duplicado"
+  return null
+}
 export const puedeCancelar = (s: number) =>
   puedeReintentar(s) || s === E.sinConfirmar || s === E.bloqueado
 
@@ -102,6 +134,17 @@ export const franjasDe = (ventana: VentanaDashboard) =>
         Math.ceil(MINUTOS_PERIODO[ventana] / f) <= 500)
   )
 
+// Quién hizo una acción, para leerlo. La API lo guarda como «ERP <código>
+// <nombre>» si entró con el pase del ERP (PaseErp.cs: el prefijo lo distingue
+// de un usuario del PHP en la base) y como su login si entró por el PHP. En
+// pantalla, código de operador y nombre por separado; el login va de nombre.
+export function autor(actor: string | null) {
+  const erp = actor ? /^ERP (\S+)(?: (.+))?$/.exec(actor) : null
+  return erp
+    ? { codigo: erp[1], nombre: erp[2] ?? null }
+    : { codigo: null, nombre: actor }
+}
+
 // Lo de hoy, solo la hora; lo de otros días, fecha y hora (decisión del
 // usuario, 26/10/2026). «Hoy» es el de Madrid.
 export const fechaHoraCorta = (iso: string | null, ahora = Date.now()) => {
@@ -111,6 +154,42 @@ export const fechaHoraCorta = (iso: string | null, ahora = Date.now()) => {
     fechaHora(new Date(ahora).toISOString()).slice(0, 10)
     ? completa.slice(11)
     : completa
+}
+
+// Hora de un trabajo en la cola. Reintentar o reimprimir reutiliza el trabajo:
+// si ha vuelto a salir, la hora es la de esa salida y lo marca un icono; si aún
+// no, la de cuando se volvió a mandar (la cola ordena por ella), y sin nada de
+// eso, la de llegada. Reintento: venía de un error, no había salido. Reimpresión:
+// venía de «sin confirmar», puede haber salido ya y la copia ser un duplicado
+// (manda sobre el reintento). El detalle va en el title.
+export function horaTrabajo(
+  t: Pick<
+    TrabajoCola,
+    "createdAtUtc" | "sentAtUtc" | "lastRequeuedAtUtc" | "retries" | "reprints"
+  >,
+  ahora = Date.now()
+) {
+  const veces = (n: number) => (n === 1 ? "1 vez" : `${n} veces`)
+  const marca = t.reprints ? "reimpresion" : t.retries ? "reintento" : null
+  const hora = marca
+    ? (t.sentAtUtc ?? t.lastRequeuedAtUtc ?? t.createdAtUtc)
+    : t.createdAtUtc
+  const detalle = [
+    `Llegó ${fechaHora(t.createdAtUtc)}`,
+    t.retries ? `Reintentado tras un error ${veces(t.retries)}` : null,
+    t.reprints ? `Reimpreso ${veces(t.reprints)}: puede estar duplicado` : null,
+    marca &&
+      (t.sentAtUtc
+        ? `Salió de nuevo ${fechaHora(t.sentAtUtc)}`
+        : t.lastRequeuedAtUtc
+          ? `Se volvió a mandar ${fechaHora(t.lastRequeuedAtUtc)}; aún no ha salido`
+          : "Aún no ha vuelto a salir"),
+  ]
+  return {
+    marca,
+    hora: fechaHoraCorta(hora, ahora),
+    detalle: detalle.filter(Boolean).join("\n"),
+  } as const
 }
 
 // Cuánto hace, como el «Desde» del PHP: «ahora mismo», «12 min», «3 h 05 min»,
@@ -159,7 +238,8 @@ export function resumen(impresoras: readonly Impresora[]): {
   if (!impresoras.length) return { tono: "neutro", texto: "Sin impresoras" }
   if (errores) return { tono: "error", texto: `${errores} con error` }
   // Aviso: sin host o sin comprobar.
-  if (avisos) return { tono: "aviso", texto: `${avisos} pendientes` }
+  if (avisos)
+    return { tono: "aviso", texto: plural(avisos, "pendiente", "pendientes") }
   return { tono: "ok", texto: "OK" }
 }
 
@@ -171,6 +251,81 @@ export function escala(maximo: number) {
   return Math.max(paso, Math.ceil(bruto / paso) * paso)
 }
 
+// Orden en que el RoutingResolver prueba las reglas: de 5 (tienda + tipo +
+// canal) a 1 (global sin tipo ni canal); dentro de cada nivel, la de menor
+// prioridad. 0: una global con tipo o canal, que no se aplica nunca.
+export const NIVELES_REGLA = [
+  "No se aplica nunca",
+  "Global",
+  "Solo tienda",
+  "Tienda + canal",
+  "Tienda + tipo",
+  "Tienda + tipo + canal",
+] as const
+
+export function nivelRegla(
+  r: Pick<ReglaEnrutado, "storeId" | "documentType" | "channel">
+) {
+  const tipo = !!r.documentType?.trim()
+  const canal = !!r.channel?.trim()
+  if (r.storeId === null) return tipo || canal ? 0 : 1
+  return tipo && canal ? 5 : tipo ? 4 : canal ? 3 : 2
+}
+
+// Las reglas en el orden en que se prueban: nivel de más a menos y, dentro,
+// prioridad y número (el desempate del RoutingResolver).
+export const enOrden = <R extends ReglaEnrutado>(reglas: readonly R[]) =>
+  [...reglas].sort(
+    (a, b) =>
+      nivelRegla(b) - nivelRegla(a) ||
+      a.priority - b.priority ||
+      a.ruleId - b.ruleId
+  )
+
 // "tcp/9100" → "9100".
 export const puerto = (transporte: string | null) =>
   transporte?.match(/\/(\d+)$/)?.[1] ?? transporte ?? "-"
+
+export type Grupo = { storeId: number | null; reglas: ReglaEnrutado[] }
+
+// Una tienda por grupo (en orden de código) y la global al final, cada uno con
+// sus reglas en el orden en que se prueban. La tabla numera con esto también.
+export function agrupar(reglas: readonly ReglaEnrutado[]): Grupo[] {
+  const tiendas = [...new Set(reglas.map((r) => r.storeId))].sort(
+    (a, b) => (a ?? Infinity) - (b ?? Infinity)
+  )
+  return tiendas.map((storeId) => ({
+    storeId,
+    reglas: enOrden(reglas.filter((r) => r.storeId === storeId)),
+  }))
+}
+
+export const tituloGrupo = (
+  storeId: number | null,
+  tiendas: readonly Tienda[]
+) => (storeId === null ? "Global" : nombreTienda(storeId, tiendas))
+
+export const condicion = (r: ReglaEnrutado) =>
+  `${r.documentType ? (TIPOS_DOCUMENTO[r.documentType] ?? r.documentType) : "Cualquier tipo"} · ${r.channel ?? "cualquier canal"}`
+
+// Por qué una regla no se aplicaría, o null si se aplica.
+export function porQueNo(
+  r: ReglaEnrutado,
+  impresoras: readonly Impresora[],
+  ahora = Date.now()
+) {
+  if (!r.isActive) return "Inactiva"
+  if (nivelRegla(r) === 0) return "Global con tipo o canal: no se aplica nunca"
+  if (impresoras.find((i) => i.printerId === r.printerId)?.isActive === false)
+    return "Su impresora está inactiva"
+  if (
+    Date.parse(r.validFromUtc) > ahora ||
+    (r.validToUtc !== null && Date.parse(r.validToUtc) < ahora)
+  )
+    return "Fuera de vigencia"
+  return null
+}
+
+// «1 trabajo», «2 trabajos» (WEB-14).
+export const plural = (n: number, uno: string, varios: string) =>
+  `${n} ${n === 1 ? uno : varios}`

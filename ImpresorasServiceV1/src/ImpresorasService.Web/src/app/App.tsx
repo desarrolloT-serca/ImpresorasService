@@ -1,11 +1,6 @@
 import * as React from "react"
 import type { DockviewApi } from "dockview-react"
-import {
-  ChevronsUpDownIcon,
-  LogOutIcon,
-  MoonIcon,
-  SunIcon,
-} from "lucide-react"
+import { ChevronsUpDownIcon, LogOutIcon, MoonIcon, SunIcon } from "lucide-react"
 
 import {
   DropdownMenu,
@@ -35,8 +30,10 @@ import {
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { useTheme } from "@/components/theme-provider"
+import { ATAJOS } from "@/core/atajos"
 import { useImpresionPaneles } from "@/core/impresion-paneles"
 import { ROLES, useCerrarSesion, useSesion } from "@/core/sesion"
+import { BusquedaAvanzada } from "@/workspace/BusquedaAvanzada"
 import { Escritorio } from "@/workspace/Escritorio"
 import { WorkspaceCtx, type Abrir, type IdPanel } from "@/workspace/modulo"
 import { PANELES, menu } from "@/workspace/registro"
@@ -54,6 +51,21 @@ export function App() {
   const grupos = menu(sesion.permisos)
   const tienda =
     sesion.storeId === null ? "Todas las tiendas" : `Tienda ${sesion.storeId}`
+
+  // Ctrl+Mayús+F abre la búsqueda avanzada de la pestaña activa, como en el ERP.
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!ATAJOS.busquedaAvanzada(e)) return
+      e.preventDefault()
+      document
+        .querySelector<HTMLButtonElement>(
+          "[data-busqueda-avanzada]:not(:disabled)"
+        )
+        ?.click()
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [])
 
   const abrir = React.useCallback<Abrir>((panel, clave, opts = {}) => {
     const api = apiRef.current
@@ -208,6 +220,9 @@ export function App() {
           <SidebarInset className="min-h-0 overflow-hidden">
             <header className="toolbar-principal flex h-12 shrink-0 items-center gap-2 border-b bg-card px-3">
               <SidebarTrigger />
+              <div className="ml-auto flex items-center gap-2">
+                <BusquedaAvanzada />
+              </div>
             </header>
 
             <Escritorio usuario={sesion.login} onReady={onReady} />

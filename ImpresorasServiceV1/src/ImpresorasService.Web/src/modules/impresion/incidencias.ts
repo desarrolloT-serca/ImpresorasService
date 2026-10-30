@@ -5,8 +5,14 @@ import type {
   TiendaDashboard,
 } from "@serca/contratos"
 import type { IdPanel } from "@/workspace/modulo"
+import { plural } from "./formato"
 
-export type Destino = { etiqueta: string; panel: IdPanel; clave: string; titulo: string }
+export type Destino = {
+  etiqueta: string
+  panel: IdPanel
+  clave: string
+  titulo: string
+}
 
 export type Incidencia = {
   storeId: number
@@ -27,17 +33,21 @@ export const RANGO_SALUD: Record<Salud, number> = {
   healthy: 3,
 }
 
-const plural = (n: number, uno: string, varios: string) =>
-  `${n} ${n === 1 ? uno : varios}`
-
 // Abrir la cola o las impresoras ya filtradas, en su propia pestaña.
-const cola = (t: TiendaDashboard | { storeId: number; storeName: string }, filtro: string, que: string): Destino => ({
+const cola = (
+  t: TiendaDashboard | { storeId: number; storeName: string },
+  filtro: string,
+  que: string
+): Destino => ({
   etiqueta: que,
   panel: "impresion.cola",
-  clave: `tienda=${t.storeId}&${filtro}`,
+  clave: `tienda=${t.storeId}${filtro ? `&${filtro}` : ""}`,
   titulo: `Cola · ${t.storeName}`,
 })
-const impresoras = (t: { storeId: number; storeName: string }, que: string): Destino => ({
+const impresoras = (
+  t: { storeId: number; storeName: string },
+  que: string
+): Destino => ({
   etiqueta: que,
   panel: "impresion.impresoras",
   clave: `tienda=${t.storeId}&conexion=problemas`,
@@ -52,11 +62,16 @@ const impresoras = (t: { storeId: number; storeName: string }, que: string): Des
 export function incidencias(
   resumen: ResumenDashboard,
   todasLasImpresoras: readonly Impresora[],
-  { admin, umbralCola }: { admin: boolean; umbralCola: (s: Salud) => number | undefined }
+  {
+    admin,
+    umbralCola,
+  }: { admin: boolean; umbralCola: (s: Salud) => number | undefined }
 ): Incidencia[] {
   const tiendas = new Map(resumen.stores.map((t) => [t.storeId, t]))
   const impresora = (storeId: number, estado: string) => {
-    const activas = new Set(tiendas.get(storeId)?.printers.map((p) => p.printerId))
+    const activas = new Set(
+      tiendas.get(storeId)?.printers.map((p) => p.printerId)
+    )
     return todasLasImpresoras.find(
       (i) => activas.has(i.printerId) && i.connectivityStatus === estado
     )
@@ -64,17 +79,66 @@ export function incidencias(
   const lista: Incidencia[] = resumen.alerts.map((a) => {
     const motivo = a.healthReason.toLowerCase()
     const t = tiendas.get(a.storeId)
-    const base = { storeId: a.storeId, storeName: a.storeName, severidad: a.health }
-    if (motivo.includes("sin impresoras activas") || motivo.includes("no hay impresoras activas"))
+    const base = {
+      storeId: a.storeId,
+      storeName: a.storeName,
+      severidad: a.health,
+    }
+    if (
+      motivo.includes("sin impresoras activas") ||
+      motivo.includes("no hay impresoras activas")
+    )
       return {
         ...base,
         tipo: "Impresoras",
         detalle: "Sin impresoras activas",
-        resto: a.queuedCurrent > 0
-          ? `${plural(a.queuedCurrent, "trabajo", "trabajos")} en cola sin salida posible`
-          : "la tienda no puede imprimir",
+        resto:
+          a.queuedCurrent > 0
+            ? `${plural(a.queuedCurrent, "trabajo", "trabajos")} en cola sin salida posible`
+            : "la tienda no puede imprimir",
         desde: t?.oldestQueuedAtUtc ?? null,
-        destinos: [cola(a, "estado=0", "Ver los parados"), impresoras(a, "Ver impresoras")],
+        destinos: [
+          cola(a, "estado=0", "Ver los parados"),
+          impresoras(a, "Ver impresoras"),
+        ],
+      }
+    // Umbrales opcionales (27/10/2026). «Sin recibir trabajos…» lleva
+    // «trabajos»: va antes que la cola para no confundirse con ella.
+    if (motivo.includes("sin recibir")) {
+      const minutos = t?.silentMinutes ?? null
+      return {
+        ...base,
+        tipo: "Sin recibir",
+        detalle: "No llegan trabajos",
+        resto: "en horario de tienda: puede que el ERP no esté mandando",
+        desde:
+          minutos === null
+            ? null
+            : new Date(Date.now() - minutos * 60_000).toISOString(),
+        destinos: [cola(a, "", "Ver la cola")],
+      }
+    }
+    if (motivo.includes("reimpresiones"))
+      return {
+        ...base,
+        tipo: "Reimpresiones",
+        detalle: plural(
+          t?.reprintsToday ?? 0,
+          "reimpresión hoy",
+          "reimpresiones hoy"
+        ),
+        resto: "posibles duplicados: revisa los motivos",
+        desde: null,
+        destinos: admin
+          ? [
+              {
+                etiqueta: "Ver el registro",
+                panel: "impresionControl.reimpresiones" as IdPanel,
+                clave: `ventana=today&tienda=${a.storeId}`,
+                titulo: `Reimpresiones · ${a.storeName}`,
+              },
+            ]
+          : [cola(a, "", "Ver la cola")],
       }
     if (motivo.includes("sin host")) {
       const i = impresora(a.storeId, "no_host")
@@ -83,7 +147,7 @@ export function incidencias(
         tipo: "Sin host",
         detalle: `${i?.printerName ?? "Impresora"} sin host configurado`,
         resto: "no puede recibir trabajos",
-        desde: i?.lastConnectionCheckAtUtc ?? null,
+        desde: i?.connectionFailingSinceUtc ?? null,
         destinos: [impresoras(a, "Configurar host")],
       }
     }
@@ -91,7 +155,11 @@ export function incidencias(
       return {
         ...base,
         tipo: "Sin reenviar",
-        detalle: plural(a.failedWithoutRetryCurrent, "trabajo sin reenviar", "trabajos sin reenviar"),
+        detalle: plural(
+          a.failedWithoutRetryCurrent,
+          "trabajo sin reenviar",
+          "trabajos sin reenviar"
+        ),
         resto: "reintentos agotados y nadie los ha reenviado",
         desde: t?.oldestFailedWithoutRetryAtUtc ?? null,
         // El reenvío se confirma en la cola, no a ciegas desde aquí.
@@ -102,15 +170,27 @@ export function incidencias(
       const racha = i?.connectionFailuresStreak ?? 0
       // Se comprueba cada 30 s: caída desde ayer son miles; pasado 100 basta con «muchos».
       const detalles = [
-        racha > 100 ? "+100 fallos seguidos" : racha > 0 ? plural(racha, "fallo seguido", "fallos seguidos") : null,
-        i?.lastConnectionTransport ? `transporte ${i.lastConnectionTransport}` : null,
+        racha > 100
+          ? "+100 fallos seguidos"
+          : racha > 0
+            ? plural(racha, "fallo seguido", "fallos seguidos")
+            : null,
+        i?.lastConnectionTransport
+          ? `transporte ${i.lastConnectionTransport}`
+          : null,
       ].filter(Boolean)
       return {
         ...base,
         tipo: "Conexión",
-        detalle: i ? `${i.printerName} sin conexión` : "Impresoras pendientes de comprobación",
-        resto: detalles.length ? detalles.join(", ") : "revisar la conexión de la tienda",
-        desde: i?.lastConnectionCheckAtUtc ?? null,
+        detalle: i
+          ? `${i.printerName} sin conexión`
+          : "Impresoras pendientes de comprobación",
+        resto: detalles.length
+          ? detalles.join(", ")
+          : "revisar la conexión de la tienda",
+        // Desde el primer fallo, no la última comprobación (cada 30 s: siempre
+        // «ahora mismo»).
+        desde: i?.connectionFailingSinceUtc ?? null,
         destinos: [impresoras(a, "Probar conexión")],
       }
     }
@@ -122,7 +202,10 @@ export function incidencias(
         detalle: `Cola de ${plural(a.queuedCurrent, "trabajo", "trabajos")}`,
         resto: `por encima del umbral ${a.health === "critical" ? "crítico" : "de aviso"}${umbral === undefined ? "" : ` (${umbral})`}`,
         desde: t?.oldestQueuedAtUtc ?? null,
-        destinos: [impresoras(a, "Ver impresoras"), cola(a, "estado=0", "Ver la cola")],
+        destinos: [
+          impresoras(a, "Ver impresoras"),
+          cola(a, "estado=0", "Ver la cola"),
+        ],
       }
     }
     return {
@@ -145,21 +228,29 @@ export function incidencias(
         storeName: t.storeName,
         severidad: "warning",
         tipo: "Sin impresora",
-        detalle: plural(t.unassignedQueueCurrent, "trabajo sin impresora", "trabajos sin impresora"),
+        detalle: plural(
+          t.unassignedQueueCurrent,
+          "trabajo sin impresora",
+          "trabajos sin impresora"
+        ),
         resto: "ninguna regla de enrutado coincide",
         desde: t.oldestQueuedAtUtc,
         destinos: [
           cola(t, "vista=sinImpresora", "Ver los trabajos"),
           ...(admin
-            ? [{
-                etiqueta: "Revisar reglas",
-                panel: "impresionConfiguracion.reglasYAvisos" as IdPanel,
-                clave: `seccion=reglas&tienda=${t.storeId}`,
-                titulo: `Reglas · ${t.storeName}`,
-              }]
+            ? [
+                {
+                  etiqueta: "Revisar reglas",
+                  panel: "impresionConfiguracion.reglasYAvisos" as IdPanel,
+                  clave: `seccion=reglas&tienda=${t.storeId}`,
+                  titulo: `Reglas · ${t.storeName}`,
+                },
+              ]
             : []),
         ],
       })
   // sort es estable: dentro de cada severidad se mantiene el orden de la API.
-  return lista.sort((a, b) => RANGO_SALUD[a.severidad] - RANGO_SALUD[b.severidad])
+  return lista.sort(
+    (a, b) => RANGO_SALUD[a.severidad] - RANGO_SALUD[b.severidad]
+  )
 }

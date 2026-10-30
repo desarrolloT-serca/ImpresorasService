@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react"
 import type { ColumnDef } from "@tanstack/react-table"
+import { CopyIcon, RotateCcwIcon } from "lucide-react"
 import { toast } from "sonner"
 import {
   PERMISOS_IMPRESION as P,
@@ -22,12 +23,14 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { ErrorApi } from "@/core/api"
+import { useBusquedaAvanzadaPanel } from "@/core/avanzados"
 import { usePermiso } from "@/core/sesion"
 import { cn } from "@/lib/utils"
 import { useEsc, type PropsPanel } from "@/workspace/modulo"
 import {
   useAccionTrabajo,
   useCola,
+  useImpresoras,
   useTiendas,
   type AccionTrabajo,
 } from "./api"
@@ -35,16 +38,19 @@ import {
   CLASE_TONO,
   ESTADOS,
   documentoErp,
-  fechaHora,
-  fechaHoraCorta,
+  horaTrabajo,
   nombreTienda,
   puedeCancelar,
   puedeReimprimir,
   puedeReintentar,
   TIPOS_DOCUMENTO,
+  plural,
 } from "./formato"
+import { SinActualizar } from "./formulario"
+import { DialogoReimprimir } from "./Reimprimir"
 
 const INICIAL: ConsultaCola = { pagina: 1, tamano: 50 }
+const SIN_TIENDAS: Tienda[] = []
 
 // Abierta desde el dashboard, la clave trae los filtros: «tienda=12&vista=sinReenviar».
 const desdeClave = (clave: string): ConsultaCola => {
@@ -71,21 +77,28 @@ const ESTADO_ITEMS = [
   })),
 ]
 const VISTAS: readonly string[] = ["sinReenviar", "sinImpresora"]
+const TIPO_OPCIONES = Object.entries(TIPOS_DOCUMENTO).map(([cod, nombre]) => ({
+  cod,
+  nombre,
+}))
+// Al cancelar, lo que deja la impresora sin nada pendiente; lo demás pide
+// mirarla (si no, el documento sale al recuperarse y duplica en silencio).
+const IMPRESORA_EN_ORDEN = new Set(["Cancelado", "YaNoSaldra", "NoLoTiene"])
 
-const AVISO_REIMPRIMIR =
-  "Este trabajo puede haberse impreso ya. Si lo reimprimes y sí había salido, el documento saldrá por duplicado. ¿Continuar?"
-
-// Cola de impresión (cola.blade.php del PHP). La API ordena por fecha de
-// creación, la más reciente primero, y filtra la tienda de quien no las ve
-// todas.
+// Cola de impresión (cola.blade.php del PHP). La API ordena por la última vez
+// que se mandó imprimir (llegada, reintento o reimpresión), lo más reciente
+// primero, y filtra la tienda de quien no las ve todas.
 export default function Cola({ clave }: PropsPanel) {
   const verTodas = usePermiso(P.todasLasTiendas)
   const gestionar = usePermiso(P.reimprimir)
   const [consulta, setConsulta] = useState(() => desdeClave(clave))
   const [reinicio, setReinicio] = useState(0)
   const cola = useCola(consulta)
-  const tiendas = useTiendas().data ?? []
+  const tiendas = useTiendas().data ?? SIN_TIENDAS
+  const impresoras = useImpresoras().data
   const accion = useAccionTrabajo()
+  // Reimprimir lo que ya salió abre su ventana de aviso (motivo y riesgo).
+  const [aReimprimir, setAReimprimir] = useState<TrabajoCola>()
   // Cualquier filtro vuelve a la primera página.
   const filtrar = (f: Partial<ConsultaCola>) =>
     setConsulta((c) => ({ ...c, pagina: 1, ...f }))
@@ -125,10 +138,28 @@ export default function Cola({ clave }: PropsPanel) {
           ? fallos[0]
           : `${fallos.length} no se pudieron: ${[...new Set(fallos)].join("; ")}`
       )
+    // Qué pasó en la cola de la impresora al cancelar (decisión del usuario,
+    // 27/10/2026). Si hay que mirarla, el aviso se queda hasta cerrarlo.
+    resultados.forEach((r, i) => {
+      if (r.status !== "fulfilled" || !r.value.printerMessage) return
+      const texto =
+        trabajos.length === 1
+          ? r.value.printerMessage
+          : `${trabajos[i].externalJobId}: ${r.value.printerMessage}`
+      if (IMPRESORA_EN_ORDEN.has(r.value.printerCancel ?? "")) toast.info(texto)
+      else toast.warning(texto, { duration: Infinity, closeButton: true })
+    })
   }
 
   const columnas = useMemo(
-    () => columnasCola(tiendas, gestionar, accion.isPending, ejecutar),
+    () =>
+      columnasCola(
+        tiendas,
+        gestionar,
+        accion.isPending,
+        ejecutar,
+        setAReimprimir
+      ),
     // ejecutar solo usa accion.mutateAsync, estable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [tiendas, gestionar, accion.isPending]
@@ -140,9 +171,59 @@ export default function Cola({ clave }: PropsPanel) {
       label: nombreTienda(t.storeId, tiendas),
     })),
   ]
+  // Impresoras, tipos y fechas van en la búsqueda avanzada (botón de arriba a
+  // la derecha): se usan poco (decisión del usuario, 27/10/2026). Las
+  // impresoras, las de la tienda elegida; con todas, cada una con su tienda.
+  const avanzados = useMemo(
+    () => ({
+      impresoras: consulta.impresoras,
+      tipos: consulta.tipos,
+      desde: consulta.desde,
+      hasta: consulta.hasta,
+    }),
+    [consulta.impresoras, consulta.tipos, consulta.desde, consulta.hasta]
+  )
+  const opcionesAvanzadas = useMemo(
+    () => ({
+      impresoras: (impresoras ?? [])
+        .filter(
+          (i) => consulta.tienda === undefined || i.storeId === consulta.tienda
+        )
+        .map((i) => ({
+          cod: String(i.printerId),
+          nombre:
+            verTodas && consulta.tienda === undefined
+              ? `${i.printerName} · ${nombreTienda(i.storeId, tiendas)}`
+              : i.printerName,
+        })),
+      tipos: TIPO_OPCIONES,
+    }),
+    [impresoras, consulta.tienda, verTodas, tiendas]
+  )
+  useBusquedaAvanzadaPanel(
+    "cola",
+    avanzados,
+    (c) =>
+      filtrar({
+        impresoras: c.impresoras,
+        tipos: c.tipos,
+        desde: c.desde,
+        hasta: c.hasta,
+      }),
+    undefined,
+    opcionesAvanzadas
+  )
 
   return (
     <Panel className="[&_table]:min-w-[62rem] [&_table]:table-fixed">
+      <SinActualizar consultas={[cola]} />
+      {aReimprimir && (
+        <DialogoReimprimir
+          trabajo={aReimprimir}
+          tiendas={tiendas}
+          onCerrar={() => setAReimprimir(undefined)}
+        />
+      )}
       <DataTable
         key={reinicio}
         columns={columnas}
@@ -164,8 +245,12 @@ export default function Cola({ clave }: PropsPanel) {
                       ? "todas"
                       : String(consulta.tienda)
                   }
+                  // Las impresoras elegidas son de la tienda anterior.
                   onValueChange={(v) =>
-                    filtrar({ tienda: v === "todas" ? undefined : Number(v) })
+                    filtrar({
+                      tienda: v === "todas" ? undefined : Number(v),
+                      impresoras: undefined,
+                    })
                   }
                 >
                   <SelectTrigger className="w-56">
@@ -221,6 +306,10 @@ export default function Cola({ clave }: PropsPanel) {
                   filas={filas}
                   ocupado={accion.isPending}
                   onAccion={(tipo, aptos) => ejecutar(aptos, tipo, limpiar)}
+                  onReimprimir={(t) => {
+                    limpiar()
+                    setAReimprimir(t)
+                  }}
                 />
               )
             : undefined
@@ -244,17 +333,25 @@ export default function Cola({ clave }: PropsPanel) {
   )
 }
 
+// El error para la gente (ErroresTrabajo, en la API), no solo en «Error»:
+// también bloqueado, sin confirmar o reintentando. Al pasar el ratón, el código,
+// el detalle y qué hacer. Con una API anterior al 26/10/2026, el código.
 const columnaError: ColumnDef<TrabajoCola, unknown> = {
   id: "error",
   header: "Error",
-  size: 150,
+  size: 220,
   cell: ({ row: { original: t } }) =>
-    t.status === 8 && t.lastErrorCode ? (
+    t.lastErrorCode ? (
       <span
-        className="block truncate font-mono text-xs text-destructive"
-        title={t.lastErrorMessage ?? undefined}
+        className={cn(
+          "block truncate",
+          t.status === 8 ? "text-destructive" : "text-muted-foreground"
+        )}
+        title={[t.lastErrorCode, t.lastErrorMessage, t.lastErrorHint]
+          .filter(Boolean)
+          .join("\n")}
       >
-        {t.lastErrorCode}
+        {t.lastErrorText ?? t.lastErrorCode}
       </span>
     ) : null,
 }
@@ -263,7 +360,8 @@ function columnasCola(
   tiendas: readonly Tienda[],
   gestionar: boolean,
   ocupado: boolean,
-  ejecutar: (t: TrabajoCola[], tipo: AccionTrabajo) => void
+  ejecutar: (t: TrabajoCola[], tipo: AccionTrabajo) => void,
+  reimprimir: (t: TrabajoCola) => void
 ): ColumnDef<TrabajoCola, unknown>[] {
   const columnas: ColumnDef<TrabajoCola, unknown>[] = [
     {
@@ -336,10 +434,8 @@ function columnasCola(
     },
     {
       id: "intentos",
-      header: () => (
-        <span className="tracking-normal normal-case">Intentos</span>
-      ),
-      size: 80,
+      header: "Intentos",
+      size: 96,
       meta: { num: true },
       cell: ({ row: { original: t } }) => (
         <span className="block text-right tabular-nums">{t.attemptCount}</span>
@@ -347,26 +443,35 @@ function columnasCola(
     },
     {
       id: "creado",
-      header: "Creado",
+      header: "Hora",
       size: 140,
-      // Reimpreso: debajo de cuándo llegó, cuándo salió la última vez.
-      cell: ({ row: { original: t } }) => (
-        <span
-          title={
-            `Llegó ${fechaHora(t.createdAtUtc)}` +
-            (t.reprints
-              ? `\nReimpreso ${t.reprints === 1 ? "1 vez" : `${t.reprints} veces`}; último envío ${fechaHora(t.sentAtUtc ?? null)}`
-              : "")
-          }
-        >
-          {fechaHoraCorta(t.createdAtUtc)}
-          {!!t.reprints && (
-            <span className="block text-[11px] text-muted-foreground">
-              Reimpreso {t.sentAtUtc ? fechaHoraCorta(t.sentAtUtc) : "(pendiente)"}
-            </span>
-          )}
-        </span>
-      ),
+      // Un renglón: la hora (de llegada o de la última salida) y, si se
+      // reintentó o reimprimió, su icono. El detalle, en el title.
+      cell: ({ row: { original: t } }) => {
+        const { marca, hora, detalle } = horaTrabajo(t)
+        const Icono = marca === "reimpresion" ? CopyIcon : RotateCcwIcon
+        return (
+          <span title={detalle} className="inline-flex items-center gap-1">
+            {hora}
+            {marca && (
+              <>
+                <Icono
+                  aria-hidden
+                  className={cn(
+                    "size-3.5 shrink-0",
+                    marca === "reimpresion"
+                      ? "text-warning"
+                      : "text-muted-foreground"
+                  )}
+                />
+                <span className="sr-only">
+                  {marca === "reimpresion" ? "Reimpreso" : "Reintentado"}
+                </span>
+              </>
+            )}
+          </span>
+        )
+      },
     },
   ]
   // Error, la última columna de datos (casi siempre está vacía) y las acciones,
@@ -381,6 +486,22 @@ function columnasCola(
       size: 190,
       cell: ({ row: { original: t } }) => (
         <div className="flex justify-end gap-1">
+          {/* Cancelar delante: así Reintentar y Reimprimir quedan siempre a la
+              derecha, alineados entre filas (decisión del usuario, 26/10/2026). */}
+          {puedeCancelar(t.status) && (
+            <Button
+              size="xs"
+              variant="destructive"
+              disabled={ocupado}
+              onClick={() =>
+                window.confirm(
+                  "¿Cancelar este trabajo? Si sigue en la cola de la impresora, se cancela también allí."
+                ) && ejecutar([t], "cancelar")
+              }
+            >
+              Cancelar
+            </Button>
+          )}
           {puedeReintentar(t.status) && (
             <Button
               size="xs"
@@ -396,24 +517,9 @@ function columnasCola(
               size="xs"
               variant="outline"
               disabled={ocupado}
-              onClick={() =>
-                window.confirm(AVISO_REIMPRIMIR) && ejecutar([t], "reintentar")
-              }
+              onClick={() => reimprimir(t)}
             >
               Reimprimir
-            </Button>
-          )}
-          {puedeCancelar(t.status) && (
-            <Button
-              size="xs"
-              variant="destructive"
-              disabled={ocupado}
-              onClick={() =>
-                window.confirm("¿Cancelar este trabajo?") &&
-                ejecutar([t], "cancelar")
-              }
-            >
-              Cancelar
             </Button>
           )}
         </div>
@@ -422,17 +528,21 @@ function columnasCola(
   ]
 }
 
-// Reimprimir lo que está sin confirmar puede duplicarlo: solo de uno en uno.
+// Reimprimir lo que ya salió puede duplicarlo: solo de uno en uno, con su
+// ventana de motivo (la misma que el botón de la fila).
 function AccionesMasivas({
   filas,
   ocupado,
   onAccion,
+  onReimprimir,
 }: {
   filas: TrabajoCola[]
   ocupado: boolean
   onAccion: (tipo: AccionTrabajo, aptos: TrabajoCola[]) => void
+  onReimprimir: (t: TrabajoCola) => void
 }) {
   const reintentables = filas.filter((t) => puedeReintentar(t.status))
+  const reimprimibles = filas.filter((t) => puedeReimprimir(t.status))
   const cancelables = filas.filter((t) => puedeCancelar(t.status))
   return (
     <>
@@ -440,21 +550,42 @@ function AccionesMasivas({
         size="sm"
         variant="outline"
         disabled={ocupado || !reintentables.length}
-        title="Solo los pendientes y los que dieron error"
+        title={
+          reimprimibles.length && !reintentables.length
+            ? "Lo que ya salió no se reintenta: se reimprime"
+            : "Solo los pendientes y los que dieron error"
+        }
         onClick={() =>
-          window.confirm(`¿Reintentar ${reintentables.length} trabajos?`) &&
-          onAccion("reintentar", reintentables)
+          window.confirm(
+            `¿Reintentar ${plural(reintentables.length, "trabajo", "trabajos")}?`
+          ) && onAccion("reintentar", reintentables)
         }
       >
         Reintentar ({reintentables.length})
       </Button>
+      {reimprimibles.length > 0 && (
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={ocupado || reimprimibles.length > 1}
+          title={
+            reimprimibles.length > 1
+              ? "Reimprimir va de uno en uno: puede salir duplicado"
+              : "Lo que ya salió, con su motivo"
+          }
+          onClick={() => onReimprimir(reimprimibles[0])}
+        >
+          Reimprimir ({reimprimibles.length})
+        </Button>
+      )}
       <Button
         size="sm"
         variant="destructive"
         disabled={ocupado || !cancelables.length}
         onClick={() =>
-          window.confirm(`¿Cancelar ${cancelables.length} trabajos?`) &&
-          onAccion("cancelar", cancelables)
+          window.confirm(
+            `¿Cancelar ${plural(cancelables.length, "trabajo", "trabajos")}?`
+          ) && onAccion("cancelar", cancelables)
         }
       >
         Cancelar ({cancelables.length})

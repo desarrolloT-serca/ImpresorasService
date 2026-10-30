@@ -12,7 +12,10 @@ export type Errores = Record<string, string>
 // (workspace/CambiarContrasena.tsx): valores en estado, Zod antes de enviar,
 // errores por campo, un solo envío a la vez y aviso al descartar lo escrito.
 // El padre lo monta para abrirlo y lo desmonta en onCerrar.
-export function DialogoFormulario<V extends Record<string, unknown>, S extends z.ZodType>({
+export function DialogoFormulario<
+  V extends Record<string, unknown>,
+  S extends z.ZodType,
+>({
   titulo,
   inicial,
   esquema,
@@ -63,7 +66,8 @@ export function DialogoFormulario<V extends Record<string, unknown>, S extends z
             const r = esquema.safeParse(valores)
             if (!r.success) {
               const nuevos: Errores = {}
-              for (const i of r.error.issues) nuevos[String(i.path[0])] ??= i.message
+              for (const i of r.error.issues)
+                nuevos[String(i.path[0])] ??= i.message
               setErrores(nuevos)
               return
             }
@@ -98,7 +102,11 @@ export function DialogoFormulario<V extends Record<string, unknown>, S extends z
               id: (clave) => `${base}-${String(clave)}`,
             })}
           </div>
-          <p role="status" aria-live="polite" className="text-sm text-destructive">
+          <p
+            role="status"
+            aria-live="polite"
+            className="text-sm text-destructive"
+          >
             {mensaje}
           </p>
           <div className="flex justify-end gap-2">
@@ -152,5 +160,28 @@ export function Campo({
         ayuda && <p className="text-xs text-muted-foreground">{ayuda}</p>
       )}
     </div>
+  )
+}
+
+// Lo que se ve es de antes: el último refresco falló y se reintenta solo
+// (WEB-10). Sin datos no hace falta: lo pinta la barrera de errores.
+export function SinActualizar({
+  consultas,
+}: {
+  consultas: { isError: boolean; data: unknown; dataUpdatedAt: number }[]
+}) {
+  const fallidas = consultas.filter((c) => c.isError && c.data !== undefined)
+  if (!fallidas.length) return null
+  const desde = Math.min(...fallidas.map((c) => c.dataUpdatedAt))
+  return (
+    <span role="status" className="block text-xs text-destructive">
+      Sin actualizar desde{" "}
+      {new Date(desde).toLocaleTimeString("es-ES", {
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: "Europe/Madrid",
+      })}
+      : no responde el servicio de impresión. Se reintenta solo.
+    </span>
   )
 }

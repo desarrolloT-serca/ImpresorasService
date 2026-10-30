@@ -33,6 +33,7 @@ import {
 import { FormularioImpresora } from "./FormularioImpresora"
 import {
   CLASE_TONO,
+  COLOR_PUNTO,
   conProblema,
   fechaHora,
   nombreTienda,
@@ -41,6 +42,7 @@ import {
   TONO_SEVERIDAD,
   type Tono,
 } from "./formato"
+import { SinActualizar } from "./formulario"
 
 const Etiqueta = ({
   tono,
@@ -59,14 +61,6 @@ const Etiqueta = ({
     {children}
   </Badge>
 )
-
-const COLOR_PUNTO: Record<Tono, string> = {
-  ok: "bg-success",
-  aviso: "bg-warning",
-  error: "bg-destructive",
-  info: "bg-secondary-foreground",
-  neutro: "bg-muted-foreground/40",
-}
 
 const TODAS = "todas"
 const CONEXION_ITEMS = [
@@ -107,6 +101,8 @@ export default function Impresoras({ clave }: PropsPanel) {
     tienda === TODAS ? lista : lista.filter((i) => String(i.storeId) === tienda)
   const visibles = conexion === TODAS ? deTienda : deTienda.filter(conProblema)
   const total = resumen(deTienda)
+  // «5 con error»: el número en negrita, como el total (decisión del usuario).
+  const [problemas, ...queTienen] = total.texto.split(" ")
   const tiendaItems = [
     { value: TODAS, label: "Todas" },
     // Tiendas activas en orden de código, también las que no tienen impresoras.
@@ -169,6 +165,7 @@ export default function Impresoras({ clave }: PropsPanel) {
 
   return (
     <Panel className="[&_table]:min-w-[60rem] [&_table]:table-fixed">
+      <SinActualizar consultas={[impresoras]} />
       <DataTable
         key={reinicio}
         columns={columnas}
@@ -207,7 +204,7 @@ export default function Impresoras({ clave }: PropsPanel) {
                           <span
                             aria-hidden
                             className={cn(
-                              "size-2 shrink-0 rounded-full",
+                              "size-2 shrink-0 self-center rounded-full",
                               COLOR_PUNTO[r.tono]
                             )}
                           />
@@ -241,10 +238,25 @@ export default function Impresoras({ clave }: PropsPanel) {
                   </SelectContent>
                 </Select>
               </CampoFiltro>
-              <span className="ml-auto flex items-center gap-2 self-center text-xs text-muted-foreground">
-                {deTienda.length} impresoras
+              <span className="ml-auto flex h-8 items-center gap-2 rounded-lg border bg-card px-3 text-sm">
+                <span>
+                  <b className="font-semibold tabular-nums">
+                    {deTienda.length}
+                  </b>{" "}
+                  <span className="text-muted-foreground">impresoras</span>
+                </span>
                 {total.tono !== "ok" && total.tono !== "neutro" && (
-                  <Etiqueta tono={total.tono}>{total.texto}</Etiqueta>
+                  <span
+                    className={
+                      total.tono === "error"
+                        ? "text-destructive"
+                        : "text-warning"
+                    }
+                  >
+                    <span className="text-muted-foreground">·</span>{" "}
+                    <b className="font-semibold tabular-nums">{problemas}</b>{" "}
+                    {queTienen.join(" ")}
+                  </span>
                 )}
               </span>
               {admin && (
@@ -306,7 +318,9 @@ function columnasImpresoras({
     {
       id: "nombre",
       header: "Nombre",
-      size: 0,
+      // Fijo, no elástico: lo que sobra se reparte entre todas las columnas
+      // (decisión del usuario, 27/10/2026).
+      size: 180,
       accessorKey: "printerName",
       cell: ({ row: { original: i } }) => (
         <span className="block truncate font-medium">{i.printerName}</span>

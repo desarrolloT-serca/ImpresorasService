@@ -3,11 +3,11 @@ import { tienePermiso } from "@serca/contratos"
 
 import type { DefPanel, IdPanel, ModuloWeb } from "@/workspace/modulo"
 import { transicion } from "@/app/transicion"
-import { impresion, impresionConfiguracion } from "@/modules/impresion"
+import { impresion, impresionConfiguracion, impresionControl } from "@/modules/impresion"
 
 // Módulos de esta aplicación. Dentro del ERP se registran los dos de
 // impresión en su workspace/registro.ts; transicion y este fichero se tiran.
-export const MODULOS: ModuloWeb[] = [impresion, impresionConfiguracion, transicion]
+export const MODULOS: ModuloWeb[] = [impresion, impresionControl, impresionConfiguracion, transicion]
 
 export const PANELES = new Map<IdPanel, DefPanel>(
   MODULOS.flatMap((m) =>
