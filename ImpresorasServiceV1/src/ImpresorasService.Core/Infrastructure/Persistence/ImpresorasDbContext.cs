@@ -184,6 +184,7 @@ public class ImpresorasDbContext : DbContext
             entity.Property(x => x.CorrelationId).HasConversion(GuidToBytesConverter);
             entity.Property(x => x.CreatedAtUtc).HasColumnName("created_at_utc");
             entity.Property(x => x.UpdatedAtUtc).HasColumnName("updated_at_utc");
+            entity.Property(x => x.LastRequeuedAtUtc).HasColumnName("last_requeued_at_utc");
             // Sin token de concurrencia a propósito: la exclusión entre procesos la da el estado en el
             // WHERE del UPDATE (PrintExecutionService.TryTransitionAsync).
             entity.Property(x => x.SourceSystem).HasMaxLength(50).IsRequired();
@@ -224,6 +225,9 @@ public class ImpresorasDbContext : DbContext
             entity.Property(x => x.ActorId).HasMaxLength(120);
 
             entity.HasIndex(x => new { x.JobId, x.OccurredAtUtc });
+            // KPI y registro de reimpresiones: solo las filas REPRINT.
+            entity.HasIndex(x => x.OccurredAtUtc).HasFilter("event_type = 'REPRINT'")
+                .HasDatabaseName("ix_printer_print_job_event_reprint");
         });
 
         modelBuilder.Entity<SourcePrintJobRecord>(entity =>
@@ -276,6 +280,7 @@ public class ImpresorasDbContext : DbContext
             entity.Property(x => x.LastConnectionCheckAtUtc).HasColumnName("last_connection_check_at_utc");
             entity.Property(x => x.LastConnectionTransport).HasColumnName("last_connection_transport");
             entity.Property(x => x.LastConnectionError).HasColumnName("last_connection_error");
+            entity.Property(x => x.ConnectionFailingSinceUtc).HasColumnName("connection_failing_since_utc");
             entity.Property(x => x.PrinterId).ValueGeneratedOnAdd();
             entity.Property(x => x.PrinterName).HasMaxLength(120).IsRequired();
             entity.Property(x => x.SpoolQueue).HasMaxLength(200);
@@ -405,6 +410,7 @@ public class ImpresorasDbContext : DbContext
             entity.Property(x => x.MinSeverity).HasColumnName("min_severity").HasMaxLength(20).HasDefaultValue("critical").IsRequired();
             entity.Property(x => x.NotifyOnRecovery).HasColumnName("notify_on_recovery").HasDefaultValue(true).IsRequired();
             entity.Property(x => x.CheckIntervalMinutes).HasColumnName("check_interval_minutes").HasDefaultValue(5).IsRequired();
+            entity.Property(x => x.BotToken).HasColumnName("bot_token").HasMaxLength(100);
             entity.Property(x => x.UpdatedAtUtc).HasColumnName("updated_at_utc").IsRequired();
         });
 

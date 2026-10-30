@@ -21,10 +21,10 @@ namespace ImpresorasService.Api.IntegrationTests.Flow;
 
 internal sealed class DummyRoutingService : IRoutingService
 {
-    public Task<RouteResult> TryRetryRouteAsync(Guid jobId, CancellationToken cancellationToken = default)
+    public Task<RouteResult> TryRetryRouteAsync(Guid jobId, CancellationToken cancellationToken = default, string? actorId = null)
         => throw new NotImplementedException();
 
-    public Task<RouteResult> TryRouteJobAsync(Guid jobId, CancellationToken cancellationToken = default)
+    public Task<RouteResult> ReprintAsync(Guid jobId, string? reason, string? note, string? actorId, CancellationToken cancellationToken = default)
         => throw new NotImplementedException();
 
     public Task TryRouteBatchAsync(IReadOnlyList<Guid> jobIds, CancellationToken cancellationToken = default)
@@ -359,6 +359,115 @@ public sealed class PrintJobsControllerCancelFlowTests
         db.ChangeTracker.Clear();
         var jobAfter = await db.PrintJobs.FirstAsync(j => j.JobId == jobId);
         Assert.Equal(PrintJobStatus.SpoolAccepted, jobAfter.Status);
+    }
+
+    /// <summary>
+    /// Cancelar a mano cancela también en la cola de la impresora lo que salió por IP, con su número y
+    /// el mismo nombre con que se mandó (decisión del usuario, 27/10/2026). Lo que salió sin número no se
+    /// puede cancelar desde aquí: se avisa, en la respuesta y en el evento, para que lo mire alguien.
+    /// </summary>
+    [Theory]
+    [InlineData(258, "Cancelado", "También se canceló en la impresora")]
+    [InlineData(null, "SinNumero", "cola de Windows")]
+    public async Task Cancel_EnLaImpresoraTambien_YQuedaConstancia(int? ippJobId, string codigo, string aviso)
+    {
+        using var setup = SqliteTestDbHelper.CreateOpenSqliteInMemory();
+        var db = setup.Db;
+        var now = DateTimeOffset.UtcNow;
+        var jobId = Guid.NewGuid();
+        db.Printers.Add(new Printer { PrinterId = 10, StoreId = 1, PrinterName = "P", Host = "10.0.0.9", IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now });
+        db.PrintJobs.Add(new PrintJob
+        {
+            JobId = jobId, SourceSystem = "ERP-TEST", ExternalJobId = "EXT-9", StoreId = 1, DocumentType = "FACTURA",
+            Channel = "DEFAULT", PdfBlob = MinimalPdf.Bytes, PdfSha256 = "pdf-sha", Status = PrintJobStatus.PrintedUnknown,
+            PrinterId = 10, IppJobId = ippJobId, AttemptCount = 1, CorrelationId = Guid.NewGuid(),
+            CreatedAtUtc = now, UpdatedAtUtc = now,
+        });
+        await db.SaveChangesAsync();
+        var ipp = new IppQueCancela();
+        var controller = new PrintJobsController(db, new DummyRoutingService(), TimeProvider.System, ipp: ipp)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = BuildPrincipal(role: "Admin", storeId: "1") }
+            }
+        };
+
+        var result = await controller.Cancel(jobId, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var respuesta = System.Text.Json.JsonSerializer.SerializeToElement(ok.Value);
+        Assert.Equal(codigo, respuesta.GetProperty("printerCancel").GetString());
+        Assert.Contains(aviso, respuesta.GetProperty("printerMessage").GetString());
+        Assert.Equal(ippJobId is null ? null : ("10.0.0.9", 258, "FACTURA EXT-9"), ipp.Cancelado);
+        var evento = await db.PrintJobEvents.Where(e => e.JobId == jobId).OrderByDescending(e => e.EventId).FirstAsync();
+        Assert.Contains(aviso, evento.Message);
+    }
+
+    /// <summary>
+    /// Reimprimir algo sin confirmar cancela la copia anterior si sigue en la cola de la impresora
+    /// (decisión del usuario, 27/10/2026), pero solo si la nueva va a una impresora: sin regla, el
+    /// documento se quedaría sin salir y la anterior no se toca.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Reprint_SinConfirmar_CancelaLaCopiaAnteriorSoloSiLaNuevaTieneImpresora(bool conRegla)
+    {
+        using var setup = SqliteTestDbHelper.CreateOpenSqliteInMemory();
+        var db = setup.Db;
+        var now = DateTimeOffset.UtcNow;
+        var jobId = Guid.NewGuid();
+        db.Printers.Add(new Printer { PrinterId = 10, StoreId = 1, PrinterName = "P", Host = "10.0.0.9", IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now });
+        if (conRegla)
+            db.RoutingRules.Add(new RoutingRule { Priority = 1, StoreId = 1, PrinterId = 10, IsActive = true, ValidFromUtc = now.AddDays(-1), CreatedAtUtc = now, UpdatedAtUtc = now });
+        db.PrintJobs.Add(new PrintJob
+        {
+            JobId = jobId, SourceSystem = "ERP-TEST", ExternalJobId = "EXT-7", StoreId = 1, DocumentType = "ALBARAN",
+            Channel = "DEFAULT", PdfBlob = MinimalPdf.Bytes, PdfSha256 = "pdf-sha", Status = PrintJobStatus.PrintedUnknown,
+            PrinterId = 10, IppJobId = 258, AttemptCount = 1, CorrelationId = Guid.NewGuid(),
+            CreatedAtUtc = now, UpdatedAtUtc = now,
+        });
+        await db.SaveChangesAsync();
+        var ipp = new IppQueCancela();
+        var controller = new PrintJobsController(db, new RoutingService(db, new RoutingResolver(db)), TimeProvider.System, ipp: ipp)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = BuildPrincipal(role: "Admin", storeId: "1") }
+            }
+        };
+
+        var result = await controller.Reprint(jobId, new ReprintRequest("PERDIDO", null), CancellationToken.None);
+
+        var respuesta = System.Text.Json.JsonSerializer.SerializeToElement(Assert.IsType<OkObjectResult>(result).Value);
+        if (conRegla)
+        {
+            Assert.Equal(("10.0.0.9", 258, "ALBARAN EXT-7"), ipp.Cancelado);
+            Assert.Equal("Cancelado", respuesta.GetProperty("printerCancel").GetString());
+            Assert.Contains("solo saldrá la nueva", respuesta.GetProperty("printerMessage").GetString());
+            Assert.True(await db.PrintJobEvents.AnyAsync(e => e.JobId == jobId && e.EventType == "PREVIOUS_COPY_IN_PRINTER"));
+        }
+        else
+        {
+            Assert.Equal("ErrorFinal", respuesta.GetProperty("status").GetString());
+            Assert.Null(ipp.Cancelado);
+        }
+    }
+
+    private sealed class IppQueCancela : IIppConfirmationService
+    {
+        public (string Host, int JobId, string JobName)? Cancelado { get; private set; }
+
+        public Task<CancelacionEnImpresora> CancelJobAsync(string printerHost, int jobId, string jobName, CancellationToken ct)
+        {
+            Cancelado = (printerHost, jobId, jobName);
+            return Task.FromResult(CancelacionEnImpresora.Cancelado);
+        }
+
+        public Task<IppQueryResult> QueryPrinterStateAsync(string printerHost, CancellationToken ct) => throw new NotImplementedException();
+        public Task<PrintSpoolResult?> PrintPdfAsync(string printerHost, byte[] pdf, string jobName, bool comoImagen, CancellationToken ct) => throw new NotImplementedException();
+        public Task<IppQueryResult?> QueryJobStateAsync(string printerHost, int jobId, CancellationToken ct) => throw new NotImplementedException();
     }
 
     private static ClaimsPrincipal BuildPrincipal(string role, string storeId)

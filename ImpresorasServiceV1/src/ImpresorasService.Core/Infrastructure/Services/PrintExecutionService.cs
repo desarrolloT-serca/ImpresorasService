@@ -154,7 +154,10 @@ public sealed class PrintExecutionService : IPrintExecutionService
         // Guard-rail: si el monitor de conectividad marca KO reciente, evitamos
         // enviar al spooler porque puede devolver "aceptado" aunque el dispositivo
         // fisico esté apagado/no alcanzable.
-        if (printer.LastConnectionOk == false && printer.LastConnectionCheckAtUtc.HasValue)
+        // Sin IP ni cola UNC el monitor no tiene a quién sondear (HOST_NOT_CONFIGURED): eso no es
+        // «no alcanzable», y una impresora con solo cola local no imprimiría nunca.
+        if (printer.LastConnectionOk == false && printer.LastConnectionCheckAtUtc.HasValue
+            && !Domain.Connectivity.PrinterConnectivityState.IsHostNotConfiguredError(printer.LastConnectionError))
         {
             var lastCheckAge = _timeProvider.GetUtcNow() - printer.LastConnectionCheckAtUtc.Value;
             if (lastCheckAge <= TimeSpan.FromSeconds(90))
@@ -239,6 +242,12 @@ public sealed class PrintExecutionService : IPrintExecutionService
             return false;
         }
 
+        // Desde aquí, sin el token de parada (auditoría M1): cortar el envío puede sacar papel a medias
+        // y perder el resultado deja «Sin confirmar» lo que se sabía. Parar el servicio espera a este
+        // trabajo (el lote no empieza otro) hasta HostOptions.ShutdownTimeout, que cubre un envío. Si se
+        // encadenan PDF, imagen y cola, o Windows se apaga, puede cortarse: queda PRINTING_INTERRUPTED, sin duplicar.
+        ct = CancellationToken.None;
+
         PrintSpoolResult result;
         try
         {
@@ -280,20 +289,22 @@ public sealed class PrintExecutionService : IPrintExecutionService
             return true;
         }
 
-        if (result.ErrorCode == "NET_TIMEOUT")
+        if (result.ErrorCode is "NET_TIMEOUT" or "IPP_ERROR_WHILE_PRINTING")
         {
-            // El envío se cortó a medias: pudo haber llegado a la cola de Windows. Ni error (afirmaría
-            // que no se imprimió) ni reintento (duplicaría). Mismo tratamiento que el Printing stale:
-            // se marca la incertidumbre y decide un operador desde la cola.
+            // El envío se cortó a medias, o la impresora falló con el trabajo a medias: pudo salir
+            // papel. Ni error (afirmaría que no se imprimió) ni reintento (duplicaría). Mismo
+            // tratamiento que el Printing stale: se marca la incertidumbre y decide un operador.
             await TryTransitionAsync(
                 jobId, [PrintJobStatus.Printing], PrintJobStatus.PrintedUnknown,
                 result.ErrorCode,
-                "El envío a la impresora se agotó de tiempo sin conocerse el resultado. Puede haberse impreso: compruébelo antes de reimprimir.",
+                result.ErrorCode == "NET_TIMEOUT"
+                    ? "El envío a la impresora se agotó de tiempo sin conocerse el resultado. Puede haberse impreso: compruébelo antes de reimprimir."
+                    : result.ErrorMessage,
                 nextRetryAtUtc: null, newAttemptCount: null, ct);
 
             _logger.LogWarning(
-                "JobId={JobId}: timeout de impresión. Marcado PrintedUnknown; requiere decisión manual (no se reenvía para no duplicar).",
-                jobId);
+                "JobId={JobId}: {Code}. Marcado PrintedUnknown; requiere decisión manual (no se reenvía para no duplicar).",
+                jobId, result.ErrorCode);
 
             return true;
         }
@@ -323,22 +334,31 @@ public sealed class PrintExecutionService : IPrintExecutionService
         return true;
     }
 
-    // Primero por IP (IPP: sin cola, driver ni Sumatra); si la impresora no acepta PDF por IPP, no
-    // responde o rechaza el trabajo, por su cola de Windows (decisión del usuario, 26/10/2026). Si
-    // el envío por IP se corta a medias no se prueba la cola: podría salir dos veces.
+    // Primero por IP (IPP: sin cola, driver ni Sumatra); si no sale nada por IP (no responde, no
+    // acepta el formato, rechaza el trabajo), por su cola de Windows (decisión del usuario,
+    // 26/10/2026). Sin cola, el motivo de IPP. Si el envío por IP se corta a medias no se prueba la
+    // cola: podría salir dos veces.
     private async Task<PrintSpoolResult> EnviarAsync(PrintJob job, byte[] pdf, Printer printer, CancellationToken ct)
     {
+        // Simulación (UseRealSpooler=false): tampoco por IP, que también es papel real.
+        if (_spooler is NoOpPrintSpooler)
+            return await _spooler.SendToPrinterAsync(pdf, printer.SpoolQueue ?? "", ct);
+
+        PrintSpoolResult? porIp = null;
         if (_ipp is not null && !string.IsNullOrWhiteSpace(printer.Host))
         {
-            var porIp = await _ipp.PrintPdfAsync(printer.Host, pdf, $"{job.DocumentType} {job.ExternalJobId}", ct);
-            if (porIp is not null)
+            // Si la impresora ya abortó este documento al leerlo, esta vez como imagen (decisión D2).
+            var comoImagen = await _db.PrintJobEvents.AnyAsync(
+                e => e.JobId == job.JobId && e.ErrorCode == "IPP_DOCUMENT_ERROR", ct);
+            porIp = await _ipp.PrintPdfAsync(printer.Host, pdf, IIppConfirmationService.JobNameFor(job.DocumentType, job.ExternalJobId), comoImagen, ct);
+            if (porIp is { SinEnviar: false })
                 return porIp;
         }
 
-        return string.IsNullOrWhiteSpace(printer.SpoolQueue)
-            ? new PrintSpoolResult(false, "NO_PRINT_ROUTE",
-                "La impresora no acepta PDF por IP ahora y no tiene cola de Windows.", true)
-            : await _spooler.SendToPrinterAsync(pdf, printer.SpoolQueue, ct);
+        if (!string.IsNullOrWhiteSpace(printer.SpoolQueue))
+            return await _spooler.SendToPrinterAsync(pdf, printer.SpoolQueue, ct);
+        return porIp ?? new PrintSpoolResult(false, "NO_PRINT_ROUTE",
+            "La impresora no tiene IP válida ni cola de Windows.", false);
     }
 
     private async Task<bool> RescuePendingJobAsync(

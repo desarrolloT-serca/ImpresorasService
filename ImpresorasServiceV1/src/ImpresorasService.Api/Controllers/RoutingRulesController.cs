@@ -1,5 +1,6 @@
 using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure.Persistence;
+using ImpresorasService.Infrastructure.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -90,15 +91,20 @@ public class RoutingRulesController : ControllerBase
                 ? "La impresora no existe o no pertenece a la tienda indicada."
                 : "La impresora especificada no existe." });
 
+        var validFrom = request.ValidFromUtc ?? DateTimeOffset.UtcNow;
+        if (await ValidarAsync(null, request.Priority, request.StoreId, request.DocumentType, request.Channel,
+                request.IsActive, validFrom, request.ValidToUtc, cancellationToken) is (int estado, string error))
+            return StatusCode(estado, new { error });
+
         var rule = new RoutingRule
         {
             Priority = request.Priority,
             StoreId = request.StoreId,
-            DocumentType = request.DocumentType,
-            Channel = request.Channel,
+            DocumentType = Limpio(request.DocumentType),
+            Channel = Limpio(request.Channel),
             PrinterId = request.PrinterId,
             IsActive = request.IsActive,
-            ValidFromUtc = request.ValidFromUtc ?? DateTimeOffset.UtcNow,
+            ValidFromUtc = validFrom,
             ValidToUtc = request.ValidToUtc,
             CreatedBy = request.CreatedBy,
             CreatedAtUtc = DateTimeOffset.UtcNow,
@@ -141,10 +147,14 @@ public class RoutingRulesController : ControllerBase
                 ? "La impresora no existe o no pertenece a la tienda indicada."
                 : "La impresora especificada no existe." });
 
+        if (await ValidarAsync(id, request.Priority, request.StoreId, request.DocumentType, request.Channel,
+                request.IsActive, request.ValidFromUtc, request.ValidToUtc, cancellationToken) is (int estado, string error))
+            return StatusCode(estado, new { error });
+
         rule.Priority = request.Priority;
         rule.StoreId = request.StoreId;
-        rule.DocumentType = request.DocumentType;
-        rule.Channel = request.Channel;
+        rule.DocumentType = Limpio(request.DocumentType);
+        rule.Channel = Limpio(request.Channel);
         rule.PrinterId = request.PrinterId;
         rule.IsActive = request.IsActive;
         rule.ValidFromUtc = request.ValidFromUtc;
@@ -171,6 +181,41 @@ public class RoutingRulesController : ControllerBase
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return NoContent();
+    }
+
+    private static string? Limpio(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    // Límites del DDL (sin ellos, un tipo largo daba un 500), fechas coherentes y sin reglas
+    // repetidas: con la misma tienda, tipo, canal y prioridad, el resolutor coge siempre la de menor
+    // id y la otra no se usaría nunca. Con distinta prioridad sí es legítimo: es la de respaldo si
+    // la impresora de la primera está de baja.
+    private async Task<(int Estado, string Error)?> ValidarAsync(
+        int? id, int priority, int? storeId, string? documentType, string? channel, bool isActive,
+        DateTimeOffset validFrom, DateTimeOffset? validTo, CancellationToken cancellationToken)
+    {
+        if (priority < 0)
+            return (StatusCodes.Status400BadRequest, "La prioridad no puede ser negativa.");
+        if (Limpio(documentType)?.Length > 80)
+            return (StatusCodes.Status400BadRequest, "El tipo de documento no puede superar 80 caracteres.");
+        if (Limpio(channel)?.Length > 40)
+            return (StatusCodes.Status400BadRequest, "El canal no puede superar 40 caracteres.");
+        if (validTo is not null && validTo <= validFrom)
+            return (StatusCodes.Status400BadRequest, "La fecha de fin tiene que ser posterior a la de inicio.");
+        if (!isActive)
+            return null;
+
+        var mismas = await _dbContext.RoutingRules
+            .AsNoTracking()
+            .Where(r => r.IsActive && r.StoreId == storeId && r.Priority == priority && (id == null || r.RuleId != id))
+            .Select(r => new { r.RuleId, r.DocumentType, r.Channel })
+            .ToListAsync(cancellationToken);
+        var igual = mismas.FirstOrDefault(r =>
+            RoutingResolver.NormalizeNullable(r.DocumentType) == RoutingResolver.NormalizeNullable(documentType)
+            && RoutingResolver.NormalizeNullable(r.Channel) == RoutingResolver.NormalizeNullable(channel));
+        return igual is null
+            ? null
+            : (StatusCodes.Status409Conflict,
+                $"Ya hay una regla igual (#{igual.RuleId}) con la misma prioridad: una de las dos no se usaría nunca.");
     }
 }
 

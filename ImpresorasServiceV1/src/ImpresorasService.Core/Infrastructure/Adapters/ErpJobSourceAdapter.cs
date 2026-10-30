@@ -24,6 +24,8 @@ public class ErpJobSourceAdapter : IJobSourceAdapter
     private readonly TimeProvider _timeProvider;
 
     private const int MaxPdfBytes = 50 * 1024 * 1024;
+    // Lo que se insiste con un pdf_url que falla por la red: son pedidos de clientes y urgen (D3).
+    private static readonly TimeSpan PdfUrlRetryWindow = TimeSpan.FromMinutes(10);
 
     // Uno por proceso: el adaptador es Scoped. Sin redirecciones, para no salir de PdfUrlHosts.
     private static readonly HttpClient Http = new(new SocketsHttpHandler
@@ -114,12 +116,15 @@ public class ErpJobSourceAdapter : IJobSourceAdapter
             if (pdf is null && !string.IsNullOrWhiteSpace(row.PdfUrl))
             {
                 (pdf, pdfError, var retry) = await DownloadPdfAsync(Http, row.PdfUrl, _options.PdfUrlHosts, cancellationToken);
-                if (retry)
+                // Fallo pasajero (red, timeout, 5xx): sin ack; se reintenta cuando expire el lease. No para
+                // siempre: pasado el plazo queda en Error y a la vista en la cola (auditoría L16).
+                if (retry && now - row.CreatedAtUtc < PdfUrlRetryWindow)
                 {
-                    // Fallo pasajero (red, timeout, 5xx): sin ack; se reintenta cuando expire el lease.
                     _logger.LogWarning("Origen: no se pudo descargar el PDF de la fila {Id}; se reintentará. {Error}", row.Id, pdfError);
                     continue;
                 }
+                if (retry)
+                    pdfError += $" Se dejó de reintentar tras {PdfUrlRetryWindow.TotalMinutes:0} min.";
             }
             else if (pdf is null)
             {
@@ -158,9 +163,13 @@ public class ErpJobSourceAdapter : IJobSourceAdapter
         if (!allowedHosts.Contains(uri.Host, StringComparer.OrdinalIgnoreCase))
             return (null, $"El host {uri.Host} no está en Source:PdfUrlHosts.", false);
 
+        // Con ResponseHeadersRead, HttpClient.Timeout solo cubre las cabeceras: el mismo plazo para el
+        // cuerpo, o uno que se quede parado colgaría la ingesta entera (auditoría M8).
+        using var plazo = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        plazo.CancelAfter(http.Timeout);
         try
         {
-            using var response = await http.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, ct);
+            using var response = await http.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, plazo.Token);
             var status = (int)response.StatusCode;
             if (status >= 500 || status is 408 or 429)
                 return (null, $"{uri.Host} respondió {status}.", true);
@@ -170,7 +179,7 @@ public class ErpJobSourceAdapter : IJobSourceAdapter
             if (response.Content.Headers.ContentLength > MaxPdfBytes)
                 return (null, $"El PDF de {uri.Host} pasa de {MaxPdfBytes / 1024 / 1024} MB.", false);
 
-            var pdf = await response.Content.ReadAsByteArrayAsync(ct);
+            var pdf = await response.Content.ReadAsByteArrayAsync(plazo.Token);
             if (pdf.Length > MaxPdfBytes)
                 return (null, $"El PDF de {uri.Host} pasa de {MaxPdfBytes / 1024 / 1024} MB.", false);
             if (!pdf.AsSpan().StartsWith("%PDF-"u8))

@@ -23,4 +23,7 @@ public class PrintJob
     public Guid CorrelationId { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; }
     public DateTimeOffset UpdatedAtUtc { get; set; }
+    // Última vez que se volvió a mandar (reintento o reimpresión); null si nunca. La cola ordena
+    // por ella o, si no hay, por la llegada: lo reimpreso sube arriba aunque aún no haya salido.
+    public DateTimeOffset? LastRequeuedAtUtc { get; set; }
 }

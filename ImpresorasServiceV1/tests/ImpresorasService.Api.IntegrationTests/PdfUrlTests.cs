@@ -114,8 +114,72 @@ public sealed class PdfUrlTests
         Assert.Single(await db.PrintJobEvents.Where(e => e.JobId == job.JobId).ToListAsync());
     }
 
+    // Un pdf_url que falla por la red se reintenta un rato; pasado el plazo, entra con el error y queda a
+    // la vista en la cola (auditoría L16). localhost:1 rechaza la conexión sin salir del equipo.
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(15, true)]
+    public async Task Un_PDF_que_no_se_puede_descargar_se_reintenta_solo_un_rato(int minutosDesdeQueLlego, bool entra)
+    {
+        using var setup = SqliteTestDbHelper.CreateOpenSqliteInMemory();
+        var db = setup.Db;
+        db.SourcePrintJobs.Add(new SourcePrintJobRecord
+        {
+            Id = 1, SourceSystem = "ERP", ExternalJobId = "EXT-URL", StoreId = 1, DocumentType = "FACTURA",
+            PdfUrl = "https://localhost:1/albaran.pdf", CreatedAtUtc = DateTimeOffset.UtcNow.AddMinutes(-minutosDesdeQueLlego)
+        });
+        await db.SaveChangesAsync();
+        var adapter = new ErpJobSourceAdapter(
+            Microsoft.Extensions.Options.Options.Create(new Infrastructure.Options.SourceOptions { PdfUrlHosts = ["localhost"] }),
+            db, NullLogger<ErpJobSourceAdapter>.Instance, TimeProvider.System);
+
+        var jobs = await adapter.FetchPendingJobsAsync(10, default);
+
+        Assert.Equal(entra, jobs.Count == 1);
+        if (entra)
+            Assert.Contains("Se dejó de reintentar", jobs[0].PdfError);
+    }
+
     private static Task<(byte[]? Pdf, string? Error, bool Retry)> DescargarAsync(HttpStatusCode status, byte[] body) =>
         ErpJobSourceAdapter.DownloadPdfAsync(new HttpClient(new Respuesta(status, body)), Url, Hosts, default);
+
+    [Fact]
+    public async Task Un_cuerpo_que_se_queda_parado_se_corta_y_se_reintenta()
+    {
+        var http = new HttpClient(new CuerpoParado()) { Timeout = TimeSpan.FromMilliseconds(200) };
+
+        var (pdf, _, retry) = await ErpJobSourceAdapter.DownloadPdfAsync(http, Url, Hosts, default)
+            .WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Null(pdf);
+        Assert.True(retry);
+    }
+
+    // Manda las cabeceras y después no manda nada del cuerpo.
+    private sealed class CuerpoParado : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+            => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(new Parado()) });
+
+        private sealed class Parado : Stream
+        {
+            public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken ct)
+            {
+                await Task.Delay(Timeout.Infinite, ct);
+                return 0;
+            }
+            public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+            public override bool CanRead => true;
+            public override bool CanSeek => false;
+            public override bool CanWrite => false;
+            public override long Length => throw new NotSupportedException();
+            public override long Position { get => 0; set => throw new NotSupportedException(); }
+            public override void Flush() { }
+            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+            public override void SetLength(long value) => throw new NotSupportedException();
+            public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        }
+    }
 
     private sealed class Respuesta : HttpMessageHandler
     {

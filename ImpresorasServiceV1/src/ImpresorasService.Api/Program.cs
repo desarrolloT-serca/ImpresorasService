@@ -146,7 +146,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = true,
             ValidAudiences = [builder.Configuration["Jwt:Audience"] ?? "ImpresorasService", PaseErp.Audiencia],
             ValidateLifetime = true,
-            ClockSkew = TimeSpan.Zero
+            // El pase lo firma otro servidor (el del ERP): sin margen, unos segundos de diferencia de
+            // hora lo rechazarían como caducado o «aún no válido».
+            ClockSkew = TimeSpan.FromSeconds(30)
         };
 
         // Firma y caducidad correctas no bastan: el usuario pudo ser borrado, desactivado o haber
@@ -180,6 +182,11 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminOnly", policy => policy.RequireRole(RoleCatalog.Admin));
+    // Gestionar usuarios exige un usuario propio (printer_user): el pase del ERP no lleva
+    // NameIdentifier y, si lo interceptaran, no serviría para crearse un admin permanente (auditoría M11).
+    options.AddPolicy("AdminAccountOnly", policy => policy
+        .RequireRole(RoleCatalog.Admin)
+        .RequireClaim(System.Security.Claims.ClaimTypes.NameIdentifier));
     options.AddPolicy("StoreManagerOrAdmin", policy => policy.RequireRole(RoleCatalog.Admin, RoleCatalog.StoreManager));
     options.AddPolicy("EmployeeOrAbove", policy => policy.RequireRole(RoleCatalog.Admin, RoleCatalog.StoreManager, RoleCatalog.Employee));
 });

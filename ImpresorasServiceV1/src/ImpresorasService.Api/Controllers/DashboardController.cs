@@ -6,6 +6,7 @@ using ImpresorasService.Domain;
 using ImpresorasService.Domain.Connectivity;
 using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure.Persistence;
+using ImpresorasService.Infrastructure.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -88,11 +89,19 @@ public class DashboardController : ControllerBase
         var rules = await _ruleStore.LoadAsync(cancellationToken);
         var (storeRows, alerts) = await BuildStoreRowsAsync(stores, printers, jobsInWindow, jobs, printedRows, failedRows, thresholds, rules, cancellationToken);
 
+        // Reimpresiones de lo que ya había salido (posibles duplicados) pedidas en el periodo: el
+        // control de que no se disparen. El detalle, en GET /api/printjobs/reprints.
+        var reprints = await _dbContext.PrintJobEvents
+            .Where(e => e.EventType == RoutingService.ReprintEvent && e.OccurredAtUtc >= fromUtc && e.OccurredAtUtc <= now)
+            .Join(jobs, e => e.JobId, j => j.JobId, (e, j) => e.EventId)
+            .CountAsync(cancellationToken);
+
         var kpis = new
         {
             received = storeRows.Sum(r => r.Received),
             printed = printedRows.Count,
             failed = failedRows.Count,
+            reprints,
             queueCurrent = storeRows.Sum(r => r.QueuedCurrent),
             failedWithoutRetryCurrent = storeRows.Sum(r => r.FailedWithoutRetryCurrent),
             activePrinters = storeRows.Sum(r => r.ConnectedPrinters),
@@ -123,12 +132,14 @@ public class DashboardController : ControllerBase
 
     /// <summary>
     /// Serie temporal del periodo para el dashboard: llegadas, impresos y fallos por tramo, mas la
-    /// profundidad de cola reconstruida. Mismas definiciones que `overview` (cohorte por
+    /// profundidad de cola reconstruida: `queueDepth` al final de cada tramo y `queuePeak`, la mayor
+    /// que hubo dentro. Mismas definiciones que `overview` (cohorte por
     /// CreatedAtUtc, PrintJobEvents para impreso/fallo), para que la grafica y los KPIs no puedan
-    /// contar cosas distintas.
+    /// contar cosas distintas. `outcome` reparte lo que llego en cada tramo por su estado de ahora.
     ///
     /// La cola no se puede consultar en pasado —`queueCurrent` es una foto— asi que se reconstruye
-    /// caminando hacia atras desde la foto de ahora: depth[n-1] = depth[n] - llegadas[n] + salidas[n].
+    /// caminando hacia atras desde la foto de ahora: depth[n-1] = depth[n] - entradas[n] + salidas[n]
+    /// (entradas: llegadas mas vueltas a la cola por reintento o reimpresion).
     /// Sale exacta y ahorra la consulta de sembrado que haria falta yendo hacia delante.
     ///
     /// ponytail: los tramos se agrupan en memoria (se traen los instantes, no filas completas). Es la
@@ -169,10 +180,12 @@ public class DashboardController : ControllerBase
         if (effectiveStoreId.HasValue)
             jobs = jobs.Where(x => x.StoreId == effectiveStoreId.Value);
 
-        var arrivals = await jobs
+        // Con su estado de ahora: el resultado de lo que llegó en cada tramo (outcome).
+        var arrived = await jobs
             .Where(x => x.CreatedAtUtc >= fromUtc && x.CreatedAtUtc <= now)
-            .Select(x => x.CreatedAtUtc)
+            .Select(x => new { x.CreatedAtUtc, x.Status })
             .ToListAsync(cancellationToken);
+        var arrivals = arrived.Select(x => x.CreatedAtUtc).ToList();
 
         // Primer instante impreso por trabajo — KPI-P1-001, igual que `printed` del overview.
         var printedAt = await _dbContext.PrintJobEvents
@@ -193,15 +206,25 @@ public class DashboardController : ControllerBase
             .Where(t => t >= fromUtc && t <= now)
             .ToListAsync(cancellationToken);
 
-        // Salidas de cola: primer evento a un estado que ya no cuenta como "en cola". RetryScheduled
-        // sigue dentro de QueueStatuses, asi que un reintento no cuenta como salida.
+        // Salidas de cola: cada paso de un estado de cola (o del alta, sin estado previo) a uno que ya
+        // no lo es. RetryScheduled sigue dentro de QueueStatuses, asi que un reintento automatico no
+        // cuenta como salida.
         var departures = await _dbContext.PrintJobEvents
-            .Where(e => e.NewStatus != null && !DashboardPrintJobPredicates.QueueStatuses.Contains(e.NewStatus.Value))
-            .Join(jobs, e => e.JobId, j => j.JobId, (e, j) => new { e.JobId, e.OccurredAtUtc })
-            .GroupBy(x => x.JobId)
-            .Select(g => g.Min(x => x.OccurredAtUtc))
-            .Where(t => t >= fromUtc && t <= now)
+            .Where(e => e.NewStatus != null && !DashboardPrintJobPredicates.QueueStatuses.Contains(e.NewStatus.Value)
+                && (e.OldStatus == null || DashboardPrintJobPredicates.QueueStatuses.Contains(e.OldStatus.Value))
+                && e.OccurredAtUtc >= fromUtc && e.OccurredAtUtc <= now)
+            .Join(jobs, e => e.JobId, j => j.JobId, (e, j) => e.OccurredAtUtc)
             .ToListAsync(cancellationToken);
+
+        // Vueltas a la cola sin ser llegadas: reintento manual y reimpresion (de fuera de la cola a
+        // Pending). Sin ellas, lo reimpreso que sigue en cola descuadraba la reconstruccion.
+        var requeues = await _dbContext.PrintJobEvents
+            .Where(e => e.OldStatus != null && !DashboardPrintJobPredicates.QueueStatuses.Contains(e.OldStatus.Value)
+                && e.NewStatus != null && DashboardPrintJobPredicates.QueueStatuses.Contains(e.NewStatus.Value)
+                && e.OccurredAtUtc >= fromUtc && e.OccurredAtUtc <= now)
+            .Join(jobs, e => e.JobId, j => j.JobId, (e, j) => e.OccurredAtUtc)
+            .ToListAsync(cancellationToken);
+        var entries = arrivals.Concat(requeues).ToList();
 
         var queueNow = await jobs.CountAsync(
             j => DashboardPrintJobPredicates.QueueStatuses.Contains(j.Status), cancellationToken);
@@ -245,9 +268,17 @@ public class DashboardController : ControllerBase
         }
 
         var received = Bucketize(arrivals);
+        // Lo que llegó en cada tramo, por cómo está ahora: cada trabajo cuenta una vez y un fallo sin
+        // resolver sigue a la vista hasta que se resuelve (al reimprimirlo y salir, pasa a impreso).
+        int[] ArrivedAs(Func<PrintJobStatus, bool> estado) =>
+            Bucketize(arrived.Where(x => estado(x.Status)).Select(x => x.CreatedAtUtc).ToList());
+        var arrivedPrinted = ArrivedAs(s => DashboardPrintJobPredicates.PrintedStatuses.Contains(s));
+        var arrivedFailed = ArrivedAs(s => s is PrintJobStatus.ErrorFinal or PrintJobStatus.PrinterBlocked);
+        var arrivedCancelled = ArrivedAs(s => s == PrintJobStatus.Cancelled);
         var printed = Bucketize(printedAt);
         var failed = Bucketize(failedAt);
         var left = Bucketize(departures);
+        var entered = Bucketize(entries);
 
         // Marcha atras desde la foto actual: el ultimo tramo cierra en queueNow.
         var depth = new int[starts.Count];
@@ -255,7 +286,28 @@ public class DashboardController : ControllerBase
         for (var i = starts.Count - 1; i >= 0; i--)
         {
             depth[i] = running;
-            running = Math.Max(0, running - received[i] + left[i]);
+            running = Math.Max(0, running - entered[i] + left[i]);
+        }
+
+        // Maximo dentro de cada tramo: hacia delante, entrada a entrada y salida a salida, desde la cola
+        // al empezar el periodo (lo que dejo la marcha atras). La cola de un trabajo dura segundos, asi
+        // que la del final del tramo casi siempre es 0 aunque dentro hubiera varios esperando.
+        var steps = entries.Select(t => (t, d: 1)).Concat(departures.Select(t => (t, d: -1)))
+            .OrderBy(x => x.t).ThenBy(x => x.d) // a la misma hora, primero la salida: no infla el pico
+            .ToList();
+        var peak = new int[starts.Count];
+        var level = running;
+        var k = 0;
+        for (var i = 0; i < starts.Count; i++)
+        {
+            peak[i] = level;
+            var end = i + 1 < starts.Count ? starts[i + 1] : DateTimeOffset.MaxValue;
+            for (; k < steps.Count && steps[k].t < end; k++)
+            {
+                level = Math.Max(0, level + steps[k].d);
+                peak[i] = Math.Max(peak[i], level);
+            }
+            peak[i] = Math.Max(peak[i], depth[i]);
         }
 
         var points = starts
@@ -265,7 +317,16 @@ public class DashboardController : ControllerBase
                 received = received[i],
                 printed = printed[i],
                 failed = failed[i],
-                queueDepth = depth[i]
+                queueDepth = depth[i],
+                queuePeak = peak[i],
+                outcome = new
+                {
+                    printed = arrivedPrinted[i],
+                    failed = arrivedFailed[i],
+                    cancelled = arrivedCancelled[i],
+                    // En cola, enviándose o reintentando.
+                    active = received[i] - arrivedPrinted[i] - arrivedFailed[i] - arrivedCancelled[i]
+                }
             })
             .ToList();
 
@@ -318,8 +379,19 @@ public class DashboardController : ControllerBase
     [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> UpdateThresholdRules([FromBody] ThresholdRuleSetRequest request, CancellationToken cancellationToken)
     {
+        // Lo opcional que no venga (un cliente anterior, el PHP) se queda como está.
+        var actual = await _ruleStore.LoadAsync(cancellationToken);
         var rules = new ThresholdRuleSet(
-            ToRules(request.Queue), ToRules(request.Failed), ToRules(request.MissingHost), ToRules(request.Conn));
+            ToRules(request.Queue), ToRules(request.Failed), ToRules(request.MissingHost), ToRules(request.Conn))
+        {
+            Silent = request.Silent is null ? actual.Silent : ToRules(request.Silent),
+            Reprints = request.Reprints is null ? actual.Reprints : ToRules(request.Reprints),
+            Horario = request.Horario is null
+                ? actual.Horario
+                : new HorarioTienda(request.Horario.Dias ?? [], request.Horario.Desde ?? "", request.Horario.Hasta ?? ""),
+            // Lo edita la pantalla de Telegram (PUT /api/telegram/config): aquí se conserva.
+            TelegramSoloEnHorario = actual.TelegramSoloEnHorario
+        };
 
         var errors = await _ruleStore.SaveAsync(rules, cancellationToken);
         if (errors.Count > 0)
@@ -336,7 +408,10 @@ public class DashboardController : ControllerBase
         queue = rules.Queue.Select(r => new { r.Min, r.Severity }),
         failed = rules.Failed.Select(r => new { r.Min, r.Severity }),
         missingHost = rules.MissingHost.Select(r => new { r.Min, r.Severity }),
-        conn = rules.Conn.Select(r => new { r.Min, r.Severity })
+        conn = rules.Conn.Select(r => new { r.Min, r.Severity }),
+        silent = rules.Silent.Select(r => new { r.Min, r.Severity }),
+        reprints = rules.Reprints.Select(r => new { r.Min, r.Severity }),
+        horario = new { dias = rules.Horario.Dias, desde = rules.Horario.Desde, hasta = rules.Horario.Hasta }
     };
 
     [HttpPut("thresholds")]
@@ -497,10 +572,12 @@ public class DashboardController : ControllerBase
         // "Desde" de las incidencias priorizadas (dashboard): antiguedad de la cola y del fallo sin
         // reenviar mas antiguo de cada tienda. Sin ventana, igual que los KPIs de estado actual que
         // acompanan (A-KPI-01): la incidencia sigue abierta aunque empezara antes del periodo.
+        // La cola cuenta desde la ultima orden de imprimir, como su orden en la pantalla: un documento
+        // de hace tres dias reimpreso hoy lleva minutos en cola, no tres dias.
         var oldestQueuedStats = await allJobs
             .Where(j => DashboardPrintJobPredicates.QueueStatuses.Contains(j.Status))
             .GroupBy(j => j.StoreId)
-            .Select(g => new { StoreId = g.Key, Oldest = g.Min(j => j.CreatedAtUtc) })
+            .Select(g => new { StoreId = g.Key, Oldest = g.Min(j => j.LastRequeuedAtUtc ?? j.CreatedAtUtc) })
             .ToDictionaryAsync(x => x.StoreId, x => x.Oldest, cancellationToken);
 
         var oldestFailedStats = await allJobs
@@ -537,6 +614,26 @@ public class DashboardController : ControllerBase
             .Select(g => new { StoreId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.StoreId, x => x.Count, cancellationToken);
 
+        // Umbrales opcionales (27/10/2026), solo si están activados: último trabajo recibido (para
+        // «sin recibir», que cuenta dentro del horario de tienda) y reimpresiones de hoy en la hora
+        // de negocio (mismo corte que el KPI de reimpresiones).
+        var now = _timeProvider.GetUtcNow();
+        var lastReceivedStats = rules.Silent.Count == 0
+            ? new Dictionary<int, DateTimeOffset>()
+            : await allJobs
+                .GroupBy(j => j.StoreId)
+                .Select(g => new { StoreId = g.Key, Last = g.Max(j => j.CreatedAtUtc) })
+                .ToDictionaryAsync(x => x.StoreId, x => x.Last, cancellationToken);
+        var todayStart = BusinessTimeZoneClock.TodayStartUtc(now, _businessTimeZone);
+        var reprintsTodayStats = rules.Reprints.Count == 0
+            ? new Dictionary<int, int>()
+            : await _dbContext.PrintJobEvents
+                .Where(e => e.EventType == RoutingService.ReprintEvent && e.OccurredAtUtc >= todayStart)
+                .Join(allJobs, e => e.JobId, j => j.JobId, (e, j) => j.StoreId)
+                .GroupBy(storeId => storeId)
+                .Select(g => new { StoreId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.StoreId, x => x.Count, cancellationToken);
+
         var printerAcc = new Dictionary<(int StoreId, int PrinterId), (int Queue, int Failed, int Received)>();
         foreach (var r in printerQueueCurrent)
             printerAcc[(r.StoreId, r.PrinterId)] = printerAcc.TryGetValue((r.StoreId, r.PrinterId), out var q)
@@ -548,12 +645,21 @@ public class DashboardController : ControllerBase
             printerAcc[(r.StoreId, r.PrinterId)] = printerAcc.TryGetValue((r.StoreId, r.PrinterId), out var t)
                 ? (t.Queue, t.Failed, t.Received + r.Count) : (0, 0, r.Count);
 
-        var printersByStore = printerAcc
-            .GroupBy(kv => kv.Key.StoreId)
+        // Todas las impresoras activas del ámbito, también las que no han tenido trabajos (a 0):
+        // con solo las de printerAcc, una tienda sin actividad salía sin impresoras (N1).
+        var activePrinterKeys = (await printers
+                .Select(p => new { p.StoreId, p.PrinterId })
+                .ToListAsync(cancellationToken))
+            .Select(p => (p.StoreId, p.PrinterId));
+        var printersByStore = activePrinterKeys
+            .Union(printerAcc.Keys)
+            .GroupBy(k => k.StoreId)
             .ToDictionary(
                 g => g.Key,
                 g => (IReadOnlyList<PrinterDashboardRow>)g
-                    .Select(kv => new PrinterDashboardRow(kv.Key.PrinterId, kv.Value.Queue, kv.Value.Failed, kv.Value.Received))
+                    .Select(k => printerAcc.TryGetValue(k, out var a)
+                        ? new PrinterDashboardRow(k.PrinterId, a.Queue, a.Failed, a.Received)
+                        : new PrinterDashboardRow(k.PrinterId, 0, 0, 0))
                     .OrderByDescending(p => p.QueueCurrent)
                     .ToList());
 
@@ -579,9 +685,15 @@ public class DashboardController : ControllerBase
             var connCrit = connStats.ConnCritical;
             var connWarn = connStats.ConnWarning;
 
+            // Sin impresoras activas no hay nada que esperar: «sin recibir» no cuenta.
+            int? silentMinutes = connected > 0 && lastReceivedStats.TryGetValue(store.StoreId, out var lastReceived)
+                ? rules.Horario.MinutosSinRecibir(lastReceived, now, _businessTimeZone)
+                : null;
+            reprintsTodayStats.TryGetValue(store.StoreId, out var reprintsToday);
+
             var (health, healthReason) = StoreHealthEvaluator.Compute(
                 connected, queuedCurrent, failedWithoutRetryCurrent, missingHost,
-                connMaxStreak, connCrit, connWarn, rules);
+                connMaxStreak, connCrit, connWarn, rules, silentMinutes, reprintsToday);
 
             rows.Add(new StoreDashboardRow(
                 StoreId: store.StoreId,
@@ -597,11 +709,13 @@ public class DashboardController : ControllerBase
                 UnassignedQueueCurrent: unassignedQueueCurrent,
                 OldestQueuedAtUtc: oldestQueuedStats.TryGetValue(store.StoreId, out var oldestQueuedAt) ? oldestQueuedAt : null,
                 OldestFailedWithoutRetryAtUtc: oldestFailedStats.TryGetValue(store.StoreId, out var oldestFailedAt) ? oldestFailedAt : null,
-                Printers: storePrinters ?? []));
+                Printers: storePrinters ?? [],
+                SilentMinutes: silentMinutes,
+                ReprintsToday: reprintsToday));
 
             alertInputs.Add(new StoreAlertInput(
                 store.StoreId, store.Name, connected, queuedCurrent, failedWithoutRetryCurrent,
-                missingHost, connMaxStreak, connCrit, connWarn));
+                missingHost, connMaxStreak, connCrit, connWarn, silentMinutes, reprintsToday));
         }
 
         var alerts = StoreHealthEvaluator.BuildAlerts(alertInputs, rules).ToList();
@@ -741,21 +855,9 @@ public class DashboardController : ControllerBase
     }
 
     private DateTimeOffset ResolveWindowStartUtc(string? window, DateTimeOffset now)
-    {
-        return NormalizeWindow(window) switch
-        {
-            "7d" => now.AddDays(-7),
-            "30d" => now.AddDays(-30),
-            // "today" en la timezone de negocio (Dashboard:BusinessTimeZone), no en la del servidor.
-            _ => BusinessTimeZoneClock.TodayStartUtc(now, _businessTimeZone)
-        };
-    }
+        => BusinessTimeZoneClock.WindowStartUtc(window, now, _businessTimeZone);
 
-    private static string NormalizeWindow(string? window)
-    {
-        var normalized = (window ?? string.Empty).Trim().ToLowerInvariant();
-        return normalized is "7d" or "30d" ? normalized : "today";
-    }
+    private static string NormalizeWindow(string? window) => BusinessTimeZoneClock.NormalizeWindow(window);
 
     private int? GetCurrentUserStoreId()
     {
@@ -777,7 +879,10 @@ public class DashboardController : ControllerBase
         int UnassignedQueueCurrent,
         DateTimeOffset? OldestQueuedAtUtc,
         DateTimeOffset? OldestFailedWithoutRetryAtUtc,
-        IReadOnlyList<PrinterDashboardRow> Printers);
+        IReadOnlyList<PrinterDashboardRow> Printers,
+        // Umbrales opcionales: null fuera de horario o sin impresoras; reimpresiones de hoy.
+        int? SilentMinutes = null,
+        int ReprintsToday = 0);
 
     private sealed record PrinterDashboardRow(
         int PrinterId,
@@ -824,4 +929,9 @@ public record ThresholdRuleSetRequest(
     List<ThresholdRuleRequest>? Queue,
     List<ThresholdRuleRequest>? Failed,
     List<ThresholdRuleRequest>? MissingHost,
-    List<ThresholdRuleRequest>? Conn);
+    List<ThresholdRuleRequest>? Conn,
+    List<ThresholdRuleRequest>? Silent = null,
+    List<ThresholdRuleRequest>? Reprints = null,
+    HorarioTiendaRequest? Horario = null);
+
+public record HorarioTiendaRequest(List<int>? Dias, string? Desde, string? Hasta);

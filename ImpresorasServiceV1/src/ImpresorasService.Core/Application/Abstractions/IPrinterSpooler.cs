@@ -11,7 +11,10 @@ public sealed record PrintSpoolResult(
     // Por dónde salió, para el historial del trabajo (impresión por IP).
     string? Detalle = null,
     // Número que dio la impresora al imprimir por IP: con él se confirma el trabajo.
-    int? IppJobId = null);
+    int? IppJobId = null,
+    // No llegó a salir nada hacia la impresora (la rechazó o no respondía): se puede probar
+    // otra vía sin riesgo de que salga dos veces.
+    bool SinEnviar = false);
 
 /// <summary>
 /// Abstracción para enviar trabajos al spooler de impresión de Windows.

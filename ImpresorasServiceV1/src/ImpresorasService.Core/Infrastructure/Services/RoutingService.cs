@@ -2,6 +2,7 @@ using ImpresorasService.Application.Abstractions;
 using ImpresorasService.Domain;
 using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure.Persistence;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 
 namespace ImpresorasService.Infrastructure.Services;
@@ -12,8 +13,26 @@ public class RoutingService : IRoutingService
     private readonly IRoutingResolver _resolver;
 
     public const string RouteNotFoundCode = "ROUTE_NOT_FOUND";
-    /// <summary>Evento de la reimpresión que pide un operador (la cola los cuenta).</summary>
+    /// <summary>Reintento que pide un operador de algo que no había salido (venía de ErrorFinal).</summary>
     public const string RetryRouteEvent = "RETRY_ROUTE";
+    /// <summary>
+    /// Reimpresión de algo que ya salió, con o sin confirmación: puede quedar duplicado. Lleva quién
+    /// (actor_id), el motivo y la nota (metadata_json) y es el registro que consulta GET /api/reprints.
+    /// </summary>
+    public const string ReprintEvent = "REPRINT";
+    public const string OtherReason = "OTRO";
+    /// <summary>Motivos de reimpresión: clave (en metadata_json) y texto. «Otro» exige nota.</summary>
+    public static readonly IReadOnlyDictionary<string, string> ReprintReasons = new Dictionary<string, string>
+    {
+        ["MAL_IMPRESO"] = "Mal impreso",
+        ["PERDIDO"] = "Perdido",
+        ["DANADO"] = "Dañado o mojado",
+        ["ATASCO"] = "Atasco o sin papel",
+        [OtherReason] = "Otro",
+    };
+    /// <summary>Lo que ya salió se reimprime con motivo; no se reintenta.</summary>
+    public static readonly PrintJobStatus[] ReprintableStatuses = [PrintJobStatus.PrintedConfirmed, PrintJobStatus.PrintedUnknown];
+    public const int MaxReprintNoteLength = 500;
 
     public RoutingService(ImpresorasDbContext db, IRoutingResolver resolver)
     {
@@ -22,79 +41,134 @@ public class RoutingService : IRoutingService
     }
 
     /// <summary>
-    /// Reintento/reimpresion manual. Fase 2.5: las transiciones van por UPDATE condicionado al
-    /// estado esperado, asi que si el Worker reclamo el trabajo entre la lectura y la escritura
-    /// la operacion afecta a 0 filas y se responde con la verdad, en vez de confirmar un cambio
-    /// que nunca llego a aplicarse.
+    /// Reintento manual de algo que no ha salido (Pending o ErrorFinal: ROUTE_NOT_FOUND,
+    /// PRINTER_INVALID, RETRIES_EXHAUSTED...). Lo que ya salió va por <see cref="ReprintAsync"/>,
+    /// con motivo: por aquí no, para que ninguna copia posible quede sin registrar.
     /// </summary>
-    public async Task<RouteResult> TryRetryRouteAsync(Guid jobId, CancellationToken cancellationToken = default)
+    public async Task<RouteResult> TryRetryRouteAsync(Guid jobId, CancellationToken cancellationToken = default, string? actorId = null)
     {
-        var job = await _db.PrintJobs.AsNoTracking().FirstOrDefaultAsync(x => x.JobId == jobId, cancellationToken);
-        if (job is null)
-            throw new InvalidOperationException($"Job {jobId} no encontrado.");
+        var job = await ReadJobAsync(jobId, cancellationToken);
 
-        // PrintedUnknown entra aquí porque es la única salida de "reimprimir asumiendo el riesgo":
-        // el sistema paró en vez de reenviar solo (puede haberse impreso ya), así que la reimpresión
-        // es una decisión humana y queda registrada como tal en el evento.
-        if (job.Status is PrintJobStatus.ErrorFinal or PrintJobStatus.PrintedUnknown)
+        if (job.Status == PrintJobStatus.ErrorFinal)
         {
-            var previousStatus = job.Status;
-            var resetAt = DateTimeOffset.UtcNow;
-
-            // Reintento manual: permitir volver a enrutar cualquier ErrorFinal
-            // (ROUTE_NOT_FOUND, PRINTER_INVALID, RETRIES_EXHAUSTED, etc.).
-            var reset = await _db.PrintJobs
-                .Where(x => x.JobId == jobId && x.Status == previousStatus)
-                .ExecuteUpdateAsync(s => s
-                    .SetProperty(x => x.Status, PrintJobStatus.Pending)
-                    .SetProperty(x => x.PrinterId, (int?)null)
-                    .SetProperty(x => x.AttemptCount, 0)
-                    .SetProperty(x => x.NextRetryAtUtc, (DateTimeOffset?)null)
-                    .SetProperty(x => x.LastErrorCode, (string?)null)
-                    .SetProperty(x => x.LastErrorMessage, (string?)null)
-                    .SetProperty(x => x.UpdatedAtUtc, resetAt), cancellationToken);
-
-            if (reset != 1)
-                throw new PrintJobStateConflictException(
-                    $"El job {jobId} cambio de estado mientras se preparaba el reintento; vuelva a consultarlo.");
-
-            _db.PrintJobEvents.Add(new PrintJobEvent
+            // Sin PDF (no se pudo descargar, o la retención ya lo borró) acabaría en PDF_MISSING.
+            if (!await HasPdfAsync(jobId, cancellationToken))
+                throw new InvalidOperationException(SinPdf);
+            job = await ResetForResendAsync(job, new PrintJobEvent
             {
-                JobId = jobId,
                 EventType = RetryRouteEvent,
-                OldStatus = previousStatus,
-                NewStatus = PrintJobStatus.Pending,
-                ActorType = "user",
-                Message = previousStatus == PrintJobStatus.PrintedUnknown
-                    ? "Reimpresión manual solicitada desde PrintedUnknown: el operador asume el riesgo de duplicado."
-                    : "Reintento manual solicitado desde ErrorFinal.",
-                OccurredAtUtc = resetAt
-            });
-            await _db.SaveChangesAsync(cancellationToken);
-
-            // ExecuteUpdate no refresca lo ya leido: sin esto el enrutado seguiria viendo el
-            // estado anterior y trataria de transicionar desde el.
-            job = await _db.PrintJobs.AsNoTracking().FirstAsync(x => x.JobId == jobId, cancellationToken);
+                ActorId = actorId,
+                Message = "Reintento manual solicitado desde ErrorFinal."
+            }, cancellationToken);
+        }
+        else if (ReprintableStatuses.Contains(job.Status))
+        {
+            throw new InvalidOperationException("Este trabajo ya salió: se reimprime con motivo, no se reintenta.");
         }
         else if (job.Status != PrintJobStatus.Pending)
         {
-            throw new InvalidOperationException(
-                $"El job {jobId} no está en Pending, ErrorFinal ni PrintedUnknown (actual: {job.Status}).");
+            throw new InvalidOperationException("Solo se reintenta lo que acabó en error; este trabajo sigue en curso o se canceló.");
         }
 
         return await TryRouteJobInternalAsync(job, cancellationToken);
     }
 
-    public async Task<RouteResult> TryRouteJobAsync(Guid jobId, CancellationToken cancellationToken = default)
-    {
-        var job = await _db.PrintJobs.AsNoTracking().FirstOrDefaultAsync(x => x.JobId == jobId, cancellationToken);
-        if (job is null)
-            throw new InvalidOperationException($"Job {jobId} no encontrado.");
+    private const string SinPdf =
+        "Este trabajo ya no tiene el PDF (no se pudo descargar, o se borró a los 90 días): el ERP tiene que volver a mandar el documento.";
 
-        if (job.Status != PrintJobStatus.Pending)
-            throw new InvalidOperationException($"El job {jobId} no está en Pending (actual: {job.Status}).");
+    // El trabajo sin su PDF, que puede pesar megas: para decidir y enrutar no hace falta (auditoría L7).
+    private async Task<PrintJob> ReadJobAsync(Guid jobId, CancellationToken cancellationToken) =>
+        await _db.PrintJobs.AsNoTracking()
+            .Where(x => x.JobId == jobId)
+            .Select(x => new PrintJob
+            {
+                JobId = x.JobId, Status = x.Status, PrinterId = x.PrinterId, StoreId = x.StoreId,
+                DocumentType = x.DocumentType, Channel = x.Channel
+            })
+            .FirstOrDefaultAsync(cancellationToken)
+        ?? throw new KeyNotFoundException($"Job {jobId} no encontrado.");
+
+    private Task<bool> HasPdfAsync(Guid jobId, CancellationToken cancellationToken) =>
+        _db.PrintJobs.AnyAsync(x => x.JobId == jobId && x.PdfBlob != null, cancellationToken);
+
+    /// <summary>
+    /// Reimprime algo que ya salió (PrintedConfirmed o PrintedUnknown): mal impreso, perdido,
+    /// mojado... Sin límite de veces (decisión del usuario, 26/10/2026), pero siempre con motivo y
+    /// con quién, en un evento REPRINT. Sin PDF (retención) no se puede: lo vuelve a mandar el ERP.
+    /// </summary>
+    public async Task<RouteResult> ReprintAsync(
+        Guid jobId, string? reason, string? note, string? actorId, CancellationToken cancellationToken = default)
+    {
+        if (reason is null || !ReprintReasons.TryGetValue(reason, out var reasonText))
+            throw new InvalidOperationException("Motivo de reimpresión no válido.");
+        note = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+        if (reason == OtherReason && note is null)
+            throw new InvalidOperationException("Con «Otro» hay que explicar el motivo.");
+        if (note?.Length > MaxReprintNoteLength)
+            throw new InvalidOperationException($"La nota admite como mucho {MaxReprintNoteLength} caracteres.");
+
+        var job = await ReadJobAsync(jobId, cancellationToken);
+        if (!ReprintableStatuses.Contains(job.Status))
+            throw new InvalidOperationException("Solo se reimprime lo que ya salió (impreso o sin confirmar).");
+        if (!await HasPdfAsync(jobId, cancellationToken))
+            throw new InvalidOperationException(SinPdf);
+
+        job = await ResetForResendAsync(job, new PrintJobEvent
+        {
+            EventType = ReprintEvent,
+            ActorId = actorId,
+            Message = $"Reimpresión: {reasonText}{(note is null ? "" : $" ({note})")}. Ya había salido: puede quedar duplicado.",
+            MetadataJson = JsonSerializer.Serialize(new { reason, note, printerId = job.PrinterId })
+        }, cancellationToken);
 
         return await TryRouteJobInternalAsync(job, cancellationToken);
+    }
+
+    /// <summary>
+    /// Devuelve el trabajo a Pending para volver a mandarlo y apunta el evento. Fase 2.5: UPDATE
+    /// condicionado al estado leído, así que si el Worker lo cambió entre medias afecta a 0 filas y se
+    /// responde con la verdad, en vez de confirmar un cambio que nunca llegó a aplicarse. También al
+    /// PDF: si la retención lo borró entre la comprobación y aquí, no se reenvía (auditoría L6). El
+    /// UPDATE y su evento, juntos o ninguno: una copia nunca queda sin registrar (auditoría L3).
+    /// </summary>
+    private async Task<PrintJob> ResetForResendAsync(PrintJob job, PrintJobEvent evento, CancellationToken cancellationToken)
+    {
+        var previousStatus = job.Status;
+        var resetAt = DateTimeOffset.UtcNow;
+
+        await using var tx = await _db.Database.BeginTransactionAsync(cancellationToken);
+        var reset = await _db.PrintJobs
+            .Where(x => x.JobId == job.JobId && x.Status == previousStatus && x.PdfBlob != null)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.Status, PrintJobStatus.Pending)
+                .SetProperty(x => x.PrinterId, (int?)null)
+                // El número de la impresora era del envío anterior: con él, el watchdog
+                // confirmaría la copia nueva por el trabajo viejo.
+                .SetProperty(x => x.IppJobId, (int?)null)
+                .SetProperty(x => x.AttemptCount, 0)
+                .SetProperty(x => x.NextRetryAtUtc, (DateTimeOffset?)null)
+                .SetProperty(x => x.LastErrorCode, (string?)null)
+                .SetProperty(x => x.LastErrorMessage, (string?)null)
+                .SetProperty(x => x.UpdatedAtUtc, resetAt)
+                // La cola ordena por aquí: lo que se vuelve a mandar sube arriba aunque no salga.
+                .SetProperty(x => x.LastRequeuedAtUtc, resetAt), cancellationToken);
+
+        if (reset != 1)
+            throw new PrintJobStateConflictException(
+                $"El job {job.JobId} cambio de estado mientras se preparaba el reenvío; vuelva a consultarlo.");
+
+        evento.JobId = job.JobId;
+        evento.OldStatus = previousStatus;
+        evento.NewStatus = PrintJobStatus.Pending;
+        evento.ActorType = "user";
+        evento.OccurredAtUtc = resetAt;
+        _db.PrintJobEvents.Add(evento);
+        await _db.SaveChangesAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
+
+        // ExecuteUpdate no refresca lo ya leido: sin esto el enrutado seguiria viendo el
+        // estado anterior y trataria de transicionar desde el.
+        return await ReadJobAsync(job.JobId, cancellationToken);
     }
 
     private async Task<RouteResult> TryRouteJobInternalAsync(PrintJob job, CancellationToken cancellationToken)

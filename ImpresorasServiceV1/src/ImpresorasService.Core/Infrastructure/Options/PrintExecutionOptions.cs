@@ -11,7 +11,7 @@ public sealed class PrintExecutionOptions
     public int BatchSize { get; set; } = 10;
 
     /// <summary>Timeout por intento de impresión en segundos.</summary>
-    public int TimeoutSeconds { get; set; } = 30;
+    public int TimeoutSeconds { get; set; } = 120;
 
     /// <summary>Máximo número de intentos por job.</summary>
     public int MaxAttempts { get; set; } = 4;

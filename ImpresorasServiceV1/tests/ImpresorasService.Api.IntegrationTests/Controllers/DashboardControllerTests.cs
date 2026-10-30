@@ -103,6 +103,96 @@ public sealed class DashboardControllerTests : IntegrationTestBase
     }
 
     /// <summary>
+    /// Umbrales opcionales (27/10/2026): se guardan y se leen con su horario, y un cliente que no
+    /// los conoce (el PHP manda solo las cuatro métricas de siempre) no los borra. Cifras que no
+    /// pueden saltar en otros tests (el fichero de reglas es compartido); al final se desactivan.
+    /// </summary>
+    [Fact]
+    public async Task ThresholdRules_OpcionalesYHorario_SeGuardanYUnClienteAnteriorNoLosBorra()
+    {
+        var actuales = await (await Client.GetAsync("/api/dashboard/threshold-rules")).Content.ReadFromJsonAsync<ReglasDto>();
+        Assert.NotNull(actuales);
+        object Basicas(object? silent, object? reprints, object? horario) => new
+        {
+            actuales!.Queue, actuales.Failed, actuales.MissingHost, actuales.Conn, silent, reprints, horario
+        };
+        try
+        {
+            var put = await Client.PutAsJsonAsync("/api/dashboard/threshold-rules", Basicas(
+                new[] { new { min = 600, severity = "warning" } },
+                new[] { new { min = 50, severity = "critical" } },
+                new { dias = new[] { 1, 2, 3, 4, 5 }, desde = "08:30", hasta = "20:00" }));
+            put.EnsureSuccessStatusCode();
+
+            // Como el PHP: sin silent, reprints ni horario.
+            var php = await Client.PutAsJsonAsync("/api/dashboard/threshold-rules", new
+            {
+                actuales!.Queue, actuales.Failed, actuales.MissingHost, actuales.Conn
+            });
+            php.EnsureSuccessStatusCode();
+
+            var leidas = await (await Client.GetAsync("/api/dashboard/threshold-rules")).Content.ReadFromJsonAsync<ReglasDto>();
+            Assert.Equal(600, Assert.Single(leidas!.Silent).Min);
+            Assert.Equal("critical", Assert.Single(leidas.Reprints).Severity);
+            Assert.Equal(new[] { 1, 2, 3, 4, 5 }, leidas.Horario.Dias);
+            Assert.Equal("08:30", leidas.Horario.Desde);
+
+            var malo = await Client.PutAsJsonAsync("/api/dashboard/threshold-rules", Basicas(
+                Array.Empty<object>(), Array.Empty<object>(), new { dias = Array.Empty<int>(), desde = "20:00", hasta = "08:00" }));
+            Assert.Equal(System.Net.HttpStatusCode.BadRequest, malo.StatusCode);
+        }
+        finally
+        {
+            var limpio = await Client.PutAsJsonAsync("/api/dashboard/threshold-rules", Basicas(
+                Array.Empty<object>(), Array.Empty<object>(), new { dias = new[] { 1, 2, 3, 4, 5, 6 }, desde = "09:00", hasta = "21:00" }));
+            limpio.EnsureSuccessStatusCode();
+        }
+    }
+
+    private sealed record ReglaDto(int Min, string Severity);
+    private sealed record HorarioDto(int[] Dias, string Desde, string Hasta);
+    private sealed record ReglasDto(
+        ReglaDto[] Queue, ReglaDto[] Failed, ReglaDto[] MissingHost, ReglaDto[] Conn,
+        ReglaDto[] Silent, ReglaDto[] Reprints, HorarioDto Horario);
+
+    /// <summary>
+    /// N1: una impresora activa sin ningún trabajo también sale en el desglose de su tienda, a 0
+    /// (antes solo salían las que tenían trabajos y una tienda sin actividad parecía no tener
+    /// impresoras). Las inactivas no salen.
+    /// </summary>
+    [Fact]
+    public async Task GetOverview_PerPrinterBreakdown_IncludesActivePrintersWithoutJobs()
+    {
+        const int storeId = 976;
+        var now = DateTimeOffset.UtcNow;
+
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
+            if (!await db.Stores.AnyAsync(s => s.StoreId == storeId))
+                db.Stores.Add(new Store { StoreId = storeId, Name = "Idle Store", IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now });
+            foreach (var (printerId, activa) in new[] { (5976, true), (5977, true), (5978, false) })
+                if (!await db.Printers.AnyAsync(p => p.PrinterId == printerId))
+                    db.Printers.Add(new Printer { PrinterId = printerId, StoreId = storeId, PrinterName = $"Idle {printerId}", Host = "host", IsActive = activa, CreatedAtUtc = now, UpdatedAtUtc = now });
+            db.PrintJobs.RemoveRange(await db.PrintJobs.Where(j => j.StoreId == storeId).ToListAsync());
+            await db.SaveChangesAsync();
+        }
+
+        var response = await Client.GetAsync($"/api/dashboard/overview?window=today&storeId={storeId}");
+
+        response.EnsureSuccessStatusCode();
+        var body = await ReadAsJsonAsync<DashboardOverviewResponse>(response);
+        var store = Assert.Single(body!.Stores!);
+        Assert.Equal(new[] { 5976, 5977 }, store.Printers!.Select(p => p.PrinterId).OrderBy(id => id));
+        Assert.All(store.Printers!, p =>
+        {
+            Assert.Equal(0, p.QueueCurrent);
+            Assert.Equal(0, p.FailedWindow);
+            Assert.Equal(0, p.ReceivedWindow);
+        });
+    }
+
+    /// <summary>
     /// "Desde" de las incidencias priorizadas del dashboard: la antiguedad sale del trabajo en cola
     /// mas viejo (CreatedAtUtc) y del fallo sin reenviar mas viejo (UpdatedAtUtc), sin ventana —
     /// una incidencia abierta hace tres dias sigue abierta hoy. Null cuando no hay incidencia.
@@ -129,6 +219,10 @@ public sealed class DashboardControllerTests : IntegrationTestBase
             queuedOld.CreatedAtUtc = oldestQueued;
             var queuedNew = MakeJob(now, PrintJobStatus.Pending, storeId: storeId, printerId: null);
             queuedNew.CreatedAtUtc = now.AddMinutes(-10);
+            // Llegó hace tres días y se reimprimió hace 30 min: cuenta desde la reimpresión.
+            var reprinted = MakeJob(now, PrintJobStatus.Pending, storeId: storeId, printerId: null);
+            reprinted.CreatedAtUtc = now.AddDays(-3);
+            reprinted.LastRequeuedAtUtc = now.AddMinutes(-30);
             var failedOld = MakeJob(now, PrintJobStatus.ErrorFinal, storeId: storeId, printerId: null, attemptCount: 2);
             failedOld.UpdatedAtUtc = oldestFailed;
             var failedNew = MakeJob(now, PrintJobStatus.ErrorFinal, storeId: storeId, printerId: null, attemptCount: 2);
@@ -136,6 +230,7 @@ public sealed class DashboardControllerTests : IntegrationTestBase
 
             AddJobWithEvent(db, queuedOld);
             AddJobWithEvent(db, queuedNew);
+            AddJobWithEvent(db, reprinted);
             AddJobWithEvent(db, failedOld);
             AddJobWithEvent(db, failedNew);
             await db.SaveChangesAsync();
@@ -208,7 +303,8 @@ public sealed class DashboardControllerTests : IntegrationTestBase
             db.PrintJobs.RemoveRange(await db.PrintJobs.Where(j => j.StoreId == storeId).ToListAsync());
 
             AddJobWithEvent(db, MakeJob(now, PrintJobStatus.ErrorFinal, storeId: storeId, printerId: printerId, attemptCount: 1));
-            AddJobWithEvent(db, MakeJob(now, PrintJobStatus.PrinterBlocked, storeId: storeId, printerId: printerId, attemptCount: 2));
+            // Bloqueado en su primer intento: ya es una incidencia (D3, 27/10/2026).
+            AddJobWithEvent(db, MakeJob(now, PrintJobStatus.PrinterBlocked, storeId: storeId, printerId: printerId, attemptCount: 1));
             var cancelled = MakeJob(now, PrintJobStatus.Cancelled, storeId: storeId, printerId: printerId, attemptCount: 4);
             cancelledJobId = cancelled.JobId;
             AddJobWithEvent(db, cancelled);
@@ -220,7 +316,7 @@ public sealed class DashboardControllerTests : IntegrationTestBase
         overviewResponse.EnsureSuccessStatusCode();
         var overview = await ReadAsJsonAsync<DashboardOverviewResponse>(overviewResponse);
         var store = Assert.Single(overview!.Stores!);
-        Assert.Equal(2, store.FailedWithoutRetryCurrent); // ErrorFinal + PrinterBlocked(2 intentos); el Cancelado no
+        Assert.Equal(2, store.FailedWithoutRetryCurrent); // ErrorFinal + PrinterBlocked (1 intento); el Cancelado no
 
         var queueResponse = await Client.GetAsync($"/api/printjobs?storeId={storeId}&failedWithoutRetry=true&includeTotal=true");
         queueResponse.EnsureSuccessStatusCode();
@@ -321,6 +417,96 @@ public sealed class DashboardControllerTests : IntegrationTestBase
 
         var store = Assert.Single(overview.Stores!);
         Assert.Equal(store.QueuedCurrent, series.Points!.Last().QueueDepth);
+    }
+
+    /// <summary>
+    /// La cola de un trabajo dura segundos: al cerrar el tramo ya está vacía aunque dentro esperasen
+    /// varios. queuePeak da el máximo del tramo. Y una reimpresión vuelve a la cola sin ser una
+    /// llegada: sin contarla, los tramos anteriores arrastraban ese trabajo.
+    /// </summary>
+    [Fact]
+    public async Task GetTimeseries_QueuePeak_CuentaLoQueEsperoDentroDelTramo()
+    {
+        const int storeId = 986;
+        var now = DateTimeOffset.UtcNow;
+        // Dentro del tramo de ahora (horas en punto también en Madrid).
+        var tramo = new DateTimeOffset(now.Year, now.Month, now.Day, now.Hour, 0, 0, TimeSpan.Zero);
+        var llega = tramo + (now - tramo) / 4;
+        var sale = tramo + (now - tramo) / 2;
+
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
+            if (!await db.Stores.AnyAsync(s => s.StoreId == storeId))
+                db.Stores.Add(new Store { StoreId = storeId, Name = "Peak Store", IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now });
+            db.PrintJobs.RemoveRange(await db.PrintJobs.Where(j => j.StoreId == storeId).ToListAsync());
+
+            for (var i = 0; i < 6; i++)
+            {
+                var job = MakeJob(now, PrintJobStatus.PrintedConfirmed, storeId: storeId, printerId: null);
+                job.CreatedAtUtc = llega;
+                job.UpdatedAtUtc = sale;
+                AddJobWithEvent(db, job);
+            }
+            var reimpreso = MakeJob(now, PrintJobStatus.Pending, storeId: storeId, printerId: null);
+            reimpreso.CreatedAtUtc = now.AddDays(-3);
+            db.PrintJobs.Add(reimpreso);
+            db.PrintJobEvents.Add(new PrintJobEvent
+            {
+                JobId = reimpreso.JobId,
+                EventType = "REPRINT",
+                OldStatus = PrintJobStatus.PrintedConfirmed,
+                NewStatus = PrintJobStatus.Pending,
+                ActorType = "user",
+                OccurredAtUtc = llega
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var response = await Client.GetAsync($"/api/dashboard/timeseries?window=today&storeId={storeId}");
+        response.EnsureSuccessStatusCode();
+        var points = (await ReadAsJsonAsync<TimeseriesResponse>(response))!.Points!;
+
+        Assert.Equal(1, points.Last().QueueDepth);
+        Assert.Equal(7, points.Last().QueuePeak);
+        Assert.All(points.SkipLast(1), p => Assert.Equal(0, p.QueueDepth));
+    }
+
+    /// <summary>
+    /// El resultado de lo que llegó en un tramo: cada trabajo una vez, por su estado de ahora. Un fallo
+    /// sin resolver sigue contando como fallido en su tramo (antes la gráfica lo perdía de vista).
+    /// </summary>
+    [Fact]
+    public async Task GetTimeseries_Outcome_RepartePorEstadoDeAhoraYNoPierdeLosFallos()
+    {
+        const int storeId = 985;
+        var now = DateTimeOffset.UtcNow;
+
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
+            if (!await db.Stores.AnyAsync(s => s.StoreId == storeId))
+                db.Stores.Add(new Store { StoreId = storeId, Name = "Outcome Store", IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now });
+            db.PrintJobs.RemoveRange(await db.PrintJobs.Where(j => j.StoreId == storeId).ToListAsync());
+
+            AddJobWithEvent(db, MakeJob(now, PrintJobStatus.PrintedConfirmed, storeId: storeId, printerId: null));
+            AddJobWithEvent(db, MakeJob(now, PrintJobStatus.ErrorFinal, storeId: storeId, printerId: null));
+            AddJobWithEvent(db, MakeJob(now, PrintJobStatus.ErrorFinal, storeId: storeId, printerId: null));
+            AddJobWithEvent(db, MakeJob(now, PrintJobStatus.PrinterBlocked, storeId: storeId, printerId: null));
+            AddJobWithEvent(db, MakeJob(now, PrintJobStatus.Cancelled, storeId: storeId, printerId: null));
+            AddJobWithEvent(db, MakeJob(now, PrintJobStatus.Pending, storeId: storeId, printerId: null));
+            await db.SaveChangesAsync();
+        }
+
+        var response = await Client.GetAsync($"/api/dashboard/timeseries?window=today&storeId={storeId}");
+        response.EnsureSuccessStatusCode();
+        var tramo = Assert.Single((await ReadAsJsonAsync<TimeseriesResponse>(response))!.Points!, p => p.Received > 0);
+
+        Assert.Equal(6, tramo.Received);
+        Assert.Equal(1, tramo.Outcome!.Printed);
+        Assert.Equal(3, tramo.Outcome.Failed);
+        Assert.Equal(1, tramo.Outcome.Cancelled);
+        Assert.Equal(1, tramo.Outcome.Active);
     }
 
     [Fact]
@@ -537,6 +723,16 @@ public sealed class DashboardControllerTests : IntegrationTestBase
         public int Printed { get; set; }
         public int Failed { get; set; }
         public int QueueDepth { get; set; }
+        public int QueuePeak { get; set; }
+        public TimeseriesOutcome? Outcome { get; set; }
+    }
+
+    private sealed class TimeseriesOutcome
+    {
+        public int Printed { get; set; }
+        public int Failed { get; set; }
+        public int Cancelled { get; set; }
+        public int Active { get; set; }
     }
 
     private sealed class PagedJobs

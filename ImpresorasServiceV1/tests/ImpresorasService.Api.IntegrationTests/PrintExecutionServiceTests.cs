@@ -120,5 +120,14 @@ public sealed class PrintExecutionServiceTests
         {
             return Task.FromResult<IReadOnlyList<int?>>(requests.Select(_ => (int?)null).ToArray());
         }
+
+        public Task<RoutingRule?> ResolveRuleAsync(
+            int storeId,
+            string documentType,
+            string channel,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<RoutingRule?>(null);
+        }
     }
 }

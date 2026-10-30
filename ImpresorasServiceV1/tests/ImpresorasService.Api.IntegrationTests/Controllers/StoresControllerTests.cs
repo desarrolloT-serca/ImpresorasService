@@ -137,5 +137,44 @@ public sealed class StoresControllerTests : IntegrationTestBase
         await db.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// Borrar una tienda con su histórico borra también sus avisos de Telegram (eventos con el job_id
+    /// fijo de la tienda), aunque no tenga trabajos: si no, al dar de alta otra vez el mismo storeId
+    /// (viene del ERP) reaparecería el historial de la vieja. Los de otras tiendas no se tocan.
+    /// </summary>
+    [Fact]
+    public async Task HardDelete_ConHistorico_BorraSusAvisosDeTelegram()
+    {
+        const int storeId = 973;
+        const int otra = 972;
+        var now = DateTimeOffset.UtcNow;
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
+            foreach (var id in new[] { storeId, otra })
+            {
+                if (!await db.Stores.AnyAsync(s => s.StoreId == id))
+                    db.Stores.Add(new Store { StoreId = id, Name = $"Tienda {id}", IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now });
+                db.PrintJobEvents.Add(new PrintJobEvent
+                {
+                    JobId = Application.Services.TelegramMensajes.JobIdHistorial(id),
+                    EventType = Application.Services.TelegramMensajes.EventoHistorial,
+                    ActorType = "system", Message = "aviso", OccurredAtUtc = now
+                });
+            }
+            await db.SaveChangesAsync();
+        }
+
+        var r = await Client.DeleteAsync($"/api/stores/{storeId}?hardDelete=true&purgeHistory=true");
+
+        r.EnsureSuccessStatusCode();
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
+            Assert.False(await db.PrintJobEvents.AnyAsync(e => e.JobId == Application.Services.TelegramMensajes.JobIdHistorial(storeId)));
+            Assert.True(await db.PrintJobEvents.AnyAsync(e => e.JobId == Application.Services.TelegramMensajes.JobIdHistorial(otra)));
+        }
+    }
+
     private sealed record StoreDeleteResponse(string Message, int AffectedPrinters);
 }
