@@ -10,6 +10,8 @@ namespace ImpresorasService.Application.Services;
 
 public class IngestionService
 {
+    public const string PdfDownloadFailedCode = "PDF_DOWNLOAD_FAILED";
+
     private readonly IJobSourceAdapter _jobSourceAdapter;
     private readonly IPrintJobRepository _printJobRepository;
     private readonly IRoutingService _routingService;
@@ -67,6 +69,8 @@ public class IngestionService
 
             var jobId = Guid.NewGuid();
             var now = _timeProvider.GetUtcNow();
+            // pdf_url que no sirve: el trabajo queda a la vista en ErrorFinal, sin PDF y sin enrutar.
+            var pdfFailed = sourceJob.PdfError is not null;
 
             var printJob = new PrintJob
             {
@@ -76,9 +80,11 @@ public class IngestionService
                 StoreId = sourceJob.StoreId,
                 DocumentType = sourceJob.DocumentType,
                 Channel = string.IsNullOrWhiteSpace(sourceJob.Channel) ? "DEFAULT" : sourceJob.Channel,
-                PdfBlob = sourceJob.PdfBlob,
-                PdfSha256 = ComputeSha256(sourceJob.PdfBlob),
-                Status = PrintJobStatus.Pending,
+                PdfBlob = pdfFailed ? null : sourceJob.PdfBlob,
+                PdfSha256 = pdfFailed ? string.Empty : ComputeSha256(sourceJob.PdfBlob),
+                Status = pdfFailed ? PrintJobStatus.ErrorFinal : PrintJobStatus.Pending,
+                LastErrorCode = pdfFailed ? PdfDownloadFailedCode : null,
+                LastErrorMessage = sourceJob.PdfError,
                 AttemptCount = 0,
                 CorrelationId = Guid.NewGuid(),
                 CreatedAtUtc = sourceJob.CreatedAtUtc == default ? now : sourceJob.CreatedAtUtc,
@@ -88,11 +94,14 @@ public class IngestionService
             var createdEvent = new PrintJobEvent
             {
                 JobId = printJob.JobId,
-                EventType = "INGESTED",
+                EventType = pdfFailed ? PdfDownloadFailedCode : "INGESTED",
                 OldStatus = null,
-                NewStatus = PrintJobStatus.Pending,
+                NewStatus = printJob.Status,
+                ErrorCode = printJob.LastErrorCode,
                 ActorType = "system",
-                Message = "Trabajo ingerido desde origen y encolado en PrintJobs.",
+                Message = pdfFailed
+                    ? $"No se pudo descargar el PDF: {sourceJob.PdfError}"
+                    : "Trabajo ingerido desde origen y encolado en PrintJobs.",
                 OccurredAtUtc = now
             };
 
@@ -107,7 +116,8 @@ public class IngestionService
                 // en lote, la violación del índice único abortaba el lote entero.
                 await _printJobRepository.SaveChangesAsync(cancellationToken);
                 sourceJobIdsToMarkProcessed.Add(sourceJob.SourceJobId);
-                insertedJobIds.Add(jobId);
+                if (!pdfFailed)
+                    insertedJobIds.Add(jobId);
                 insertedCount++;
             }
             catch (DbUpdateException ex)

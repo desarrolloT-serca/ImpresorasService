@@ -57,6 +57,10 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
             {
                 break;
             }
+            catch (Exception ex) when (FallosBd.EsFalloDeConexion(ex))
+            {
+                // La base no responde: lo anota EstadoBd, una vez y con el motivo.
+            }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Fallo en watchdog de SpoolAccepted.");
@@ -96,6 +100,7 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
                 LastErrorCode  = j.LastErrorCode,
                 LastErrorMessage = j.LastErrorMessage,
                 NextRetryAtUtc = j.NextRetryAtUtc,
+                IppJobId       = j.IppJobId,
             })
             .Take(batchSize)
             .ToListAsync(ct);
@@ -109,12 +114,15 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
 
         // Solo los jobs que ApplyOutcome ha cambiado. Contar sobre `candidates` mezclaba los
         // ignorados con los procesados: "Recuperados" acababa contando los que seguían esperando.
-        var changed = new List<WatchdogJob>();
+        var changed = new List<(WatchdogJob Job, PrintJobStatus OldStatus)>();
 
         foreach (var job in candidates)
         {
             var oldStatus = job.Status;
-            var ippResult = ResolveIppResult(job, printerHosts, ippResults);
+            // Lo que salió por IP se confirma por su número de trabajo; si la impresora ya no lo
+            // recuerda, por su estado, como lo que salió por la cola de Windows.
+            var ippResult = await QueryJobAsync(job, printerHosts, ct)
+                ?? ResolveIppResult(job, printerHosts, ippResults);
             if (!ApplyOutcome(job, ippResult, maxAgeSeconds, now))
             {
                 _logger.LogInformation(
@@ -123,44 +131,50 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
                 continue;
             }
 
-            // Attach + mark-modified evita cargar la entidad completa (PdfBlob).
-            var entity = new PrintJob { JobId = job.JobId };
-            db.PrintJobs.Attach(entity);
-            entity.Status           = job.Status;
-            entity.UpdatedAtUtc     = job.UpdatedAtUtc;
-            entity.LastErrorCode    = job.LastErrorCode;
-            entity.LastErrorMessage = job.LastErrorMessage;
-            entity.NextRetryAtUtc  = job.NextRetryAtUtc;
-            db.Entry(entity).Property(x => x.Status).IsModified           = true;
-            db.Entry(entity).Property(x => x.UpdatedAtUtc).IsModified     = true;
-            db.Entry(entity).Property(x => x.LastErrorCode).IsModified    = true;
-            db.Entry(entity).Property(x => x.LastErrorMessage).IsModified = true;
-            db.Entry(entity).Property(x => x.NextRetryAtUtc).IsModified   = true;
+            // Sin Cancel-Job automático (decisión del usuario, 27/10/2026, cambia D3): un trabajo que
+            // la impresora tiene parado demasiado tiempo queda «Sin confirmar, puede salir aún» y lo
+            // resuelve una persona desde la cola, con su evento. Cancelar por número podía acertar a
+            // otro trabajo si la impresora se reinició y reutiliza números (3b.8): un error oculto.
 
-            await db.PrintJobEvents.AddAsync(BuildEvent(job, oldStatus, now), ct);
-            changed.Add(job);
+            changed.Add((job, oldStatus));
         }
 
         if (changed.Count == 0)
             return;
 
-        try
+        // Cada cambio, condicionado al estado que se leyó: si un operador lo canceló (o cambió) mientras
+        // se consultaban las impresoras, su decisión manda y aquí no se pisa (auditoría L1). En una
+        // transacción con sus eventos, y después de las consultas para no tenerla abierta durante la red.
+        var applied = new List<WatchdogJob>();
+        await using (var tx = await db.Database.BeginTransactionAsync(ct))
         {
+            foreach (var (job, oldStatus) in changed)
+            {
+                var rows = await db.PrintJobs
+                    .Where(j => j.JobId == job.JobId && j.Status == oldStatus)
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(x => x.Status, job.Status)
+                        .SetProperty(x => x.UpdatedAtUtc, job.UpdatedAtUtc)
+                        .SetProperty(x => x.LastErrorCode, job.LastErrorCode)
+                        .SetProperty(x => x.LastErrorMessage, job.LastErrorMessage)
+                        .SetProperty(x => x.NextRetryAtUtc, job.NextRetryAtUtc), ct);
+                if (rows == 0)
+                    continue;
+                db.PrintJobEvents.Add(BuildEvent(job, oldStatus, now));
+                applied.Add(job);
+            }
             await db.SaveChangesAsync(ct);
-
-            var confirmed = changed.Count(j => j.Status == PrintJobStatus.PrintedConfirmed);
-            var blocked   = changed.Count(j => j.Status == PrintJobStatus.PrinterBlocked);
-            var recovered = changed.Count(j => j.Status == PrintJobStatus.SpoolAccepted);
-            var unknown   = changed.Count(j => j.Status == PrintJobStatus.PrintedUnknown);
-
-            _logger.LogInformation(
-                "Watchdog: {Changed}/{Total} jobs actualizados — Confirmados={Confirmed} Bloqueados={Blocked} Recuperados={Recovered} Desconocidos={Unknown} (maxAge={MaxAge}s).",
-                changed.Count, candidates.Count, confirmed, blocked, recovered, unknown, maxAgeSeconds);
+            await tx.CommitAsync(ct);
         }
-        catch (DbUpdateConcurrencyException)
-        {
-            _logger.LogInformation("Watchdog: concurrencia detectada; reintento en el siguiente ciclo.");
-        }
+
+        var confirmed = applied.Count(j => j.Status == PrintJobStatus.PrintedConfirmed);
+        var blocked   = applied.Count(j => j.Status == PrintJobStatus.PrinterBlocked);
+        var recovered = applied.Count(j => j.Status == PrintJobStatus.SpoolAccepted);
+        var unknown   = applied.Count(j => j.Status == PrintJobStatus.PrintedUnknown);
+
+        _logger.LogInformation(
+            "Watchdog: {Changed}/{Total} jobs actualizados — Confirmados={Confirmed} Bloqueados={Blocked} Recuperados={Recovered} Desconocidos={Unknown} (maxAge={MaxAge}s).",
+            applied.Count, candidates.Count, confirmed, blocked, recovered, unknown, maxAgeSeconds);
     }
 
     private static async Task<Dictionary<int, (string Host, bool? IppSupported)>> LoadPrinterHostsAsync(
@@ -209,6 +223,18 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
         return results.ToDictionary(r => r.host, r => r.result);
     }
 
+    private async Task<IppQueryResult?> QueryJobAsync(
+        WatchdogJob job,
+        Dictionary<int, (string Host, bool? IppSupported)> printerHosts,
+        CancellationToken ct)
+    {
+        if (!_options.Value.IppConfirmationEnabled || job.IppJobId is null || !job.PrinterId.HasValue)
+            return null;
+        return printerHosts.TryGetValue(job.PrinterId.Value, out var printerInfo)
+            ? await _ippService.QueryJobStateAsync(printerInfo.Host, job.IppJobId.Value, ct)
+            : null;
+    }
+
     private IppQueryResult? ResolveIppResult(
         WatchdogJob job,
         Dictionary<int, (string Host, bool? IppSupported)> printerHosts,
@@ -221,8 +247,10 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
         return result;
     }
 
-    // Tiempo máximo de espera para impresora detenida o procesando antes de desistir.
+    // Tiempo máximo de espera con la impresora procesando antes de desistir.
     private const int WaitGiveUpMinutes = 30;
+    // Con la impresora parada (sin papel, atasco), menos: son pedidos de clientes y urgen (D3, 27/10/2026).
+    private const int BlockedGiveUpMinutes = 10;
 
     // Devuelve false si el trabajo debe ignorarse este ciclo (esperar recuperación de impresora).
     private static bool ApplyOutcome(
@@ -270,9 +298,27 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
                     return true;
                 }
                 // Ya está bloqueado: seguir esperando recuperación.
-                if ((now - job.UpdatedAtUtc).TotalMinutes < WaitGiveUpMinutes)
+                if ((now - job.UpdatedAtUtc).TotalMinutes < BlockedGiveUpMinutes)
                     return false;
                 goto giveUp;
+
+            case IppOutcome.CompletedWithErrors:
+                // La impresora lo dio por terminado con errores: puede no haber salido bien.
+                job.NextRetryAtUtc = null;
+                job.UpdatedAtUtc = now;
+                job.Status = PrintJobStatus.PrintedUnknown;
+                job.LastErrorCode = ippResult.ErrorCode ?? "IPP_COMPLETED_WITH_ERRORS";
+                job.LastErrorMessage = ippResult.ErrorMessage;
+                return true;
+
+            case IppOutcome.JobAborted:
+                // La impresora canceló o abortó el trabajo enviado por IP: no salió.
+                job.NextRetryAtUtc = null;
+                job.UpdatedAtUtc = now;
+                job.Status = PrintJobStatus.ErrorFinal;
+                job.LastErrorCode = ippResult.ErrorCode ?? "IPP_JOB_ABORTED";
+                job.LastErrorMessage = ippResult.ErrorMessage ?? "La impresora abortó el trabajo.";
+                return true;
 
             giveUp:
                 job.NextRetryAtUtc = null;
@@ -281,20 +327,21 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
                 job.LastErrorCode = ippResult!.Outcome == IppOutcome.PrinterStopped
                     ? "IPP_PRINTER_STOPPED_TIMEOUT"
                     : "IPP_PRINTER_PROCESSING_TIMEOUT";
-                job.LastErrorMessage =
-                    $"Impresora en estado '{ippResult.Outcome}' durante más de {WaitGiveUpMinutes} min. Estado desconocido.";
+                job.LastErrorMessage = ippResult.Outcome == IppOutcome.PrinterStopped
+                    ? $"Impresora parada más de {BlockedGiveUpMinutes} min: puede salir aún cuando se recupere."
+                    : $"Impresora ocupada más de {WaitGiveUpMinutes} min sin terminarlo: puede salir aún.";
                 return true;
 
             default:
                 // IPP no disponible: si el trabajo ya estaba bloqueado, esperar hasta el timeout.
-                if (isBlocked && (now - job.UpdatedAtUtc).TotalMinutes < WaitGiveUpMinutes)
+                if (isBlocked && (now - job.UpdatedAtUtc).TotalMinutes < BlockedGiveUpMinutes)
                     return false;
                 job.NextRetryAtUtc = null;
                 job.UpdatedAtUtc = now;
                 job.Status = PrintJobStatus.PrintedUnknown;
                 job.LastErrorCode = "SPOOL_ACCEPTED_TIMEOUT";
                 job.LastErrorMessage = isBlocked
-                    ? $"Impresora bloqueada sin respuesta IPP durante más de {WaitGiveUpMinutes} min. Estado desconocido."
+                    ? $"Impresora bloqueada sin respuesta IPP durante más de {BlockedGiveUpMinutes} min. Estado desconocido."
                     : $"SpoolAccepted sin confirmación tras {maxAgeSeconds}s (watchdog).";
                 return true;
         }
@@ -332,5 +379,6 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
         public string? LastErrorCode { get; set; }
         public string? LastErrorMessage { get; set; }
         public DateTimeOffset? NextRetryAtUtc { get; set; }
+        public int? IppJobId { get; init; }
     }
 }

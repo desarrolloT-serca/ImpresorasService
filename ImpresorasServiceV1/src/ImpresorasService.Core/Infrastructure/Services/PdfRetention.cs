@@ -49,8 +49,10 @@ public static class PdfRetention
         if (ids.Count == 0)
             return 0;
 
+        // Las mismas condiciones otra vez: si alguien lo reimprimió o reintentó desde la lectura, ya no
+        // está en un estado terminal (ni es antiguo) y se queda con su PDF (auditoría L6).
         return await db.PrintJobs
-            .Where(j => ids.Contains(j.JobId))
+            .Where(j => ids.Contains(j.JobId) && TerminalStatuses.Contains(j.Status) && j.UpdatedAtUtc <= cutoff)
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.PdfBlob, (byte[]?)null), ct);
     }
 

@@ -21,6 +21,7 @@ public sealed class TelegramConfigCompatibilityTests
                     min_severity TEXT NOT NULL,
                     notify_on_recovery INTEGER NOT NULL,
                     check_interval_minutes INTEGER NOT NULL,
+                    bot_token TEXT,
                     updated_at_utc TEXT NOT NULL
                 );
 

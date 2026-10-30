@@ -5,6 +5,7 @@ using ImpresorasService.Domain.Connectivity;
 using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure.Options;
 using ImpresorasService.Infrastructure.Persistence;
+using ImpresorasService.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -67,6 +68,10 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
+            }
+            catch (Exception ex) when (FallosBd.EsFalloDeConexion(ex))
+            {
+                // La base no responde: lo anota EstadoBd, una vez y con el motivo.
             }
             catch (Exception ex)
             {
@@ -145,13 +150,31 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
             .Select(g => new { StoreId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.StoreId, x => x.Count, ct);
 
+        // Umbrales opcionales, como DashboardController.BuildStoreRowsAsync: último trabajo recibido
+        // («sin recibir», en horario de tienda) y reimpresiones de hoy en la hora de negocio.
+        var lastReceivedByStore = rules.Silent.Count == 0
+            ? new Dictionary<int, DateTimeOffset>()
+            : await db.PrintJobs.AsNoTracking()
+                .Where(j => storeIdList.Contains(j.StoreId))
+                .GroupBy(j => j.StoreId)
+                .Select(g => new { StoreId = g.Key, Last = g.Max(j => j.CreatedAtUtc) })
+                .ToDictionaryAsync(x => x.StoreId, x => x.Last, ct);
+        var todayStart = BusinessTimeZoneClock.TodayStartUtc(now, _businessTimeZone);
+        var reprintsTodayByStore = rules.Reprints.Count == 0
+            ? new Dictionary<int, int>()
+            : await db.PrintJobEvents.AsNoTracking()
+                .Where(e => e.EventType == RoutingService.ReprintEvent && e.OccurredAtUtc >= todayStart)
+                .Join(db.PrintJobs.Where(j => storeIdList.Contains(j.StoreId)), e => e.JobId, j => j.JobId, (e, j) => j.StoreId)
+                .GroupBy(storeId => storeId)
+                .Select(g => new { StoreId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.StoreId, x => x.Count, ct);
+
         // Sin AsNoTracking: EF debe detectar los cambios para SaveChanges.
         var alertStates = await db.StoreAlertStates
             .Where(s => storeIdList.Contains(s.StoreId))
             .ToDictionaryAsync(s => s.StoreId, ct);
 
         // ── Evaluación en memoria ─────────────────────────────────────────────
-        const string hr = "—————————————————";
         var localTime = TimeZoneInfo.ConvertTime(now.UtcDateTime, _businessTimeZone);
         var ts = localTime.ToString("dd/MM HH:mm");
 
@@ -185,14 +208,29 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
             queuedByStore.TryGetValue(store.StoreId, out var queued);
             failedByStore.TryGetValue(store.StoreId, out var failed);
 
+            int? silentMinutes = connected > 0 && lastReceivedByStore.TryGetValue(store.StoreId, out var lastReceived)
+                ? rules.Horario.MinutosSinRecibir(lastReceived, now, _businessTimeZone)
+                : null;
+            reprintsTodayByStore.TryGetValue(store.StoreId, out var reprintsToday);
+
             var (health, reason) = StoreHealthEvaluator.Compute(
-                connected, queued, failed, missingHost, connMaxStreak, connCrit, connWarn, rules);
+                connected, queued, failed, missingHost, connMaxStreak, connCrit, connWarn, rules,
+                silentMinutes, reprintsToday);
 
             if (!alertStates.TryGetValue(store.StoreId, out var alertState))
             {
                 alertState = new StoreAlertState { StoreId = store.StoreId, CheckedAtUtc = now };
                 db.StoreAlertStates.Add(alertState);
                 alertStates[store.StoreId] = alertState;
+            }
+
+            // Telegram solo en horario de tienda (si se pide): fuera, ni se avisa ni se da por avisado,
+            // así lo que siga pasando al abrir se avisa entonces.
+            if (rules.TelegramSoloEnHorario && !rules.Horario.EstaAbierto(now, _businessTimeZone))
+            {
+                alertState.LastHealth = health;
+                alertState.CheckedAtUtc = now;
+                continue;
             }
 
             var previousNotifiedHealth = alertState.NotifiedHealth ?? "healthy";
@@ -203,27 +241,11 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
 
             string? message = null;
 
+            // El texto, el mismo que la vista previa de la pantalla de Telegram (TelegramMensajes).
             if (isAlertLevel && (!wasAlertLevel || isEscalation))
-            {
-                var icon = health == "critical" ? "🔴" : "🟡";
-                var label = health == "critical" ? "CRÍTICA" : "WARNING";
-                message =
-                    $"{hr}\n\n" +
-                    $"{icon} <b>{label}</b> · <b>{store.Name}</b> <code>#{store.StoreId}</code>\n" +
-                    $"{reason}\n\n" +
-                    $"📦 Cola <b>{queued}</b> · ❌ Fallos <b>{failed}</b>\n" +
-                    $"🕒 {ts}\n\n" +
-                    $"{hr}";
-            }
+                message = TelegramMensajes.Alerta(store.Name, store.StoreId, health, reason, queued, failed, ts);
             else if (!isAlertLevel && wasAlertLevel && notifyOnRecovery)
-            {
-                message =
-                    $"{hr}\n\n" +
-                    $"🟢 <b>RECUPERADA</b> · <b>{store.Name}</b> <code>#{store.StoreId}</code>\n" +
-                    $"<code>{previousNotifiedHealth}</code> → <b>saludable</b>\n\n" +
-                    $"🕒 {ts}\n\n" +
-                    $"{hr}";
-            }
+                message = TelegramMensajes.Recuperada(store.Name, store.StoreId, previousNotifiedHealth, ts);
 
             alertState.LastHealth = health;
             alertState.CheckedAtUtc = now;
@@ -242,6 +264,34 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
                 await db.SaveChangesAsync(ct);
 
                 var delivered = await _telegram.SendAlertAsync(message, ct, store.StoreId);
+
+                // Constancia de cada aviso, llegue o no (historial de la pantalla de Telegram).
+                var recuperada = !isAlertLevel;
+                var evento = new PrintJobEvent
+                {
+                    JobId = TelegramMensajes.JobIdHistorial(store.StoreId),
+                    EventType = TelegramMensajes.EventoHistorial,
+                    Message = recuperada ? $"Recuperada (venía de {previousNotifiedHealth})" : reason,
+                    ActorType = "system",
+                    MetadataJson = System.Text.Json.JsonSerializer.Serialize(new
+                    {
+                        storeId = store.StoreId,
+                        health = recuperada ? "healthy" : health,
+                        delivered
+                    }),
+                    OccurredAtUtc = now
+                };
+                // Un aviso que no llega se reintenta cada ciclo (abajo): en el historial, solo la primera
+                // vez. Si lo último apuntado de la tienda es este mismo fallo, no se repite (NET-1).
+                var repetido = !delivered && await db.PrintJobEvents.AsNoTracking()
+                    .Where(e => e.JobId == evento.JobId && e.EventType == evento.EventType)
+                    .OrderByDescending(e => e.OccurredAtUtc)
+                    .Select(e => new { e.Message, e.MetadataJson })
+                    .Take(1)
+                    .AnyAsync(e => e.Message == evento.Message && e.MetadataJson == evento.MetadataJson, ct);
+                if (!repetido)
+                    db.PrintJobEvents.Add(evento);
+
                 if (delivered)
                 {
                     _logger.LogInformation("Alerta Telegram enviada para tienda {StoreId} ({Name}): {Health}.",

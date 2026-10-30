@@ -4,7 +4,8 @@ public class Printer
 {
     public int PrinterId { get; set; }
     public string PrinterName { get; set; } = string.Empty;
-    public string SpoolQueue { get; set; } = string.Empty;
+    // Cola de Windows: la alternativa cuando no se puede imprimir por IP (Host). Sin ella, solo por IP.
+    public string? SpoolQueue { get; set; }
     public string? Host { get; set; }
     public int StoreId { get; set; }
     public bool IsActive { get; set; } = true;
@@ -18,6 +19,8 @@ public class Printer
     public DateTimeOffset? LastConnectionCheckAtUtc { get; set; }
     public string? LastConnectionTransport { get; set; }
     public string? LastConnectionError { get; set; }
+    // Desde cuándo falla sin interrupción (sin conexión o sin host); null mientras responde.
+    public DateTimeOffset? ConnectionFailingSinceUtc { get; set; }
 
     // null = sin comprobar, true = soporta IPP, false = no soporta IPP
     public bool? IppSupported { get; set; }

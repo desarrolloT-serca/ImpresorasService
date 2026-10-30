@@ -1,3 +1,4 @@
+using ImpresorasService.Infrastructure.Persistence;
 using ImpresorasService.Application.Abstractions;
 using ImpresorasService.Infrastructure.Options;
 using Microsoft.Extensions.Options;
@@ -48,6 +49,10 @@ public sealed class PrintExecutionBackgroundService : BackgroundService
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
+            }
+            catch (Exception ex) when (FallosBd.EsFalloDeConexion(ex))
+            {
+                // La base no responde: lo anota EstadoBd, una vez y con el motivo.
             }
             catch (Exception ex)
             {

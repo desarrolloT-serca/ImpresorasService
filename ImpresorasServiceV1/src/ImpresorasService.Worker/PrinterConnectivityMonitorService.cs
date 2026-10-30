@@ -60,6 +60,10 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
             {
                 break;
             }
+            catch (Exception ex) when (FallosBd.EsFalloDeConexion(ex))
+            {
+                // La base no responde: lo anota EstadoBd, una vez y con el motivo.
+            }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Fallo en monitor de conectividad de impresoras.");
@@ -82,6 +86,7 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
                 p.SpoolQueue,
                 p.Host,
                 p.ConnectionFailuresStreak,
+                p.ConnectionFailingSinceUtc,
                 p.IppSupported))
             .ToListAsync(ct);
 
@@ -140,7 +145,8 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
         var printer = new Printer
         {
             PrinterId = candidate.PrinterId,
-            ConnectionFailuresStreak = candidate.ConnectionFailuresStreak
+            ConnectionFailuresStreak = candidate.ConnectionFailuresStreak,
+            ConnectionFailingSinceUtc = candidate.ConnectionFailingSinceUtc
         };
 
         var host = !string.IsNullOrWhiteSpace(candidate.Host)
@@ -197,12 +203,14 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
         entity.LastConnectionCheckAtUtc = update.CheckedAtUtc;
         entity.LastConnectionTransport = update.Transport;
         entity.LastConnectionError = update.Error;
+        entity.ConnectionFailingSinceUtc = update.FailingSinceUtc;
 
         db.Entry(entity).Property(x => x.LastConnectionOk).IsModified = true;
         db.Entry(entity).Property(x => x.ConnectionFailuresStreak).IsModified = true;
         db.Entry(entity).Property(x => x.LastConnectionCheckAtUtc).IsModified = true;
         db.Entry(entity).Property(x => x.LastConnectionTransport).IsModified = true;
         db.Entry(entity).Property(x => x.LastConnectionError).IsModified = true;
+        db.Entry(entity).Property(x => x.ConnectionFailingSinceUtc).IsModified = true;
 
         if (update.IppSupported.HasValue)
         {
@@ -219,6 +227,7 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
             printer.LastConnectionCheckAtUtc ?? DateTimeOffset.UtcNow,
             printer.LastConnectionTransport,
             printer.LastConnectionError,
+            printer.ConnectionFailingSinceUtc,
             ippSupported);
 
     private async Task<(bool Ok, string? Transport, string? Error)> TryConnectAnyPortAsync(
@@ -273,7 +282,7 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
         return trimmed;
     }
 
-    private static string? ExtractHostFromSpoolQueue(string spoolQueue)
+    private static string? ExtractHostFromSpoolQueue(string? spoolQueue)
     {
         if (string.IsNullOrWhiteSpace(spoolQueue))
             return null;
@@ -286,9 +295,10 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
 
     private sealed record PrinterConnectivityCandidate(
         int PrinterId,
-        string SpoolQueue,
+        string? SpoolQueue,
         string? Host,
         int ConnectionFailuresStreak,
+        DateTimeOffset? ConnectionFailingSinceUtc,
         bool? IppSupported);
 
     private sealed record ConnectivityUpdate(
@@ -298,6 +308,7 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
         DateTimeOffset CheckedAtUtc,
         string? Transport,
         string? Error,
+        DateTimeOffset? FailingSinceUtc,
         bool? IppSupported);
 
     private sealed class PrinterConnectivityOptions

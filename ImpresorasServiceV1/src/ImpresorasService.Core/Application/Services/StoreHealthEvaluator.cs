@@ -17,7 +17,11 @@ public sealed record StoreAlertInput(
     int MissingHost,
     int ConnMaxStreak,
     int ConnCritical,
-    int ConnWarning);
+    int ConnWarning,
+    // Opcionales (27/10/2026): minutos sin recibir en horario (null = fuera de horario o nunca
+    // recibió) y reimpresiones de hoy.
+    int? SilentMinutes = null,
+    int ReprintsToday = 0);
 
 /// <summary>
 /// G5.3: puerto exacto de computeHealth()/buildPrioritizedAlerts() de DashboardController.php —
@@ -38,12 +42,16 @@ public static class StoreHealthEvaluator
         int connMaxStreak,
         int connCritical,
         int connWarning,
-        ThresholdRuleSet rules)
+        ThresholdRuleSet rules,
+        int? silentMinutes = null,
+        int reprintsToday = 0)
     {
         var connRule = ThresholdRuleEngine.MatchThresholdRule(rules.Conn, connMaxStreak);
         var queueRule = ThresholdRuleEngine.MatchThresholdRule(rules.Queue, queuedCurrent);
         var failedRule = ThresholdRuleEngine.MatchThresholdRule(rules.Failed, failedWithoutRetryCurrent);
         var missingHostRule = ThresholdRuleEngine.MatchThresholdRule(rules.MissingHost, missingHost);
+        var silentRule = silentMinutes is { } sm ? ThresholdRuleEngine.MatchThresholdRule(rules.Silent, sm) : null;
+        var reprintsRule = ThresholdRuleEngine.MatchThresholdRule(rules.Reprints, reprintsToday);
 
         if (connCritical > 0)
             return ("critical", "Impresora(s) sin conexion (conectividad)");
@@ -59,6 +67,12 @@ public static class StoreHealthEvaluator
 
         if (queueRule is { Severity: "critical" })
             return (ToHealth(queueRule.Severity), Prefix(queueRule.Severity) + $"Cola actual mayor o igual a {queueRule.Min} trabajos");
+
+        if (silentRule is { Severity: "critical" })
+            return (ToHealth(silentRule.Severity), SilentReason(silentMinutes!.Value));
+
+        if (reprintsRule is { Severity: "critical" })
+            return (ToHealth(reprintsRule.Severity), ReprintsReason(reprintsToday));
 
         if (connectedPrinters == 0)
             return ("warning", "Sin impresoras activas en la tienda");
@@ -77,6 +91,12 @@ public static class StoreHealthEvaluator
 
         if (queueRule is not null)
             return (ToHealth(queueRule.Severity), Prefix(queueRule.Severity) + $"Cola actual mayor o igual a {queueRule.Min} trabajos");
+
+        if (silentRule is not null)
+            return (ToHealth(silentRule.Severity), Prefix(silentRule.Severity) + SilentReason(silentMinutes!.Value));
+
+        if (reprintsRule is not null)
+            return (ToHealth(reprintsRule.Severity), Prefix(reprintsRule.Severity) + ReprintsReason(reprintsToday));
 
         return ("healthy", "Operacion dentro de umbrales");
     }
@@ -121,6 +141,13 @@ public static class StoreHealthEvaluator
 
             if (missingHostRule is not null && s.MissingHost > 0)
                 alerts.Add(s.ToAlert(ToAlertHealth(missingHostRule.Severity), "Impresora(s) sin host configurado"));
+
+            if (s.SilentMinutes is { } sm
+                && ThresholdRuleEngine.MatchThresholdRule(rules.Silent, sm) is { } silentRule)
+                alerts.Add(s.ToAlert(ToAlertHealth(silentRule.Severity), SilentReason(sm)));
+
+            if (ThresholdRuleEngine.MatchThresholdRule(rules.Reprints, s.ReprintsToday) is { } reprintsRule)
+                alerts.Add(s.ToAlert(ToAlertHealth(reprintsRule.Severity), ReprintsReason(s.ReprintsToday)));
         }
 
         var severityRank = new Dictionary<string, int> { ["critical"] = 3, ["warning"] = 2, ["info"] = 1, ["healthy"] = 0 };
@@ -145,6 +172,12 @@ public static class StoreHealthEvaluator
         var s = severity.Trim().ToLowerInvariant();
         return s == "critical" ? "critical" : (s == "warning" ? "warning" : "info");
     }
+
+    private static string SilentReason(int minutes) =>
+        $"Sin recibir trabajos desde hace {minutes} min en horario de tienda";
+
+    private static string ReprintsReason(int reprints) =>
+        $"{reprints} reimpresiones hoy";
 
     private static string Prefix(string severity) => severity.Trim().ToLowerInvariant() == "info" ? "Info: " : string.Empty;
 

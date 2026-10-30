@@ -40,11 +40,23 @@ public static class UserRevocationValidator
 
         var db = context.HttpContext.RequestServices.GetRequiredService<ImpresorasDbContext>();
 
-        var current = await db.Users
-            .AsNoTracking()
-            .Where(u => u.UserId == userId)
-            .Select(u => new { u.IsActive, u.TokenVersion })
-            .FirstOrDefaultAsync(context.HttpContext.RequestAborted);
+        (bool IsActive, int TokenVersion)? current;
+        try
+        {
+            var fila = await db.Users
+                .AsNoTracking()
+                .Where(u => u.UserId == userId)
+                .Select(u => new { u.IsActive, u.TokenVersion })
+                .FirstOrDefaultAsync(context.HttpContext.RequestAborted);
+            current = fila is null ? null : (fila.IsActive, fila.TokenVersion);
+        }
+        catch (Exception ex) when (FallosBd.EsFalloDeConexion(ex))
+        {
+            // Sin base no se puede comprobar: se rechaza aquí y OnChallenge (Program.cs) responde 503.
+            // Dejarla escapar hacía que JwtBearer registrase la traza en cada petición y diese 401.
+            context.Fail(ex);
+            return;
+        }
 
         // Usuario borrado: el token sigue estando bien firmado, pero ya no representa a nadie.
         if (current is null)
@@ -53,7 +65,7 @@ public static class UserRevocationValidator
             return;
         }
 
-        if (!current.IsActive)
+        if (!current.Value.IsActive)
         {
             context.Fail("El usuario del token está desactivado.");
             return;
@@ -66,7 +78,7 @@ public static class UserRevocationValidator
             ? parsed
             : 0;
 
-        if (tokenVersion != current.TokenVersion)
+        if (tokenVersion != current.Value.TokenVersion)
             context.Fail("El token se emitió antes del último cambio de credenciales.");
     }
 }

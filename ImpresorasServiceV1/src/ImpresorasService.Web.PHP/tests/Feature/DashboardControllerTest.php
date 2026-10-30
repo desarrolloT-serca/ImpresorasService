@@ -229,8 +229,8 @@ class DashboardControllerTest extends TestCase
     /**
      * F2.2: cuando el overview no responde, PHP recalcula desde `api/printjobs` (fallback) y debe
      * marcar `partialData` si el número de jobs alcanza el límite honesto de 500 (VAL-P1-004), y
-     * el predicado `failedWithoutRetryCurrent` debe alinearse con el contrato (ErrorFinal o
-     * Pending/Routed/Printing/PrinterBlocked con AttemptCount>1 — VAL-P2-006), incluyendo
+     * el predicado `failedWithoutRetryCurrent` debe alinearse con el contrato (ErrorFinal,
+     * PrinterBlocked desde el primer intento, o Pending/Routed/Printing con AttemptCount>1 — VAL-P2-006), incluyendo
      * el mapeo de PrinterBlocked que antes faltaba en normalizePrintJobStatus. `Cancelled` quedó
      * fuera del predicado (2026-08-17), así que el fallback tampoco debe contarlo.
      */

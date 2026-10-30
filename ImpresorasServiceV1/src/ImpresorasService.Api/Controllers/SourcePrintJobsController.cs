@@ -107,7 +107,9 @@ public class SourcePrintJobsController : ControllerBase
             StoreId = request.StoreId,
             DocumentType = string.IsNullOrWhiteSpace(request.DocumentType) ? "TICKET" : request.DocumentType,
             Channel = string.IsNullOrWhiteSpace(request.Channel) ? "DEFAULT" : request.Channel,
-            PdfBlob = request.PdfBlob?.Length > 0 ? request.PdfBlob : MinimalPdf.Bytes,
+            PdfBlob = request.PdfBlob?.Length > 0 ? request.PdfBlob
+                : string.IsNullOrWhiteSpace(request.PdfUrl) ? MinimalPdf.Bytes : null,
+            PdfUrl = string.IsNullOrWhiteSpace(request.PdfUrl) ? null : request.PdfUrl.Trim(),
             CreatedAtUtc = DateTimeOffset.UtcNow,
             IsProcessed = false
         };
@@ -156,4 +158,5 @@ public class CreateSourcePrintJobRequest
     public string? DocumentType { get; set; }
     public string? Channel { get; set; }
     public byte[]? PdfBlob { get; set; }
+    public string? PdfUrl { get; set; }
 }
