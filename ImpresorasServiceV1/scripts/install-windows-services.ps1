@@ -25,6 +25,10 @@
 #   .\scripts\install-windows-services.ps1 -SumatraExe C:\descargas\SumatraPDF-3.6.1-64.exe
 #     -> copia SumatraPDF portable (sin instalador) a <InstallDir>\SumatraPDF: el Worker imprime con el.
 #
+#   .\scripts\install-windows-services.ps1 -RotateErpSecret
+#     -> genera un Erp__Secret nuevo (si el anterior se filtro). Hay que copiarlo al IMPRESION_SECRETO
+#        del ERP: hasta entonces la impresion desde el ERP responde 502.
+#
 param(
     [string]$InstallDir        = "C:\ImpresorasService",
     [string]$DbHost            = "",             # vacio = se pregunta al capturar credenciales
@@ -37,6 +41,7 @@ param(
     [switch]$Reconfigure,                        # fuerza repedir/regenerar credenciales aunque ya existan
     [switch]$SkipPublish,                        # reutiliza binarios ya publicados, solo (re)instala servicios
     [switch]$ConfigureTelegram,                  # pide/actualiza el Telegram Bot Token (opcional)
+    [switch]$RotateErpSecret,                    # genera un Erp__Secret nuevo (cambiarlo tambien en el ERP)
     [string]$SumatraExe        = ""              # SumatraPDF portable que se copia a <InstallDir>\SumatraPDF
 )
 
@@ -206,13 +211,13 @@ if ($Reconfigure -or -not $jwtSecret) {
 # Secreto compartido con la pasarela de impresion del ERP nuevo (su IMPRESION_SECRETO; PaseErp en la
 # Api). Se genera una vez: cambiarlo obliga a cambiarlo tambien en el ERP.
 $erpSecret = Get-ServiceEnvVar $ApiSvc "Erp__Secret"
-if (-not $erpSecret) {
+if ($RotateErpSecret -or -not $erpSecret) {
     $bytes = New-Object byte[] 48
     (New-Object System.Security.Cryptography.RNGCryptoServiceProvider).GetBytes($bytes)
     $erpSecret = [Convert]::ToBase64String($bytes)
     Write-Host "  Erp__Secret generado (el ERP lo necesita en IMPRESION_SECRETO)." -ForegroundColor Green
 } else {
-    Write-Host "  Erp__Secret ya configurado." -ForegroundColor DarkGray
+    Write-Host "  Erp__Secret ya configurado (usa -RotateErpSecret para cambiarlo)." -ForegroundColor DarkGray
 }
 
 if ($ConfigureTelegram) {
@@ -245,7 +250,11 @@ Set-ServiceEnv $WorkerSvc @{
 $sumatraDir = Join-Path $InstallDir "SumatraPDF"
 $sumatra    = Join-Path $sumatraDir "SumatraPDF.exe"
 if ($SumatraExe) {
-    if ((Get-AuthenticodeSignature $SumatraExe).Status -ne "Valid") { throw "SumatraPDF sin firma valida: $SumatraExe" }
+    # Firma valida y de su autor: cualquier otra firma valida no basta (el Worker lo ejecuta como servicio).
+    $firma = Get-AuthenticodeSignature $SumatraExe
+    if ($firma.Status -ne "Valid" -or $firma.SignerCertificate.Subject -notlike "CN=Krzysztof Kowalczyk,*") {
+        throw "SumatraPDF sin firma valida de su autor (Krzysztof Kowalczyk): $SumatraExe"
+    }
     New-Item -ItemType Directory -Force -Path $sumatraDir | Out-Null
     Copy-Item $SumatraExe $sumatra -Force
     Write-Host "  SumatraPDF copiado a $sumatra." -ForegroundColor Green
