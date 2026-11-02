@@ -1,0 +1,27 @@
+# scripts/install-linux.sh lo copia a /etc/systemd/system/. Configuración en
+# /etc/impresoras/impresoras.env (plantilla: deploy/linux/impresoras.env.example).
+[Unit]
+Description=API de ImpresorasService (pasarela de impresión del ERP)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# AddSystemd() avisa a systemd cuando ha arrancado.
+Type=notify
+User=impresoras
+Group=impresoras
+WorkingDirectory=/opt/impresoras/api
+ExecStart=/opt/impresoras/api/ImpresorasService.Api
+EnvironmentFile=/etc/impresoras/impresoras.env
+Restart=always
+RestartSec=5
+# /var/lib/impresoras: el fichero de umbrales del dashboard, compartido por los dos.
+StateDirectory=impresoras
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

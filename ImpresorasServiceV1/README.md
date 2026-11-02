@@ -49,6 +49,11 @@ cargan al arrancar (`DotEnv.cs`) sin pisar variables ya definidas.
 En producción la cadena vive en las variables de cada servicio:
 `.\scripts\install-windows-services.ps1 -SkipPublish -Reconfigure -DbHost HOST -DbPort 5433 -DbName BD -DbUser USUARIO`.
 
+En Linux (systemd), solo por IP: `sudo ./scripts/install-linux.sh`. La configuración va en
+`/etc/impresoras/impresoras.env` (plantilla en `deploy/linux/impresoras.env.example`, con
+`PrintExecution__SoloIp=true`). El mismo código sirve en los dos sistemas: cambiar de sistema es cambiar
+de instalador y de configuración, no de rama.
+
 Copia del esquema real: `pg_dump --schema-only -n <esquema>`. No hay migraciones EF: el esquema vive en
 `scripts/sql/crear-esquema.sql` y la aplicación nunca lo crea ni lo altera (salvo en los tests).
 

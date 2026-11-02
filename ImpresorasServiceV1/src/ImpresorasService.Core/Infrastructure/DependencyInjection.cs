@@ -67,20 +67,29 @@ public static class DependencyInjection
         // ahí a PrintedConfirmed sin que salga una hoja. Nunca debe activarse por inferencia
         // (plataforma equivocada, sección de config ausente); solo por decisión explícita.
         var wantsRealSpooler = configuration.GetValue<bool>("PrintExecution:UseRealSpooler");
+        // Solo por IP: papel real sin colas de Windows, en cualquier sistema (Linux, 02/11/2026).
+        var soloIp = configuration.GetValue<bool>("PrintExecution:SoloIp");
         var isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
         var isProduction = string.Equals(environmentName, "Production", StringComparison.OrdinalIgnoreCase);
+
+        if (soloIp && wantsRealSpooler)
+            throw new InvalidOperationException(
+                "PrintExecution:SoloIp y PrintExecution:UseRealSpooler a la vez. Elija uno: SoloIp imprime solo por IP; " +
+                "UseRealSpooler, por IP y, si no se puede, por la cola de Windows.");
 
         if (wantsRealSpooler && !isWindows)
             throw new InvalidOperationException(
                 "PrintExecution:UseRealSpooler=true pero el host no es Windows. El spooler real requiere Windows; " +
                 "arrancar aquí degradaría a simulación y marcaría como impresos trabajos que nunca salieron.");
 
-        if (isProduction && !wantsRealSpooler)
+        if (isProduction && !wantsRealSpooler && !soloIp)
             throw new InvalidOperationException(
                 "PrintExecution:UseRealSpooler=false en Production. La simulación marca como impresos trabajos " +
-                "que nunca salen por papel. Active el spooler real o despliegue fuera de Production.");
+                "que nunca salen por papel. Active el spooler real, SoloIp, o despliegue fuera de Production.");
 
-        if (wantsRealSpooler)
+        if (soloIp)
+            services.AddSingleton<IPrinterSpooler, SinColaPrintSpooler>();
+        else if (wantsRealSpooler)
             services.AddScoped<IPrinterSpooler, WindowsPrintSpooler>();
         else
             services.AddSingleton<IPrinterSpooler>(new NoOpPrintSpooler(simulateSuccess: true));

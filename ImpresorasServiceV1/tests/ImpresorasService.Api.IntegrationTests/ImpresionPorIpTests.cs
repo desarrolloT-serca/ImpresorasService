@@ -3,9 +3,12 @@ using System.Text;
 using ImpresorasService.Application.Abstractions;
 using ImpresorasService.Domain;
 using ImpresorasService.Domain.Entities;
+using ImpresorasService.Infrastructure;
 using ImpresorasService.Infrastructure.Options;
 using ImpresorasService.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -202,6 +205,47 @@ public sealed class ImpresionPorIpTests
         Assert.Equal("NO_PRINT_ROUTE", codigo);
     }
 
+    // Solo por IP (Linux, 02/11/2026): la cola de la ficha no se usa; queda el motivo de IPP.
+    [Fact]
+    public async Task Solo_IP_no_recurre_a_la_cola_aunque_la_ficha_la_tenga()
+    {
+        var (estado, ipp, _, _, _, codigo) = await ImprimirAsync(host: "10.0.0.9", queue: "COLA", porIp: Ocupada, soloIp: true);
+
+        Assert.Equal(PrintJobStatus.RetryScheduled, estado);
+        Assert.Equal("IPP_PRINTER_BUSY", codigo);
+        Assert.Equal(1, ipp.Llamadas);
+    }
+
+    [Fact]
+    public async Task Solo_IP_sale_por_IP()
+    {
+        var (estado, _, _, _, ippJobId, _) = await ImprimirAsync(host: "10.0.0.9", queue: "COLA", porIp: Aceptado, soloIp: true);
+
+        Assert.Equal(PrintJobStatus.SpoolAccepted, estado);
+        Assert.Equal(7, ippJobId);
+    }
+
+    // Production en Linux: SoloIp arranca (papel real); con UseRealSpooler a la vez, no.
+    [Theory]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, false)]
+    public void Solo_IP_arranca_en_Production(bool soloIp, bool useRealSpooler, bool arranca)
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:PrintQueue"] = "Host=localhost;Database=x;Username=x",
+            ["PrintExecution:SoloIp"] = soloIp.ToString(),
+            ["PrintExecution:UseRealSpooler"] = useRealSpooler.ToString(),
+        }).Build();
+
+        var registrar = () => new ServiceCollection().AddInfrastructure(config, "Production").BuildServiceProvider();
+
+        if (arranca)
+            Assert.IsType<SinColaPrintSpooler>(registrar().GetRequiredService<IPrinterSpooler>());
+        else
+            Assert.Throws<InvalidOperationException>(registrar);
+    }
+
     [Fact]
     public async Task En_simulacion_tampoco_sale_por_IP()
     {
@@ -271,7 +315,7 @@ public sealed class ImpresionPorIpTests
 
     private static async Task<(PrintJobStatus Estado, IppFalso Ipp, FakeSpooler Cola, string Mensaje, int? IppJobId, string? Codigo)> ImprimirAsync(
         string? host, string? queue, PrintSpoolResult? porIp, bool simulacion = false, string? errorConexion = null,
-        bool abortadoPorDocumento = false, CancellationTokenSource? parada = null)
+        bool abortadoPorDocumento = false, CancellationTokenSource? parada = null, bool soloIp = false)
     {
         using var setup = SqliteTestDbHelper.CreateOpenSqliteInMemory();
         var db = setup.Db;
@@ -303,7 +347,7 @@ public sealed class ImpresionPorIpTests
         var cola = new FakeSpooler((_, _, _) => Task.FromResult(new PrintSpoolResult(true, null, null, false)));
         var ipp = new IppFalso(porIp, parada is null ? null : parada.Cancel);
         var service = new PrintExecutionService(
-            db, simulacion ? new NoOpPrintSpooler(simulateSuccess: true) : cola, NullLogger<PrintExecutionService>.Instance,
+            db, simulacion ? new NoOpPrintSpooler(simulateSuccess: true) : soloIp ? new SinColaPrintSpooler() : cola, NullLogger<PrintExecutionService>.Instance,
             Options.Create(new PrintExecutionOptions { MaxAttempts = 4, BackoffSeconds = [15, 30, 60], TimeoutSeconds = 30 }),
             new RoutingSinUso(), TimeProvider.System, ipp);
 
