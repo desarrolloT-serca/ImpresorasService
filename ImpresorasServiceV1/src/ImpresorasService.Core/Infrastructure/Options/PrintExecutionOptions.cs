@@ -25,6 +25,12 @@ public sealed class PrintExecutionOptions
     /// </summary>
     public int[] BackoffSeconds { get; set; } = [15, 30, 60];
 
+    /// <summary>
+    /// Solo por IP (IPP), sin colas de Windows: para un servidor Linux o uno sin SumatraPDF. Vale en
+    /// Production y en cualquier sistema; no se combina con <c>UseRealSpooler</c>.
+    /// </summary>
+    public bool SoloIp { get; set; }
+
     /// <summary>Ruta al ejecutable para imprimir PDF (ej. SumatraPDF). Si vacío, se intenta ubicación por defecto.</summary>
     public string? PdfPrinterExecutablePath { get; set; }
 

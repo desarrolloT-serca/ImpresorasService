@@ -120,7 +120,9 @@ es el registro de reimpresiones (`docs/PLAN.md` B10).
 ```jsonc
 // Worker — sección PrintExecution
 {
-  "UseRealSpooler": true,        // false en Linux/test → NoOpPrintSpooler
+  "UseRealSpooler": true,        // por IP y, si no, cola de Windows (solo Windows)
+  "SoloIp": false,               // true en Linux: solo IPP, sin cola ni simulación (vale en Production)
+                                 // ninguno de los dos: NoOpPrintSpooler (simulación; Production no arranca)
   "MaxAttempts": 4,
   "BackoffSeconds": [15,30,60],   // solo se consumen MaxAttempts-1 esperas
   "IppConfirmationEnabled": true,

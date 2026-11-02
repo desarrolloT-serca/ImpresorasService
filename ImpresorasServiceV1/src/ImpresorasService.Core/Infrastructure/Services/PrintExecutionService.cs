@@ -355,7 +355,8 @@ public sealed class PrintExecutionService : IPrintExecutionService
                 return porIp;
         }
 
-        if (!string.IsNullOrWhiteSpace(printer.SpoolQueue))
+        // Solo por IP (SoloIp): aunque la ficha tenga cola, queda el motivo de IPP.
+        if (!string.IsNullOrWhiteSpace(printer.SpoolQueue) && _spooler is not SinColaPrintSpooler)
             return await _spooler.SendToPrinterAsync(pdf, printer.SpoolQueue, ct);
         return porIp ?? new PrintSpoolResult(false, "NO_PRINT_ROUTE",
             "La impresora no tiene IP válida ni cola de Windows.", false);
