@@ -7,7 +7,9 @@ using System.Globalization;
 
 DotEnv.Load();
 var builder = Host.CreateApplicationBuilder(args);
+// Cada uno solo actúa en su sistema: servicio de Windows o unidad de systemd (Linux).
 builder.Services.AddWindowsService(options => options.ServiceName = "ImpresorasService.Worker");
+builder.Services.AddSystemd();
 // Parar espera al trabajo que se está enviando (auditoría M1): el plazo de un envío y margen para la
 // consulta previa. ponytail: no cubre PDF, imagen y cola encadenados (hasta 3 plazos); eso acaba en
 // PRINTING_INTERRUPTED, sin duplicar. Un plazo único para todo el envío si molesta.
@@ -52,7 +54,8 @@ await using (var scope = host.Services.CreateAsyncScope())
 
     // En Production esto es inalcanzable (AddInfrastructure ya habría fallado), pero fuera de
     // Production la simulación es legítima y debe verse: un "impreso" de esta instancia no es papel.
-    if (!builder.Configuration.GetValue<bool>("PrintExecution:UseRealSpooler"))
+    if (!builder.Configuration.GetValue<bool>("PrintExecution:UseRealSpooler")
+        && !builder.Configuration.GetValue<bool>("PrintExecution:SoloIp"))
         logger.LogWarning("SPOOLER EN SIMULACION: no se envia nada a impresoras reales. Los trabajos avanzaran a SpoolAccepted sin efecto fisico.");
 }
 

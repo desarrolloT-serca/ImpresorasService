@@ -17,7 +17,9 @@ using Microsoft.OpenApi.Models;
 
 DotEnv.Load();
 var builder = WebApplication.CreateBuilder(args);
+// Cada uno solo actúa en su sistema: servicio de Windows o unidad de systemd (Linux).
 builder.Services.AddWindowsService(options => options.ServiceName = "ImpresorasService.Api");
+builder.Services.AddSystemd();
 var appCultureName = builder.Configuration["Globalization:Culture"] ?? "es-ES";
 var appCulture = CultureInfo.GetCultureInfo(appCultureName);
 CultureInfo.DefaultThreadCurrentCulture = appCulture;
