@@ -9,10 +9,13 @@
 # Jwt__Secret y Erp__Secret generados, y se para: hay que rellenar la conexión y volver a lanzarlo.
 # Después lo respeta (no regenera claves ni pisa lo que se haya cambiado a mano).
 # Necesita el SDK de .NET 8 para compilar; los servicios no necesitan el runtime (self-contained).
+# ponytail: compila como root en este checkout, así que bin/ y obj/ quedan de root (git pull no se
+# entera); si alguien compila después con su usuario: sudo rm -rf src/*/bin src/*/obj.
 set -euo pipefail
 
 [ "$(id -u)" -eq 0 ] || { echo "Ejecútalo con sudo." >&2; exit 1; }
-command -v dotnet >/dev/null || { echo "Falta el SDK de .NET 8 (dotnet)." >&2; exit 1; }
+# Con sudo, el PATH es el de root: un SDK instalado solo para un usuario (~/.dotnet) no se ve.
+command -v dotnet >/dev/null || { echo "Falta el SDK de .NET 8 (dotnet), o sudo no lo ve: instálalo para todo el sistema." >&2; exit 1; }
 
 repo="$(cd "$(dirname "$0")/.." && pwd)"
 destino=/opt/impresoras
