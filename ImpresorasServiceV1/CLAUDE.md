@@ -191,6 +191,7 @@ No se duplica aquí para que no diverja.
 Esquema completo para una BD vacía: `scripts/sql/crear-esquema.sql` (PostgreSQL, sin nombre de esquema; se
 aplica con `scripts/crear-esquema.ps1`, en una transacción). Si cambias el modelo, actualízalo ahí.
 Copia del esquema real: `pg_dump --schema-only -n <esquema>`. Puesta en marcha y pendientes: `docs/PLAN.md`, B0.
+La base es la del ERP: todo cambio de esquema se apunta también en `ERP_SERCA/docs/61_cambios_bd_frente_a_14.md` (registro de lo que hay que llevar al migrar).
 
 ---
 
