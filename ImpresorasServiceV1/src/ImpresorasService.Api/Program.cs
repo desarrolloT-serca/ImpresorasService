@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Threading.RateLimiting;
+using ImpresorasService.Api.Controllers;
 using ImpresorasService.Api.HealthChecks;
 using ImpresorasService.Api.Security;
 using ImpresorasService.Application;
@@ -36,23 +37,16 @@ static bool IsUnsafeJwtSecret(string? value)
         || string.Equals(normalized, "changeme", StringComparison.OrdinalIgnoreCase);
 }
 
-static async Task NormalizeLegacyUserRolesAsync(ImpresorasDbContext db)
+// La base caída no es un fallo del programa: 503 con el motivo y cuándo reintentar. EstadoBd ya
+// lo anota en el registro, una vez.
+static Task EscribirBdNoDisponible(HttpResponse response)
 {
-    var users = await db.Users.ToListAsync();
-    var changed = false;
-
-    foreach (var user in users)
+    response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+    response.Headers.RetryAfter = "10";
+    return response.WriteAsJsonAsync(new
     {
-        var normalized = RoleCatalog.Normalize(user.Role);
-        if (!string.Equals(user.Role, normalized, StringComparison.Ordinal))
-        {
-            user.Role = normalized;
-            changed = true;
-        }
-    }
-
-    if (changed)
-        await db.SaveChangesAsync();
+        error = "La base de datos no responde. Se reconecta sola: vuelve a probar en unos segundos."
+    });
 }
 
 static async Task SeedDefaultUsersAsync(ImpresorasDbContext db)
@@ -124,6 +118,17 @@ var jwtSecret = builder.Configuration["Jwt:Secret"];
 if (IsUnsafeJwtSecret(jwtSecret))
     throw new InvalidOperationException("Jwt:Secret es obligatorio, debe estar definido por entorno y no puede usar valores inseguros/default.");
 var jwtSecretValue = jwtSecret!.Trim();
+var jwtKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecretValue));
+
+// Pase del ERP nuevo (PaseErp). Opcional: sin Erp:Secret la API no acepta pases.
+var erpSecret = builder.Configuration["Erp:Secret"];
+SymmetricSecurityKey? erpKey = null;
+if (!string.IsNullOrWhiteSpace(erpSecret))
+{
+    if (IsUnsafeJwtSecret(erpSecret) || erpSecret.Trim() == jwtSecretValue)
+        throw new InvalidOperationException("Erp:Secret debe tener al menos 32 caracteres y ser distinto de Jwt:Secret.");
+    erpKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(erpSecret.Trim()));
+}
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -131,26 +136,57 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecretValue)),
+            // La clave va por emisor: un pase del ERP solo vale firmado con Erp:Secret y un token
+            // propio solo con Jwt:Secret.
+            IssuerSigningKeyResolver = (_, token, _, _) => token.Issuer == PaseErp.Emisor
+                ? erpKey is null ? [] : [erpKey]
+                : [jwtKey],
             ValidateIssuer = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"] ?? "ImpresorasService",
+            ValidIssuers = [builder.Configuration["Jwt:Issuer"] ?? "ImpresorasService", PaseErp.Emisor],
             ValidateAudience = true,
-            ValidAudience = builder.Configuration["Jwt:Audience"] ?? "ImpresorasService",
+            ValidAudiences = [builder.Configuration["Jwt:Audience"] ?? "ImpresorasService", PaseErp.Audiencia],
             ValidateLifetime = true,
-            ClockSkew = TimeSpan.Zero
+            // El pase lo firma otro servidor (el del ERP): sin margen, unos segundos de diferencia de
+            // hora lo rechazarían como caducado o «aún no válido».
+            ClockSkew = TimeSpan.FromSeconds(30)
         };
 
         // Firma y caducidad correctas no bastan: el usuario pudo ser borrado, desactivado o haber
         // cambiado su contraseña después de emitirse este token (Fase 5).
         options.Events = new JwtBearerEvents
         {
-            OnTokenValidated = UserRevocationValidator.ValidateAsync
+            // El frontend React no ve el token: llega en la cookie de sesión. Con cabecera
+            // Authorization (el PHP) manda la cabecera.
+            OnMessageReceived = context =>
+            {
+                if (!context.Request.Headers.ContainsKey("Authorization"))
+                    context.Token = context.Request.Cookies[AuthController.SessionCookie];
+                return Task.CompletedTask;
+            },
+            OnTokenValidated = context => context.SecurityToken.Issuer == PaseErp.Emisor
+                ? PaseErp.ValidarAsync(context)
+                : UserRevocationValidator.ValidateAsync(context),
+            // Si no se pudo comprobar el usuario porque la base no respondía, 503 y no 401: la sesión
+            // sigue siendo buena y volver a entrar no arreglaría nada.
+            OnChallenge = async context =>
+            {
+                if (context.AuthenticateFailure is { } fallo && FallosBd.EsFalloDeConexion(fallo))
+                {
+                    context.HandleResponse();
+                    await EscribirBdNoDisponible(context.Response);
+                }
+            }
         };
     });
 
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminOnly", policy => policy.RequireRole(RoleCatalog.Admin));
+    // Gestionar usuarios exige un usuario propio (printer_user): el pase del ERP no lleva
+    // NameIdentifier y, si lo interceptaran, no serviría para crearse un admin permanente (auditoría M11).
+    options.AddPolicy("AdminAccountOnly", policy => policy
+        .RequireRole(RoleCatalog.Admin)
+        .RequireClaim(System.Security.Claims.ClaimTypes.NameIdentifier));
     options.AddPolicy("StoreManagerOrAdmin", policy => policy.RequireRole(RoleCatalog.Admin, RoleCatalog.StoreManager));
     options.AddPolicy("EmployeeOrAbove", policy => policy.RequireRole(RoleCatalog.Admin, RoleCatalog.StoreManager, RoleCatalog.Employee));
 });
@@ -226,7 +262,9 @@ await using (var scope = app.Services.CreateAsyncScope())
     // El esquema lo crea scripts/crear-esquema.ps1; solo los tests lo generan desde el modelo.
     if (app.Environment.IsEnvironment("Testing"))
         await dbContext.Database.EnsureCreatedAsync();
-    await NormalizeLegacyUserRolesAsync(dbContext);
+    // Fuera de las pruebas, arrancar no toca la base: con ella caída la Api arranca, responde 503 y
+    // se recupera sola. Aquí se normalizaban los roles antiguos (Supervisor), una migración ya
+    // hecha; RoleCatalog.Normalize los sigue entendiendo al leerlos.
 
     var seedDefaultUsers = app.Configuration.GetValue<bool>("Bootstrap:SeedDefaultUsers");
     if (seedDefaultUsers)
@@ -259,6 +297,20 @@ app.Use(async (context, next) =>
     context.Response.Headers.Append("X-Correlation-Id", cid.ToString());
     using (app.Logger.BeginScope("CorrelationId:{CorrelationId}", cid.ToString()))
         await next(context);
+});
+
+// Base caída durante una petición: 503 con el motivo, sin traza. En cuanto responde, la siguiente
+// petición funciona: no hay que reiniciar nada.
+app.Use(async (context, next) =>
+{
+    try
+    {
+        await next(context);
+    }
+    catch (Exception ex) when (FallosBd.EsFalloDeConexion(ex) && !context.Response.HasStarted)
+    {
+        await EscribirBdNoDisponible(context.Response);
+    }
 });
 
 app.UseHttpsRedirection();

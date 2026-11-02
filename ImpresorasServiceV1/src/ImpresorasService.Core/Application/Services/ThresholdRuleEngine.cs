@@ -46,12 +46,14 @@ public static class ThresholdRuleEngine
     public static IReadOnlyList<string> Validate(ThresholdRuleSet rules)
     {
         var errors = new List<string>();
-        foreach (var metric in ThresholdRuleSet.Metrics)
+        // Las opcionales (silent, reprints) pueden ir vacías: desactivadas.
+        foreach (var metric in ThresholdRuleSet.Metrics.Concat(ThresholdRuleSet.OptionalMetrics))
         {
             var metricRules = rules.ForMetric(metric);
             if (metricRules.Count == 0)
             {
-                errors.Add("Cada grupo debe tener al menos un umbral.");
+                if (ThresholdRuleSet.Metrics.Contains(metric))
+                    errors.Add("Cada grupo debe tener al menos un umbral.");
                 continue;
             }
             if (metricRules.Count > ThresholdRuleSet.Severities.Length)
@@ -76,6 +78,12 @@ public static class ThresholdRuleEngine
             if (!HasAscendingSeverityThresholds(metricRules))
                 errors.Add("Los umbrales deben crecer con la severidad: Info < Warning < Critica.");
         }
+
+        var h = rules.Horario;
+        if (h.Dias.Count == 0 || h.Dias.Any(d => d is < 1 or > 7) || h.Dias.Distinct().Count() != h.Dias.Count)
+            errors.Add("El horario de tienda necesita al menos un día de la semana.");
+        if (!HorarioTienda.TryHora(h.Desde, out var desde) || !HorarioTienda.TryHora(h.Hasta, out var hasta) || desde >= hasta)
+            errors.Add("El horario de tienda va de una hora a otra mayor (HH:mm), en el mismo día.");
 
         return errors.Distinct().ToList();
     }

@@ -8,5 +8,7 @@ public sealed record IncomingPrintJob(
     string DocumentType,
     string Channel,
     byte[] PdfBlob,
-    DateTimeOffset CreatedAtUtc
+    DateTimeOffset CreatedAtUtc,
+    // Motivo por el que pdf_url no sirve (y no servirá): el trabajo entra directo en ErrorFinal.
+    string? PdfError = null
 );

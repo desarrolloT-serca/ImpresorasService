@@ -51,7 +51,7 @@ public sealed class RoutingControllerTests : IntegrationTestBase
         await Factory.ResetDatabaseAsync();
         var p1 = await CreatePrinterAsync("P1", 1);
         var p2 = await CreatePrinterAsync("P2", 1);
-        await CreateRuleAsync(p1.PrinterId, storeId: 1, documentType: "FACTURA", channel: "DEFAULT", priority: 10);
+        var ganadora = await CreateRuleAsync(p1.PrinterId, storeId: 1, documentType: "FACTURA", channel: "DEFAULT", priority: 10);
         await CreateRuleAsync(p2.PrinterId, storeId: 1, documentType: null, channel: null, priority: 5);
 
         var request = new { storeId = 1, documentType = "FACTURA", channel = "DEFAULT" };
@@ -61,6 +61,8 @@ public sealed class RoutingControllerTests : IntegrationTestBase
         var body = await ReadAsJsonAsync<ResolveResponseDto>(response);
         Assert.NotNull(body);
         Assert.Equal(p1.PrinterId, body.PrinterId);
+        // El simulador de reglas marca cuál gana: la más específica, aunque tenga peor prioridad.
+        Assert.Equal(ganadora, body.RuleId);
     }
 
     #region Helpers
@@ -82,15 +84,17 @@ public sealed class RoutingControllerTests : IntegrationTestBase
         res.EnsureSuccessStatusCode();
     }
 
-    private async Task CreateRuleAsync(int printerId, int? storeId, string? documentType, string? channel, int priority)
+    private async Task<int> CreateRuleAsync(int printerId, int? storeId, string? documentType, string? channel, int priority)
     {
         var req = new { priority, storeId, documentType, channel, printerId, isActive = true, createdBy = "test" };
         var res = await Client.PostAsJsonAsync("/api/routingrules", req);
         res.EnsureSuccessStatusCode();
+        return (await res.Content.ReadFromJsonAsync<RuleIdDto>())!.RuleId;
     }
 
     private sealed record PrinterDto(int PrinterId, string PrinterName, string SpoolQueue, int StoreId);
-    private sealed record ResolveResponseDto(int PrinterId, object Printer);
+    private sealed record ResolveResponseDto(int PrinterId, int RuleId, object Printer);
+    private sealed record RuleIdDto(int RuleId);
     private sealed record ErrorDto(string Error, string Code);
 
     #endregion

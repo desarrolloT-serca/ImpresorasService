@@ -1,3 +1,4 @@
+using ImpresorasService.Infrastructure.Persistence;
 using ImpresorasService.Application.Options;
 using ImpresorasService.Application.Services;
 using Microsoft.Extensions.Options;
@@ -47,6 +48,10 @@ public class IngestionBackgroundService : BackgroundService
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
+            }
+            catch (Exception ex) when (FallosBd.EsFalloDeConexion(ex))
+            {
+                // La base no responde: lo anota EstadoBd, una vez y con el motivo.
             }
             catch (Exception ex)
             {

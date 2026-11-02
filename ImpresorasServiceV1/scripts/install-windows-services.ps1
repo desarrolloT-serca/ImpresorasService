@@ -22,6 +22,13 @@
 #     -> activa/actualiza las alertas de Telegram (opcional; sin token, TelegramNotifierService
 #        no-opea solo, no rompe nada).
 #
+#   .\scripts\install-windows-services.ps1 -SumatraExe C:\descargas\SumatraPDF-3.6.1-64.exe
+#     -> copia SumatraPDF portable (sin instalador) a <InstallDir>\SumatraPDF: el Worker imprime con el.
+#
+#   .\scripts\install-windows-services.ps1 -RotateErpSecret
+#     -> genera un Erp__Secret nuevo (si el anterior se filtro). Hay que copiarlo al IMPRESION_SECRETO
+#        del ERP: hasta entonces la impresion desde el ERP responde 502.
+#
 param(
     [string]$InstallDir        = "C:\ImpresorasService",
     [string]$DbHost            = "",             # vacio = se pregunta al capturar credenciales
@@ -33,7 +40,9 @@ param(
     [string]$ServiceAccount    = "",             # ej. ".\svc_impresoras"; vacio = LocalSystem
     [switch]$Reconfigure,                        # fuerza repedir/regenerar credenciales aunque ya existan
     [switch]$SkipPublish,                        # reutiliza binarios ya publicados, solo (re)instala servicios
-    [switch]$ConfigureTelegram                   # pide/actualiza el Telegram Bot Token (opcional)
+    [switch]$ConfigureTelegram,                  # pide/actualiza el Telegram Bot Token (opcional)
+    [switch]$RotateErpSecret,                    # genera un Erp__Secret nuevo (cambiarlo tambien en el ERP)
+    [string]$SumatraExe        = ""              # SumatraPDF portable que se copia a <InstallDir>\SumatraPDF
 )
 
 $ErrorActionPreference = "Stop"
@@ -199,6 +208,18 @@ if ($Reconfigure -or -not $jwtSecret) {
     Write-Host "  Jwt__Secret ya configurado (usa -Reconfigure para regenerarlo)." -ForegroundColor DarkGray
 }
 
+# Secreto compartido con la pasarela de impresion del ERP nuevo (su IMPRESION_SECRETO; PaseErp en la
+# Api). Se genera una vez: cambiarlo obliga a cambiarlo tambien en el ERP.
+$erpSecret = Get-ServiceEnvVar $ApiSvc "Erp__Secret"
+if ($RotateErpSecret -or -not $erpSecret) {
+    $bytes = New-Object byte[] 48
+    (New-Object System.Security.Cryptography.RNGCryptoServiceProvider).GetBytes($bytes)
+    $erpSecret = [Convert]::ToBase64String($bytes)
+    Write-Host "  Erp__Secret generado (el ERP lo necesita en IMPRESION_SECRETO)." -ForegroundColor Green
+} else {
+    Write-Host "  Erp__Secret ya configurado (usa -RotateErpSecret para cambiarlo)." -ForegroundColor DarkGray
+}
+
 if ($ConfigureTelegram) {
     $telegramSecure = Read-Host "Telegram Bot Token (no se muestra)" -AsSecureString
     $telegramToken  = ConvertFrom-SecureStringPlain $telegramSecure
@@ -216,6 +237,7 @@ if ($ConfigureTelegram) {
 Set-ServiceEnv $ApiSvc @{
     "ConnectionStrings__PrintQueue" = $printQueueConn
     "Jwt__Secret"                   = $jwtSecret
+    "Erp__Secret"                   = $erpSecret
     "ASPNETCORE_URLS"               = "http://+:5105"
     "Telegram__BotToken"            = $telegramToken
 }
@@ -223,6 +245,35 @@ Set-ServiceEnv $WorkerSvc @{
     "ConnectionStrings__PrintQueue" = $printQueueConn
     "Telegram__BotToken"            = $telegramToken
 }
+
+# SumatraPDF portable junto a los servicios, fuera de las carpetas que se republican: sin instalador.
+$sumatraDir = Join-Path $InstallDir "SumatraPDF"
+$sumatra    = Join-Path $sumatraDir "SumatraPDF.exe"
+if ($SumatraExe) {
+    # Firma valida y de su autor: cualquier otra firma valida no basta (el Worker lo ejecuta como servicio).
+    $firma = Get-AuthenticodeSignature $SumatraExe
+    if ($firma.Status -ne "Valid" -or $firma.SignerCertificate.Subject -notlike "CN=Krzysztof Kowalczyk,*") {
+        throw "SumatraPDF sin firma valida de su autor (Krzysztof Kowalczyk): $SumatraExe"
+    }
+    New-Item -ItemType Directory -Force -Path $sumatraDir | Out-Null
+    Copy-Item $SumatraExe $sumatra -Force
+    Write-Host "  SumatraPDF copiado a $sumatra." -ForegroundColor Green
+}
+if (Test-Path $sumatra) {
+    Set-ServiceEnv $WorkerSvc @{ "PrintExecution__PdfPrinterExecutablePath" = $sumatra }
+} else {
+    Write-Host "  AVISO: sin SumatraPDF en $sumatra los trabajos fallan (SPOOLER_DOWN). Usa -SumatraExe." -ForegroundColor Yellow
+}
+
+# ── 7b. Recuperación ─────────────────────────────────────────────────────────
+# Si un servicio se cae, Windows lo vuelve a arrancar: a los 30 s, al minuto y después cada 2 min;
+# el contador se reinicia cada día. failureflag: también si se para con código de error, no solo
+# si el proceso revienta. La base caída ya no tumba la Api (EstadoBd); esto cubre lo imprevisto.
+foreach ($svc in @($ApiSvc, $WorkerSvc)) {
+    sc.exe failure $svc reset= 86400 actions= restart/30000/restart/60000/restart/120000 | Out-Null
+    sc.exe failureflag $svc 1 | Out-Null
+}
+Write-Host "  Recuperacion: reinicio automatico si el servicio cae." -ForegroundColor DarkGray
 
 # ── 8. Arrancar ──────────────────────────────────────────────────────────────
 Write-Host ""
@@ -234,4 +285,4 @@ foreach ($svc in @($ApiSvc, $WorkerSvc)) {
 
 Write-Host ""
 Write-Host "Listo. Comprueba: Invoke-RestMethod http://localhost:5105/health" -ForegroundColor Cyan
-Write-Host "Pendiente manual (no automatizable desde aqui): esquema creado (scripts\crear-esquema.ps1), SumatraPDF, impresoras instaladas con el nombre de spool_queue." -ForegroundColor DarkYellow
+Write-Host "Pendiente manual (no automatizable desde aqui): esquema creado (scripts\crear-esquema.ps1), SumatraPDF (con -SumatraExe), impresoras instaladas con el nombre de spool_queue." -ForegroundColor DarkYellow

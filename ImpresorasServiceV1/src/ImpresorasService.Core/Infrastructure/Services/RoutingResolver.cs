@@ -28,6 +28,15 @@ public class RoutingResolver : IRoutingResolver
         string channel,
         CancellationToken cancellationToken = default)
     {
+        return (await ResolveRuleAsync(storeId, documentType, channel, cancellationToken))?.PrinterId;
+    }
+
+    public async Task<RoutingRule?> ResolveRuleAsync(
+        int storeId,
+        string documentType,
+        string channel,
+        CancellationToken cancellationToken = default)
+    {
         var rules = await LoadActiveRulesAsync(cancellationToken);
         return ResolveFromRules(rules, storeId, documentType, channel);
     }
@@ -38,7 +47,7 @@ public class RoutingResolver : IRoutingResolver
     {
         if (requests.Count == 0) return Array.Empty<int?>();
         var rules = await LoadActiveRulesAsync(cancellationToken);
-        return requests.Select(r => ResolveFromRules(rules, r.storeId, r.documentType, r.channel)).ToArray();
+        return requests.Select(r => ResolveFromRules(rules, r.storeId, r.documentType, r.channel)?.PrinterId).ToArray();
     }
 
     private async Task<List<RoutingRule>> LoadActiveRulesAsync(CancellationToken cancellationToken)
@@ -67,7 +76,7 @@ public class RoutingResolver : IRoutingResolver
         return rules.Where(r => activePrinterIds.Contains(r.PrinterId)).ToList();
     }
 
-    private static int? ResolveFromRules(List<RoutingRule> rules, int storeId, string documentType, string channel)
+    private static RoutingRule? ResolveFromRules(List<RoutingRule> rules, int storeId, string documentType, string channel)
     {
         var normDoc = NormalizeRequired(documentType);
         var normChannel = NormalizeNullable(channel);
@@ -77,8 +86,7 @@ public class RoutingResolver : IRoutingResolver
             ?? rules.FirstOrDefault(r => Matches(r, storeId, normDoc, normChannel, specificity: 4))
             ?? rules.FirstOrDefault(r => Matches(r, storeId, normDoc, normChannel, specificity: 3))
             ?? rules.FirstOrDefault(r => Matches(r, storeId, normDoc, normChannel, specificity: 2))
-            ?? rules.FirstOrDefault(r => Matches(r, storeId, normDoc, normChannel, specificity: 1)))
-            ?.PrinterId;
+            ?? rules.FirstOrDefault(r => Matches(r, storeId, normDoc, normChannel, specificity: 1)));
     }
 
     /// <summary>
@@ -120,7 +128,8 @@ public class RoutingResolver : IRoutingResolver
         return (value ?? string.Empty).Trim().ToUpperInvariant();
     }
 
-    private static string? NormalizeNullable(string? value)
+    // Tipo y canal tal como se comparan: sin espacios y en mayúsculas; vacío = cualquiera.
+    public static string? NormalizeNullable(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
             return null;

@@ -29,6 +29,11 @@ public class ApiWebApplicationFactory : WebApplicationFactory<Program>
         builder.UseSetting("TestInstanceId", Interlocked.Increment(ref _instanceId).ToString());
         builder.UseSetting("Jwt:Secret", "integration-tests-secret-32-chars-minimum!!");
         builder.UseSetting("ConnectionStrings:PrintQueue", "ServerNode=localhost;UID=test;PWD=test;Current Schema=TEST");
+        // Fichero de reglas propio de cada instancia de pruebas. Sin esto se usaba el de appsettings.json,
+        // que es el de los servicios instalados (C:\ImpresorasService\...): cada dotnet test en ese equipo
+        // dejaba sus umbrales y su horario en los valores por defecto (revisión del 27/10/2026).
+        builder.UseSetting("Dashboard:ThresholdRulesFilePath",
+            Path.Combine(Path.GetTempPath(), $"impresoras-tests-reglas-{Guid.NewGuid():N}.json"));
 
         builder.ConfigureTestServices(services =>
         {

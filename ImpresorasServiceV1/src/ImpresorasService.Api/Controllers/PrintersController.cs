@@ -1,7 +1,9 @@
 using System.Diagnostics;
+using System.Net;
 using System.Net.Sockets;
 using System.Security.Claims;
 using System.Text.Json;
+using ImpresorasService.Api.Security;
 using ImpresorasService.Domain.Connectivity;
 using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure.Persistence;
@@ -34,8 +36,8 @@ public class PrintersController : ControllerBase
     {
         IQueryable<Printer> query = _dbContext.Printers.AsNoTracking();
 
-        var effectiveStoreId = IsAdmin() ? storeId : GetCurrentUserStoreId();
-        if (!IsAdmin() && !effectiveStoreId.HasValue)
+        var effectiveStoreId = User.VeTodasLasTiendas() ? storeId : GetCurrentUserStoreId();
+        if (!User.VeTodasLasTiendas() && !effectiveStoreId.HasValue)
             return Forbid();
         if (effectiveStoreId.HasValue)
             query = query.Where(x => x.StoreId == effectiveStoreId.Value);
@@ -62,7 +64,7 @@ public class PrintersController : ControllerBase
 
         if (printer is null)
             return NotFound();
-        if (!IsAdmin() && printer.StoreId != GetCurrentUserStoreId())
+        if (!User.VeTodasLasTiendas() && printer.StoreId != GetCurrentUserStoreId())
             return Forbid();
 
         return Ok(ToPrinterDto(printer));
@@ -89,6 +91,9 @@ public class PrintersController : ControllerBase
         if (!await ActiveStoreExistsAsync(request.StoreId, cancellationToken))
             return BadRequest(new { error = "La tienda especificada no existe o esta inactiva." });
 
+        if (await DuplicadaAsync(null, input, request.StoreId, request.IsActive, cancellationToken) is { } duplicada)
+            return Conflict(new { error = duplicada });
+
         var printer = new Printer
         {
             PrinterName = input.PrinterName,
@@ -108,7 +113,7 @@ public class PrintersController : ControllerBase
         }
         catch (DbUpdateException)
         {
-            return Conflict(new { error = "Ya existe una impresora con el mismo StoreId y SpoolQueue." });
+            return Conflict(new { error = "Ya hay una impresora con esa cola de Windows en la tienda." });
         }
 
         return CreatedAtAction(nameof(GetById), new { id = printer.PrinterId }, ToPrinterDto(printer));
@@ -140,6 +145,16 @@ public class PrintersController : ControllerBase
         if (!await ActiveStoreExistsAsync(request.StoreId, cancellationToken))
             return BadRequest(new { error = "La tienda especificada no existe o esta inactiva." });
 
+        if (await DuplicadaAsync(id, input, request.StoreId, request.IsActive, cancellationToken) is { } duplicada)
+            return Conflict(new { error = duplicada });
+
+        // Las reglas de una tienda solo mandan a impresoras suyas (se comprueba al crearlas): moverla
+        // de tienda haría que esas reglas imprimieran en otra.
+        if (request.StoreId != printer.StoreId
+            && await _dbContext.RoutingRules.AnyAsync(
+                r => r.PrinterId == id && r.StoreId != null && r.StoreId != request.StoreId, cancellationToken))
+            return Conflict(new { error = "Tiene reglas de enrutado de su tienda: cámbialas o bórralas antes de pasarla a otra." });
+
         // Con host nuevo, el Worker vuelve a descubrir el soporte IPP en el siguiente ciclo.
         if (!string.Equals(printer.Host, input.Host, StringComparison.OrdinalIgnoreCase))
             printer.IppSupported = null;
@@ -160,7 +175,7 @@ public class PrintersController : ControllerBase
         }
         catch (DbUpdateException)
         {
-            return Conflict(new { error = "Ya existe otra impresora con el mismo StoreId y SpoolQueue." });
+            return Conflict(new { error = "Ya hay otra impresora con esa cola de Windows en la tienda." });
         }
 
         return Ok(ToPrinterDto(printer));
@@ -178,17 +193,13 @@ public class PrintersController : ControllerBase
         if (printer is null)
             return NotFound();
 
-        _dbContext.Printers.Remove(printer);
-
-        try
-        {
-            await _dbContext.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException ex) when (ex.InnerException?.Message?.Contains("FOREIGN KEY") == true)
-        {
+        // La base no tiene claves foráneas (scripts/sql/crear-esquema.sql): sin esta comprobación
+        // las reglas se quedaban apuntando a una impresora borrada.
+        if (await _dbContext.RoutingRules.AnyAsync(r => r.PrinterId == id, cancellationToken))
             return Conflict(new { error = "No se puede eliminar: existen reglas de enrutado que usan esta impresora." });
-        }
 
+        _dbContext.Printers.Remove(printer);
+        await _dbContext.SaveChangesAsync(cancellationToken);
         return NoContent();
     }
 
@@ -224,7 +235,7 @@ public class PrintersController : ControllerBase
 
         if (printer is null)
             return NotFound();
-        if (!IsAdmin() && printer.StoreId != GetCurrentUserStoreId())
+        if (!User.VeTodasLasTiendas() && printer.StoreId != GetCurrentUserStoreId())
             return Forbid();
 
         var host = !string.IsNullOrWhiteSpace(printer.Host)
@@ -369,7 +380,7 @@ public class PrintersController : ControllerBase
         return trimmed;
     }
 
-    private static string? ExtractHostFromSpoolQueue(string spoolQueue)
+    private static string? ExtractHostFromSpoolQueue(string? spoolQueue)
     {
         if (string.IsNullOrWhiteSpace(spoolQueue))
             return null;
@@ -384,6 +395,41 @@ public class PrintersController : ControllerBase
     }
 
     private bool IsAdmin() => User.IsInRole("Admin");
+
+    // Se imprime por ipp://{host}:631: con «.», «http://…» o «10.0.0.5:9100» la impresora no recibía
+    // nada. Lo que solo tiene cifras y puntos ha de ser una IPv4 entera (CheckHostName da por buen
+    // nombre «10.0.0» o «192.168.1.300»).
+    internal static bool HostValido(string? host) =>
+        host is not null
+        && (host.All(c => char.IsAsciiDigit(c) || c == '.')
+            ? host.Split('.').Length == 4 && IPAddress.TryParse(host, out _)
+            : Uri.CheckHostName(host) != UriHostNameType.Unknown);
+
+    // Otra impresora activa con la misma IP (dos fichas para un aparato reparten los trabajos y
+    // duplican los avisos) o con el mismo nombre en la tienda (en las reglas no se distinguen). Las
+    // inactivas no cuentan: al sustituir una, la vieja se queda de baja con su IP.
+    private async Task<string?> DuplicadaAsync(
+        int? id, NormalizedPrinterInput input, int storeId, bool isActive, CancellationToken cancellationToken)
+    {
+        if (!isActive)
+            return null;
+
+        var activas = await _dbContext.Printers
+            .AsNoTracking()
+            .Where(p => p.IsActive && (id == null || p.PrinterId != id))
+            .Select(p => new { p.PrinterName, p.StoreId, p.Host })
+            .ToListAsync(cancellationToken);
+
+        static string? Ip(string? host) => host is null ? null : ExtractHostFromMaybeUnc(host)?.ToLowerInvariant();
+        var ip = Ip(input.Host);
+        var mismaIp = ip is null ? null : activas.FirstOrDefault(p => Ip(p.Host) == ip);
+        if (mismaIp is not null)
+            return $"La IP {input.Host} ya es de la impresora «{mismaIp.PrinterName}» (tienda {mismaIp.StoreId}).";
+
+        var mismoNombre = activas.FirstOrDefault(p =>
+            p.StoreId == storeId && string.Equals(p.PrinterName.Trim(), input.PrinterName, StringComparison.OrdinalIgnoreCase));
+        return mismoNombre is null ? null : $"Ya hay una impresora «{mismoNombre.PrinterName}» en la tienda {storeId}.";
+    }
 
     private async Task<bool> ActiveStoreExistsAsync(int storeId, CancellationToken cancellationToken)
     {
@@ -408,15 +454,18 @@ public class PrintersController : ControllerBase
         if (normalizedName.Length > 120)
             return (null, "El nombre de impresora no puede superar 120 caracteres.");
 
-        var normalizedSpoolQueue = spoolQueue?.Trim();
-        if (string.IsNullOrWhiteSpace(normalizedSpoolQueue))
-            return (null, "La cola de impresion es obligatoria.");
-        if (normalizedSpoolQueue.Length > 200)
+        // Se imprime primero por IP (host) y la cola de Windows es la alternativa: basta una de las dos.
+        var normalizedSpoolQueue = string.IsNullOrWhiteSpace(spoolQueue) ? null : spoolQueue.Trim();
+        if (normalizedSpoolQueue?.Length > 200)
             return (null, "La cola de impresion no puede superar 200 caracteres.");
 
         var normalizedHost = string.IsNullOrWhiteSpace(host) ? null : host.Trim();
         if (normalizedHost?.Length > 255)
             return (null, "El host no puede superar 255 caracteres.");
+        if (normalizedHost is not null && !HostValido(ExtractHostFromMaybeUnc(normalizedHost)))
+            return (null, "La IP no es válida: escribe solo la IP o el nombre de la impresora, sin http://, puerto ni ruta.");
+        if (normalizedSpoolQueue is null && normalizedHost is null)
+            return (null, "Indica la IP de la impresora o su cola de Windows.");
 
         var normalizedCapabilitiesJson = string.IsNullOrWhiteSpace(capabilitiesJson) ? null : capabilitiesJson.Trim();
         if (normalizedCapabilitiesJson is not null)
@@ -462,6 +511,7 @@ public class PrintersController : ControllerBase
             printer.LastConnectionCheckAtUtc,
             printer.LastConnectionTransport,
             printer.LastConnectionError,
+            printer.ConnectionFailingSinceUtc,
             connectivity.ConnectivityStatus,
             connectivity.ConnectivityLabel,
             connectivity.ConnectivitySeverity,
@@ -472,7 +522,7 @@ public class PrintersController : ControllerBase
     private sealed record PrinterDto(
         int PrinterId,
         string PrinterName,
-        string SpoolQueue,
+        string? SpoolQueue,
         string? Host,
         int StoreId,
         bool IsActive,
@@ -484,6 +534,7 @@ public class PrintersController : ControllerBase
         DateTimeOffset? LastConnectionCheckAtUtc,
         string? LastConnectionTransport,
         string? LastConnectionError,
+        DateTimeOffset? ConnectionFailingSinceUtc,
         string ConnectivityStatus,
         string ConnectivityLabel,
         string ConnectivitySeverity,
@@ -536,14 +587,14 @@ public class PrintersController : ControllerBase
 
     private sealed record NormalizedPrinterInput(
         string PrinterName,
-        string SpoolQueue,
+        string? SpoolQueue,
         string? Host,
         string? CapabilitiesJson);
 }
 
 public record CreatePrinterRequest(
     string PrinterName,
-    string SpoolQueue,
+    string? SpoolQueue,
     string? Host,
     int StoreId,
     bool IsActive = true,
@@ -551,7 +602,7 @@ public record CreatePrinterRequest(
 
 public record UpdatePrinterRequest(
     string PrinterName,
-    string SpoolQueue,
+    string? SpoolQueue,
     string? Host,
     int StoreId,
     bool IsActive,

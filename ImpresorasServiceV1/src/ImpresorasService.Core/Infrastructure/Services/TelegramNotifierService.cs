@@ -30,14 +30,21 @@ internal sealed class TelegramNotifierService : ITelegramNotifier, IDisposable
 
     public async Task<bool> SendAlertAsync(string message, CancellationToken ct, int? storeId = null)
     {
-        if (!_options.Value.Enabled || string.IsNullOrWhiteSpace(_options.Value.BotToken))
+        if (!_options.Value.Enabled)
         {
-            _logger.LogDebug("Telegram desactivado o sin token. Mensaje omitido.");
+            _logger.LogDebug("Telegram desactivado. Mensaje omitido.");
             return false;
         }
 
         await using var scope = _scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
+
+        var token = await TelegramToken.ResolverAsync(db, _options.Value, ct);
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            _logger.LogDebug("Telegram sin token. Mensaje omitido.");
+            return false;
+        }
 
         var allChats = await db.TelegramChats.AsNoTracking().ToListAsync(ct);
         var chatIds = allChats
@@ -51,7 +58,7 @@ internal sealed class TelegramNotifierService : ITelegramNotifier, IDisposable
             return false;
         }
 
-        var url = $"https://api.telegram.org/bot{_options.Value.BotToken}/sendMessage";
+        var url = $"https://api.telegram.org/bot{token}/sendMessage";
 
         var delivered = 0;
 

@@ -63,7 +63,13 @@ public sealed class DashboardThresholdRuleStore : IDashboardThresholdRuleStore
             ThresholdRuleEngine.NormalizeRuleSet(rules.Queue).ToList(),
             ThresholdRuleEngine.NormalizeRuleSet(rules.Failed).ToList(),
             ThresholdRuleEngine.NormalizeRuleSet(rules.MissingHost).ToList(),
-            ThresholdRuleEngine.NormalizeRuleSet(rules.Conn).ToList());
+            ThresholdRuleEngine.NormalizeRuleSet(rules.Conn).ToList())
+        {
+            Silent = ThresholdRuleEngine.NormalizeRuleSet(rules.Silent).ToList(),
+            Reprints = ThresholdRuleEngine.NormalizeRuleSet(rules.Reprints).ToList(),
+            Horario = rules.Horario with { Dias = rules.Horario.Dias.Distinct().Order().ToList() },
+            TelegramSoloEnHorario = rules.TelegramSoloEnHorario
+        };
 
         var errors = ThresholdRuleEngine.Validate(normalized);
         if (errors.Count > 0)
@@ -80,11 +86,23 @@ public sealed class DashboardThresholdRuleStore : IDashboardThresholdRuleStore
         return Array.Empty<string>();
     }
 
+    // Un fichero anterior sin silent/reprints/horario: desactivadas y el horario por defecto.
     private static ThresholdRuleSet ToRuleSet(RuleSetDto dto) => new(
         Queue: ToRules(dto.Queue),
         Failed: ToRules(dto.Failed),
         MissingHost: ToRules(dto.MissingHost),
-        Conn: ToRules(dto.Conn));
+        Conn: ToRules(dto.Conn))
+    {
+        Silent = ToRules(dto.Silent),
+        Reprints = ToRules(dto.Reprints),
+        Horario = dto.Horario is null
+            ? HorarioTienda.Default
+            : new HorarioTienda(
+                dto.Horario.Dias ?? HorarioTienda.Default.Dias.ToList(),
+                dto.Horario.Desde ?? HorarioTienda.Default.Desde,
+                dto.Horario.Hasta ?? HorarioTienda.Default.Hasta),
+        TelegramSoloEnHorario = dto.TelegramSoloEnHorario ?? false
+    };
 
     private static List<ThresholdRule> ToRules(List<RuleDto>? rules) =>
         (rules ?? new List<RuleDto>()).Select(r => new ThresholdRule(r.Min, r.Severity)).ToList();
@@ -94,7 +112,11 @@ public sealed class DashboardThresholdRuleStore : IDashboardThresholdRuleStore
         Queue = rules.Queue.Select(r => new RuleDto { Min = r.Min, Severity = r.Severity }).ToList(),
         Failed = rules.Failed.Select(r => new RuleDto { Min = r.Min, Severity = r.Severity }).ToList(),
         MissingHost = rules.MissingHost.Select(r => new RuleDto { Min = r.Min, Severity = r.Severity }).ToList(),
-        Conn = rules.Conn.Select(r => new RuleDto { Min = r.Min, Severity = r.Severity }).ToList()
+        Conn = rules.Conn.Select(r => new RuleDto { Min = r.Min, Severity = r.Severity }).ToList(),
+        Silent = rules.Silent.Select(r => new RuleDto { Min = r.Min, Severity = r.Severity }).ToList(),
+        Reprints = rules.Reprints.Select(r => new RuleDto { Min = r.Min, Severity = r.Severity }).ToList(),
+        Horario = new HorarioDto { Dias = rules.Horario.Dias.ToList(), Desde = rules.Horario.Desde, Hasta = rules.Horario.Hasta },
+        TelegramSoloEnHorario = rules.TelegramSoloEnHorario
     };
 
     private sealed class RuleSetDto
@@ -103,6 +125,17 @@ public sealed class DashboardThresholdRuleStore : IDashboardThresholdRuleStore
         public List<RuleDto>? Failed { get; set; }
         public List<RuleDto>? MissingHost { get; set; }
         public List<RuleDto>? Conn { get; set; }
+        public List<RuleDto>? Silent { get; set; }
+        public List<RuleDto>? Reprints { get; set; }
+        public HorarioDto? Horario { get; set; }
+        public bool? TelegramSoloEnHorario { get; set; }
+    }
+
+    private sealed class HorarioDto
+    {
+        public List<int>? Dias { get; set; }
+        public string? Desde { get; set; }
+        public string? Hasta { get; set; }
     }
 
     private sealed class RuleDto

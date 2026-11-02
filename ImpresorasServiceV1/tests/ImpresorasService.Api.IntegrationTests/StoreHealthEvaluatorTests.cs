@@ -133,4 +133,82 @@ public sealed class StoreHealthEvaluatorTests
 
         Assert.NotEmpty(errors);
     }
+
+    // ── Umbrales opcionales (27/10/2026): «tienda sin recibir» y «reimpresiones del día» ──
+
+    private static readonly TimeZoneInfo Madrid = BusinessTimeZoneClock.Resolve("Europe/Madrid");
+
+    // 27/10/2026 es martes; en Madrid, UTC+1 (horario de invierno desde el 25/10).
+    private static DateTimeOffset Local(int hora, int minuto = 0, int dia = 27) =>
+        new(2026, 10, dia, hora, minuto, 0, TimeSpan.FromHours(1));
+
+    [Fact]
+    public void MinutosSinRecibir_EnHorario_CuentaDesdeElUltimo()
+    {
+        var minutos = HorarioTienda.Default.MinutosSinRecibir(Local(10, 15), Local(11, 0), Madrid);
+
+        Assert.Equal(45, minutos);
+    }
+
+    [Fact]
+    public void MinutosSinRecibir_UltimoAntesDeAbrir_CuentaDesdeLaApertura()
+    {
+        // El último llegó ayer por la tarde: a las 9:30 lleva 30 min de horario, no 15 h.
+        var minutos = HorarioTienda.Default.MinutosSinRecibir(Local(18, 0, dia: 26), Local(9, 30), Madrid);
+
+        Assert.Equal(30, minutos);
+    }
+
+    [Theory]
+    [InlineData(8, 59)]   // antes de abrir
+    [InlineData(21, 0)]   // ya cerrado
+    public void MinutosSinRecibir_FueraDeHorario_EsNull(int hora, int minuto)
+    {
+        Assert.Null(HorarioTienda.Default.MinutosSinRecibir(Local(7, 0), Local(hora, minuto), Madrid));
+    }
+
+    [Fact]
+    public void MinutosSinRecibir_DiaNoLaborable_O_NuncaRecibio_EsNull()
+    {
+        // 1/11/2026 es domingo: fuera del horario por defecto (lunes a sábado).
+        Assert.Null(HorarioTienda.Default.MinutosSinRecibir(Local(10, 0, dia: 31), new DateTimeOffset(2026, 11, 1, 12, 0, 0, TimeSpan.FromHours(1)), Madrid));
+        Assert.Null(HorarioTienda.Default.MinutosSinRecibir(null, Local(12, 0), Madrid));
+    }
+
+    [Fact]
+    public void Validate_MetricasOpcionalesVaciasSonValidas_PeroElHorarioSeComprueba()
+    {
+        Assert.Empty(ThresholdRuleEngine.Validate(Rules));
+
+        var conSilent = Rules with
+        {
+            Silent = new[] { new ThresholdRule(60, "warning"), new ThresholdRule(30, "critical") },
+            Horario = new HorarioTienda(Array.Empty<int>(), "21:00", "09:00")
+        };
+        var errors = ThresholdRuleEngine.Validate(conSilent);
+
+        Assert.Contains(errors, e => e.Contains("crecer con la severidad"));
+        Assert.Contains(errors, e => e.Contains("al menos un día"));
+        Assert.Contains(errors, e => e.Contains("HH:mm"));
+    }
+
+    [Fact]
+    public void Compute_SinRecibirYReimpresiones_MarcanLaSalud()
+    {
+        var reglas = Rules with
+        {
+            Silent = new[] { new ThresholdRule(60, "warning"), new ThresholdRule(120, "critical") },
+            Reprints = new[] { new ThresholdRule(5, "warning"), new ThresholdRule(15, "critical") }
+        };
+
+        var (silent, motivoSilent) = StoreHealthEvaluator.Compute(2, 0, 0, 0, 0, 0, 0, reglas, silentMinutes: 130);
+        var (reprints, motivoReprints) = StoreHealthEvaluator.Compute(2, 0, 0, 0, 0, 0, 0, reglas, reprintsToday: 6);
+        var (sano, _) = StoreHealthEvaluator.Compute(2, 0, 0, 0, 0, 0, 0, reglas, silentMinutes: null, reprintsToday: 4);
+
+        Assert.Equal("critical", silent);
+        Assert.Contains("130 min", motivoSilent);
+        Assert.Equal("warning", reprints);
+        Assert.Contains("6 reimpresiones", motivoReprints);
+        Assert.Equal("healthy", sano);
+    }
 }

@@ -27,4 +27,14 @@ public interface IRoutingResolver
     Task<IReadOnlyList<int?>> ResolveBatchAsync(
         IReadOnlyList<(int storeId, string documentType, string channel)> requests,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// La regla que ganaría para ese trabajo, o null (simulador de la pantalla de reglas).
+    /// Misma lógica que <see cref="ResolvePrinterAsync"/>.
+    /// </summary>
+    Task<Domain.Entities.RoutingRule?> ResolveRuleAsync(
+        int storeId,
+        string documentType,
+        string channel,
+        CancellationToken cancellationToken = default);
 }

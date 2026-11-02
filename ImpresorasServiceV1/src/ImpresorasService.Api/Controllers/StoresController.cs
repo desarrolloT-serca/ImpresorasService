@@ -185,12 +185,12 @@ public class StoresController : ControllerBase
                     .Select(x => x.JobId)
                     .ToListAsync(cancellationToken);
 
-                if (jobIds.Count > 0)
-                {
-                    await _dbContext.PrintJobEvents
-                        .Where(x => jobIds.Contains(x.JobId))
-                        .ExecuteDeleteAsync(cancellationToken);
-                }
+                // También su historial de avisos de Telegram (eventos con un job_id fijo por tienda):
+                // si no, al dar de alta otra vez el mismo storeId reaparecería el de la tienda vieja.
+                var historialTelegram = Application.Services.TelegramMensajes.JobIdHistorial(storeId);
+                await _dbContext.PrintJobEvents
+                    .Where(x => jobIds.Contains(x.JobId) || x.JobId == historialTelegram)
+                    .ExecuteDeleteAsync(cancellationToken);
 
                 await _dbContext.PrintJobs
                     .Where(x => x.StoreId == storeId)

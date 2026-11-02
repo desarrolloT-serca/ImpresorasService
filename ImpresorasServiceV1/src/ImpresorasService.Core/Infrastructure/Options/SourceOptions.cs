@@ -10,4 +10,7 @@ public sealed class SourceOptions
 
     /// <summary>Segundos que una fila reclamada queda reservada a este Worker (mínimo 15).</summary>
     public int LeaseSeconds { get; set; } = 90;
+
+    /// <summary>Hosts de los que se acepta descargar pdf_url (solo https). Vacío: ninguno.</summary>
+    public string[] PdfUrlHosts { get; set; } = [];
 }

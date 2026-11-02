@@ -1,3 +1,4 @@
+using ImpresorasService.Infrastructure.Persistence;
 using ImpresorasService.Application.Abstractions;
 using ImpresorasService.Infrastructure.Options;
 using Microsoft.Extensions.Options;
@@ -78,6 +79,7 @@ public sealed class WorkerLockBackgroundService : BackgroundService
 
             bool acquired;
             var unreachable = false;
+            var bdCaida = false;
             try
             {
                 await using var scope = _scopeFactory.CreateAsyncScope();
@@ -90,7 +92,11 @@ public sealed class WorkerLockBackgroundService : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Worker lock: fallo al adquirir/renovar; esta instancia queda inactiva este ciclo.");
+                // La base caída la anota EstadoBd, una vez y con el motivo; el resto (permisos, tabla)
+                // se registra aquí con su traza.
+                bdCaida = FallosBd.EsFalloDeConexion(ex);
+                if (!bdCaida)
+                    _logger.LogWarning(ex, "Worker lock: fallo al adquirir/renovar; esta instancia queda inactiva este ciclo.");
                 acquired = false;
                 unreachable = true;
             }
@@ -106,7 +112,8 @@ public sealed class WorkerLockBackgroundService : BackgroundService
             if (unreachable)
             {
                 consecutiveUnreachable++;
-                if (ShouldEscalate(consecutiveUnreachable))
+                // Con la base caída, el motivo ya lo da EstadoBd: este aviso señalaría a los privilegios.
+                if (ShouldEscalate(consecutiveUnreachable) && !bdCaida)
                     _logger.LogError(
                         "Worker lock: {Seconds}s sin poder consultar el lock ({Cycles} ciclos seguidos). El Worker NO esta " +
                         "procesando NADA (ingesta, impresion, conectividad y alertas parados) aunque el servicio figure en " +

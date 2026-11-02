@@ -50,10 +50,19 @@ public sealed class WorkerActivityHealthCheck : IHealthCheck
 
         // MIN ignora los NULL en SQL: una impresora recién dada de alta y aún no sondeada no
         // dispara el check (evita un falso positivo durante su primer ciclo).
-        var oldestCheck = await _dbContext.Printers
-            .AsNoTracking()
-            .Where(p => p.IsActive)
-            .MinAsync(p => (DateTimeOffset?)p.LastConnectionCheckAtUtc, cancellationToken);
+        DateTimeOffset? oldestCheck;
+        try
+        {
+            oldestCheck = await _dbContext.Printers
+                .AsNoTracking()
+                .Where(p => p.IsActive)
+                .MinAsync(p => (DateTimeOffset?)p.LastConnectionCheckAtUtc, cancellationToken);
+        }
+        catch (Exception ex) when (FallosBd.EsFalloDeConexion(ex))
+        {
+            // Sin base no hay huella que mirar. Lo dice el check "database"; aquí, sin traza en cada /health.
+            return HealthCheckResult.Degraded("Sin base de datos no se puede comprobar el Worker.");
+        }
 
         if (oldestCheck is null)
             return HealthCheckResult.Healthy("Sin impresoras activas sondeadas todavia; nada que vigilar.");

@@ -6,8 +6,10 @@ using ImpresorasService.Infrastructure.Persistence;
 using ImpresorasService.Infrastructure.Repositories;
 using ImpresorasService.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Runtime.InteropServices;
 
@@ -43,7 +45,18 @@ public static class DependencyInjection
         if (string.IsNullOrWhiteSpace(connectionString))
             throw new InvalidOperationException("ConnectionStrings:PrintQueue es obligatorio (PostgreSQL: Host, Port, Database, Username, Search Path).");
 
-        services.AddDbContext<ImpresorasDbContext>(options => options.UseNpgsql(connectionString));
+        services.AddSingleton<EstadoBd>();
+        services.AddDbContext<ImpresorasDbContext>((sp, options) => options
+            .UseNpgsql(connectionString)
+            .AddInterceptors(new EstadoBdInterceptor(sp.GetRequiredService<EstadoBd>()))
+            // Los cortes de la base los anota EstadoBd una vez, con su motivo; estos avisos de EF
+            // repetían la traza en cada petición y en cada ciclo del Worker. Los errores que no son
+            // de conexión siguen apareciendo: los registran Kestrel y los bucles del Worker.
+            .ConfigureWarnings(w => w.Log(
+                (RelationalEventId.ConnectionError, LogLevel.Debug),
+                (RelationalEventId.CommandError, LogLevel.Debug),
+                (CoreEventId.QueryIterationFailed, LogLevel.Debug),
+                (CoreEventId.SaveChangesFailed, LogLevel.Debug))));
 
         services.AddScoped<IPrintJobRepository, PrintJobRepository>();
         services.AddScoped<IJobSourceAdapter, ErpJobSourceAdapter>();

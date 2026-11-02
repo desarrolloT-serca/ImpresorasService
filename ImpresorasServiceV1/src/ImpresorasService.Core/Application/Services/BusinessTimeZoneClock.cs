@@ -34,4 +34,30 @@ public static class BusinessTimeZoneClock
         var todayDate = TimeZoneInfo.ConvertTime(nowUtc, businessTimeZone).Date;
         return new DateTimeOffset(todayDate, businessTimeZone.GetUtcOffset(todayDate));
     }
+
+    /// <summary>Las 00:00 de ese día en la zona de negocio (filtro de fechas de la cola).</summary>
+    public static DateTimeOffset DayStartUtc(DateOnly day, TimeZoneInfo businessTimeZone)
+    {
+        var date = day.ToDateTime(TimeOnly.MinValue);
+        return new DateTimeOffset(date, businessTimeZone.GetUtcOffset(date));
+    }
+
+    /// <summary>
+    /// Inicio del periodo del dashboard («today», «7d», «30d»; otro valor = «today»). El mismo para sus
+    /// KPI y para los registros que se abren desde ellos, como el de reimpresiones (auditoría L8).
+    /// </summary>
+    public static DateTimeOffset WindowStartUtc(string? window, DateTimeOffset nowUtc, TimeZoneInfo businessTimeZone) =>
+        NormalizeWindow(window) switch
+        {
+            "7d" => nowUtc.AddDays(-7),
+            "30d" => nowUtc.AddDays(-30),
+            // "today" en la timezone de negocio (Dashboard:BusinessTimeZone), no en la del servidor.
+            _ => TodayStartUtc(nowUtc, businessTimeZone)
+        };
+
+    public static string NormalizeWindow(string? window)
+    {
+        var normalized = (window ?? string.Empty).Trim().ToLowerInvariant();
+        return normalized is "7d" or "30d" ? normalized : "today";
+    }
 }

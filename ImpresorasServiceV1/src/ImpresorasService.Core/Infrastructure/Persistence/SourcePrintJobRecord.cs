@@ -14,6 +14,9 @@ public class SourcePrintJobRecord
     /// toca antes de acusarlas.
     /// </summary>
     public byte[]? PdfBlob { get; set; } = Array.Empty<byte>();
+
+    /// <summary>Alternativa a PdfBlob: URL de la que la ingesta descarga el PDF (solo hosts de Source:PdfUrlHosts).</summary>
+    public string? PdfUrl { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; }
     public bool IsProcessed { get; set; }
 

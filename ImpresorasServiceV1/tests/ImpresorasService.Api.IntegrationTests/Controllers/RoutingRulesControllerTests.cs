@@ -83,7 +83,7 @@ public sealed class RoutingRulesControllerTests : IntegrationTestBase
         {
             priority = 10,
             storeId = (int?)1,
-            documentType = "FACTURA",
+            documentType = Tipo(),
             channel = "DEFAULT",
             printerId = printer.PrinterId,
             isActive = true,
@@ -115,6 +115,56 @@ public sealed class RoutingRulesControllerTests : IntegrationTestBase
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    [Fact]
+    public async Task Create_ConFinAntesDelInicio_Returns400()
+    {
+        var printer = await CreatePrinterAsync();
+        var desde = DateTimeOffset.UtcNow;
+        var request = new
+        {
+            priority = 10, storeId = (int?)1, documentType = Tipo(), printerId = printer.PrinterId,
+            isActive = true, validFromUtc = desde, validToUtc = desde.AddHours(-1), createdBy = "test"
+        };
+
+        var response = await Client.PostAsJsonAsync("/api/routingrules", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Create_ConPrioridadNegativa_Returns400()
+    {
+        var printer = await CreatePrinterAsync();
+        var request = new { priority = -1, storeId = (int?)1, documentType = Tipo(), printerId = printer.PrinterId, isActive = true, createdBy = "test" };
+
+        var response = await Client.PostAsJsonAsync("/api/routingrules", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    /// <summary>
+    /// Con la misma tienda, tipo, canal y prioridad, una de las dos no se usaría nunca: se rechaza
+    /// aunque el tipo venga con otras mayúsculas o espacios. Con otra prioridad es la de respaldo.
+    /// </summary>
+    [Fact]
+    public async Task Create_ReglaRepetida_Returns409_YConOtraPrioridadSePermite()
+    {
+        var printer = await CreatePrinterAsync();
+        var tipo = Tipo();
+        object Regla(int priority, string documentType) => new
+        {
+            priority, storeId = (int?)1, documentType, channel = "WEB", printerId = printer.PrinterId,
+            isActive = true, createdBy = "test"
+        };
+        (await Client.PostAsJsonAsync("/api/routingrules", Regla(5, tipo))).EnsureSuccessStatusCode();
+
+        var repetida = await Client.PostAsJsonAsync("/api/routingrules", Regla(5, $" {tipo.ToLowerInvariant()} "));
+        var respaldo = await Client.PostAsJsonAsync("/api/routingrules", Regla(6, tipo));
+
+        Assert.Equal(HttpStatusCode.Conflict, repetida.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, respaldo.StatusCode);
+    }
+
     #endregion
 
     #region PUT /api/routingrules/{id}
@@ -128,7 +178,7 @@ public sealed class RoutingRulesControllerTests : IntegrationTestBase
         {
             priority = 20,
             storeId = (int?)1,
-            documentType = "TICKET",
+            documentType = Tipo(),
             channel = "DEFAULT",
             printerId = printer.PrinterId,
             isActive = true,
@@ -193,7 +243,7 @@ public sealed class RoutingRulesControllerTests : IntegrationTestBase
     /// </summary>
     private async Task<PrinterDto> CreatePrinterAsync(int storeId = 1)
     {
-        var req = new { printerName = "P1", spoolQueue = $"\\\\srv\\q{Guid.NewGuid():N}"[..20], storeId, isActive = true };
+        var req = new { printerName = $"P-{Guid.NewGuid():N}"[..12], spoolQueue = $"\\\\srv\\q{Guid.NewGuid():N}"[..20], storeId, isActive = true };
         var res = await Client.PostAsJsonAsync("/api/printers", req);
         res.EnsureSuccessStatusCode();
         var p = await res.Content.ReadFromJsonAsync<PrinterDto>();
@@ -203,13 +253,17 @@ public sealed class RoutingRulesControllerTests : IntegrationTestBase
 
     private async Task<RoutingRuleDto> CreateRuleAsync(int printerId, int? storeId = 1)
     {
-        var req = new { priority = 10, storeId, printerId, isActive = true, createdBy = "test" };
+        var req = new { priority = 10, storeId, documentType = Tipo(), printerId, isActive = true, createdBy = "test" };
         var res = await Client.PostAsJsonAsync("/api/routingrules", req);
         res.EnsureSuccessStatusCode();
         var r = await res.Content.ReadFromJsonAsync<RoutingRuleDto>();
         Assert.NotNull(r);
         return r;
     }
+
+    // Un tipo propio de cada regla: dos activas iguales (tienda, tipo, canal y prioridad) no se admiten
+    // y las pruebas comparten base de datos.
+    private static string Tipo() => $"T{Guid.NewGuid():N}"[..12].ToUpperInvariant();
 
     private sealed record PrinterDto(int PrinterId, string PrinterName, string SpoolQueue, int StoreId, bool IsActive);
     private sealed record RoutingRuleDto(int RuleId, int Priority, int? StoreId, string? DocumentType, string? Channel, int PrinterId, bool IsActive);

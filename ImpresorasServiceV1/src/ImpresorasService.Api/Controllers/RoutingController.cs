@@ -27,23 +27,24 @@ public class RoutingController : ControllerBase
     [HttpPost("resolve")]
     public async Task<IActionResult> Resolve([FromBody] ResolveRoutingRequest request, CancellationToken cancellationToken)
     {
-        var printerId = await _resolver.ResolvePrinterAsync(
+        // La regla, no solo la impresora: el simulador de la pantalla de reglas marca cuál gana.
+        var rule = await _resolver.ResolveRuleAsync(
             request.StoreId,
             request.DocumentType,
             request.Channel ?? "DEFAULT",
             cancellationToken);
 
-        if (printerId is null)
+        if (rule is null)
             return NotFound(new { error = "No hay regla aplicable para este trabajo.", code = "ROUTE_NOT_FOUND" });
 
         var printer = await _db.Printers
             .AsNoTracking()
-            .FirstOrDefaultAsync(p => p.PrinterId == printerId.Value, cancellationToken);
+            .FirstOrDefaultAsync(p => p.PrinterId == rule.PrinterId, cancellationToken);
 
         if (printer is null)
             return NotFound(new { error = "Impresora no encontrada." });
 
-        return Ok(new { printerId = printer.PrinterId, printer });
+        return Ok(new { printerId = printer.PrinterId, ruleId = rule.RuleId, printer });
     }
 }
 

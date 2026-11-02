@@ -14,7 +14,7 @@ antes de corregirlo, no solo por inspección de código.
 | `printed` | Trabajos cuya **primera** transición a un estado impreso ocurre en la ventana (cuenta una sola vez por `JobId`, sin importar cuántas veces se actualice después) | `MIN(PrintJobEvents.OccurredAtUtc)` agrupado por `JobId`, donde `NewStatus IN (SpoolAccepted, PrintedConfirmed, PrintedUnknown)`, filtrado a `[from, now]` | ídem |
 | `failed` | Trabajos distintos con **al menos una** señal de fallo en la ventana (no se re-imputa un job que ya cuenta por otra señal en la misma ventana) | Unión, deduplicada por `JobId`: eventos con `NewStatus IN (ErrorFinal, RetryScheduled)` en `[from, now]`; **más** los jobs de `printed` (mismo cálculo) cuyo `AttemptCount > 1` | ídem |
 | `queueCurrent` | Foto actual, sin ventana temporal | `Status IN (Pending, Routed, Printing, RetryScheduled)` | ídem |
-| `failedWithoutRetryCurrent` | Fallidos sin reenvío pendiente — foto de estado actual, **sin ventana temporal** (corregido 2026-07-21, A-KPI-01: filtrar por `UpdatedAtUtc` hacía que un `ErrorFinal` terminal "desapareciera" al cruzar medianoche, ya que su `UpdatedAtUtc` no vuelve a moverse — falsas alertas de recuperación y fallos ocultos). Idéntico en `today`/`7d`/`30d` por diseño. **`Cancelled` queda fuera** (corregido 2026-08-17): cancelar es una decisión explícita del operador que cierra el trabajo, así que un cancelado tras agotar reintentos no está pendiente de reenvío — mientras contaba inflaba el KPI de forma permanente (nunca se resuelve solo) y mantenía viva la alerta de la tienda por trabajos ya cerrados. | `DashboardPrintJobPredicates.FailedWithoutRetryCurrent` (sin filtro de fecha) | ídem |
+| `failedWithoutRetryCurrent` | Fallidos sin reenvío pendiente — foto de estado actual, **sin ventana temporal** (corregido 2026-07-21, A-KPI-01: filtrar por `UpdatedAtUtc` hacía que un `ErrorFinal` terminal "desapareciera" al cruzar medianoche, ya que su `UpdatedAtUtc` no vuelve a moverse — falsas alertas de recuperación y fallos ocultos). Idéntico en `today`/`7d`/`30d` por diseño. **`Cancelled` queda fuera** (corregido 2026-08-17): cancelar es una decisión explícita del operador que cierra el trabajo, así que un cancelado tras agotar reintentos no está pendiente de reenvío — mientras contaba inflaba el KPI de forma permanente (nunca se resuelve solo) y mantenía viva la alerta de la tienda por trabajos ya cerrados. **`PrinterBlocked` cuenta desde el primer intento** (2026-10-27, decisión D3 de `auditoria-2026-10-26.md`): un pedido parado por falta de papel o atasco es incidencia de la tienda desde que se para; antes solo contaba con `AttemptCount > 1`. | `DashboardPrintJobPredicates.FailedWithoutRetryCurrent` (sin filtro de fecha) | ídem |
 | `activePrinters` | Impresoras activas actuales | foto actual | tienda efectiva |
 | `activeStores` | Tiendas activas actuales | foto actual | tienda efectiva |
 
@@ -27,11 +27,13 @@ días sigue abierta hoy y filtrarla por la ventana la haría desaparecer del pan
 
 | Campo | Definición | Fuente / timestamp |
 |---|---|---|
-| `oldestQueuedAtUtc` | Instante de creación del trabajo **en cola** más antiguo de la tienda. `null` si no hay cola. | `MIN(CreatedAtUtc)` sobre `Status IN (Pending, Routed, Printing, RetryScheduled)`, agrupado por tienda |
+| `oldestQueuedAtUtc` | Instante en que se mandó imprimir el trabajo **en cola** más antiguo de la tienda (la última vez, si se reimprimió o reintentó). `null` si no hay cola. | `MIN(COALESCE(LastRequeuedAtUtc, CreatedAtUtc))` sobre `Status IN (Pending, Routed, Printing, RetryScheduled)`, agrupado por tienda |
 | `oldestFailedWithoutRetryAtUtc` | Última actualización del **fallo sin reenviar** más antiguo de la tienda. `null` si no hay ninguno. | `MIN(UpdatedAtUtc)` sobre `DashboardPrintJobPredicates.FailedWithoutRetryCurrent`, agrupado por tienda |
 
-Se usa `CreatedAtUtc` para la cola (cuándo entró el trabajo, que es lo que el operador percibe como
-espera) y `UpdatedAtUtc` para el fallo (cuándo quedó en estado terminal, no cuándo se creó).
+Para la cola se usa la última orden de imprimir (`LastRequeuedAtUtc`, que ponen la reimpresión y el
+reintento; si no la hay, `CreatedAtUtc`): es lo que el operador percibe como espera, y la misma hora
+por la que se ordena y se filtra la pantalla de la cola (`GET /api/printjobs`, 27/10/2026). Para el
+fallo, `UpdatedAtUtc` (cuándo quedó en estado terminal, no cuándo se creó).
 
 La antigüedad de una incidencia de **conectividad** o de **host sin configurar** no sale de aquí: la
 da `Printer.LastConnectionCheckAtUtc`, que ya viajaba en `GET /api/printers`. Sin chequeo previo el

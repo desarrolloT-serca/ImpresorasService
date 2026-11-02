@@ -7,16 +7,16 @@ namespace ImpresorasService.Application.Abstractions;
 public interface IRoutingService
 {
     /// <summary>
-    /// Intenta enrutar un trabajo. Si no hay regla aplicable, transiciona a ErrorFinal.
-    /// Solo funciona para trabajos en estado Pending.
+    /// Reintento de algo que no ha salido: acepta Pending o ErrorFinal, que resetea a Pending y
+    /// vuelve a enrutar. Lo que ya salió va por <see cref="ReprintAsync"/>.
     /// </summary>
-    Task<RouteResult> TryRouteJobAsync(Guid jobId, CancellationToken cancellationToken = default);
+    Task<RouteResult> TryRetryRouteAsync(Guid jobId, CancellationToken cancellationToken = default, string? actorId = null);
 
     /// <summary>
-    /// Intenta enrutar o re-enrutar. Acepta Pending o ErrorFinal (ROUTE_NOT_FOUND).
-    /// Para ErrorFinal con ROUTE_NOT_FOUND, resetea a Pending y vuelve a intentar.
+    /// Reimpresión de algo que ya salió (PrintedConfirmed o PrintedUnknown), con motivo obligatorio
+    /// y registrada como evento REPRINT con quién la pidió.
     /// </summary>
-    Task<RouteResult> TryRetryRouteAsync(Guid jobId, CancellationToken cancellationToken = default);
+    Task<RouteResult> ReprintAsync(Guid jobId, string? reason, string? note, string? actorId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Enruta todos los trabajos Pending del lote con una sola carga de reglas/impresoras.

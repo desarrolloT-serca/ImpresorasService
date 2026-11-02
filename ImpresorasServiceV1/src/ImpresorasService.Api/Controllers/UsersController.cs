@@ -9,7 +9,7 @@ using System.Security.Claims;
 namespace ImpresorasService.Api.Controllers;
 
 [ApiController]
-[Authorize(Policy = "AdminOnly")]
+[Authorize(Policy = "AdminAccountOnly")]
 [Route("api/[controller]")]
 public class UsersController : ControllerBase
 {

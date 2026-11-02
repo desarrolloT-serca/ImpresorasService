@@ -66,20 +66,21 @@
                 </div>
         </x-ui.form-section>
 
-        <x-ui.form-section title="Configuración de cola" hint="Ruta de spool y host para la comprobación.">
+        <x-ui.form-section title="Impresión" hint="Primero por IP; la cola de Windows es la alternativa. Basta una de las dos.">
                 <div>
-                    <label for="spoolQueue" class="form-label">SpoolQueue *</label>
-                    <input type="text" name="spoolQueue" id="spoolQueue" value="{{ old('spoolQueue', $printer ? ($printer['spoolQueue'] ?? $printer['SpoolQueue'] ?? '') : '') }}" required
-                        class="input @error('spoolQueue') border-red-500 @enderror">
-                    @error('spoolQueue')<p class="field-error">{{ $message }}</p>@enderror
+                    <label for="host" class="form-label">IP</label>
+                    <input type="text" name="host" id="host" value="{{ old('host', $printer ? ($printer['host'] ?? $printer['Host'] ?? '') : '') }}"
+                        class="input @error('host') border-red-500 @enderror">
+                    <p class="form-hint">Se imprime primero por aquí (IPP), sin cola ni driver. También sirve para comprobar la conexión.</p>
+                    @error('host')<p class="field-error">{{ $message }}</p>@enderror
                 </div>
 
                 <div>
-                    <label for="host" class="form-label">Host</label>
-                    <input type="text" name="host" id="host" value="{{ old('host', $printer ? ($printer['host'] ?? $printer['Host'] ?? '') : '') }}"
-                        class="input @error('host') border-red-500 @enderror">
-                    <p class="form-hint">Usado para comprobar conectividad SMB cuando SpoolQueue no es UNC.</p>
-                    @error('host')<p class="field-error">{{ $message }}</p>@enderror
+                    <label for="spoolQueue" class="form-label">Cola de Windows (alternativa)</label>
+                    <input type="text" name="spoolQueue" id="spoolQueue" value="{{ old('spoolQueue', $printer ? ($printer['spoolQueue'] ?? $printer['SpoolQueue'] ?? '') : '') }}"
+                        class="input @error('spoolQueue') border-red-500 @enderror">
+                    <p class="form-hint">Opcional si hay IP: se usa cuando la impresora no acepta PDF por IP o no responde.</p>
+                    @error('spoolQueue')<p class="field-error">{{ $message }}</p>@enderror
                 </div>
         </x-ui.form-section>
 

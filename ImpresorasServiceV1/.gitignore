@@ -52,6 +52,10 @@ src/ImpresorasService.Web.PHP/public/build/
 src/ImpresorasService.Web.PHP/public/hot/
 src/ImpresorasService.Web.PHP/.phpunit.result.cache
 
+# Frontend React con las piezas del ERP
+src/ImpresorasService.Web/node_modules/
+src/ImpresorasService.Web/dist/
+
 # Demo templates (KeenThemes - no forman parte del producto)
 templates/
 

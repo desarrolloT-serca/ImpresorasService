@@ -126,7 +126,7 @@
                         @php
                             $id = $p['printerId'] ?? $p['PrinterId'] ?? null;
                             $name = $p['printerName'] ?? $p['PrinterName'] ?? '-';
-                            $spoolQueue = $p['spoolQueue'] ?? $p['SpoolQueue'] ?? '-';
+                            $spoolQueue = $p['spoolQueue'] ?? $p['SpoolQueue'] ?? 'Solo IP';
                             $host = trim((string) ($p['host'] ?? $p['Host'] ?? ''));
                             $isActive = (bool) ($p['isActive'] ?? $p['IsActive'] ?? false);
                             $editUrl = $id ? route('impresoras.edit', ['impresora' => $id, 'storeId' => $pageStoreId]) : '#';

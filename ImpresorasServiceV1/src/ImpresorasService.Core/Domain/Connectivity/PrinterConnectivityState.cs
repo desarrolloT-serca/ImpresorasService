@@ -71,11 +71,13 @@ public static class PrinterConnectivityState
             printer.ConnectionFailuresStreak = 0;
             printer.LastConnectionTransport = NormalizeDetail(transport);
             printer.LastConnectionError = null;
+            printer.ConnectionFailingSinceUtc = null;
             return;
         }
 
         printer.LastConnectionOk = false;
         printer.LastConnectionTransport = null;
+        printer.ConnectionFailingSinceUtc ??= checkedAtUtc;
 
         if (IsHostNotConfiguredError(error))
         {

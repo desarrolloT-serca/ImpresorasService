@@ -13,5 +13,8 @@ public class TelegramConfig
     /// <summary>Intervalo en minutos entre ciclos de chequeo de salud de tiendas.</summary>
     public int CheckIntervalMinutes { get; set; } = 5;
 
+    /// <summary>Token del bot puesto desde la pantalla; manda sobre Telegram:BotToken. Null = el de la config.</summary>
+    public string? BotToken { get; set; }
+
     public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
 }

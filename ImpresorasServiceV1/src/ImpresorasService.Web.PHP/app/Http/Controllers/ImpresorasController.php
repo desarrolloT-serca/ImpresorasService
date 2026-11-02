@@ -321,11 +321,12 @@ class ImpresorasController extends Controller
 
         $request->validate([
             'printerName' => 'required|string|max:255',
-            'spoolQueue' => 'required|string|max:255',
+            // Se imprime primero por IP (host); la cola de Windows es la alternativa: basta una.
+            'spoolQueue' => 'nullable|string|max:200|required_without:host',
             'host' => 'nullable|string|max:255',
             'storeId' => $effectiveStore === null ? 'required|integer|min:0' : 'nullable',
             'isActive' => 'boolean',
-        ]);
+        ], ['spoolQueue.required_without' => 'Indica la IP o la cola de Windows.']);
 
         try {
             $host = $request->filled('host') ? $request->input('host') : null;
@@ -367,11 +368,12 @@ class ImpresorasController extends Controller
     {
         $request->validate([
             'printerName' => 'required|string|max:255',
-            'spoolQueue' => 'required|string|max:255',
+            // Se imprime primero por IP (host); la cola de Windows es la alternativa: basta una.
+            'spoolQueue' => 'nullable|string|max:200|required_without:host',
             'host' => 'nullable|string|max:255',
             'storeId' => 'required|integer|min:0',
             'isActive' => 'boolean',
-        ]);
+        ], ['spoolQueue.required_without' => 'Indica la IP o la cola de Windows.']);
 
         try {
             $host = $request->filled('host') ? $request->input('host') : null;

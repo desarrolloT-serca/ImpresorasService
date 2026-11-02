@@ -27,6 +27,7 @@ public sealed class PrintExecutionService : IPrintExecutionService
     private readonly PrintExecutionOptions _options;
     private readonly IRoutingResolver _routingResolver;
     private readonly TimeProvider _timeProvider;
+    private readonly IIppConfirmationService? _ipp;
 
     public PrintExecutionService(
         ImpresorasDbContext db,
@@ -34,7 +35,9 @@ public sealed class PrintExecutionService : IPrintExecutionService
         ILogger<PrintExecutionService> logger,
         IOptions<PrintExecutionOptions> options,
         IRoutingResolver routingResolver,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        // ponytail: opcional para no tocar las pruebas que no imprimen por IP; en la app siempre está.
+        IIppConfirmationService? ipp = null)
     {
         _db = db;
         _spooler = spooler;
@@ -42,6 +45,7 @@ public sealed class PrintExecutionService : IPrintExecutionService
         _options = options.Value;
         _routingResolver = routingResolver;
         _timeProvider = timeProvider;
+        _ipp = ipp;
     }
 
     public async Task<int> ExecuteBatchAsync(int batchSize, CancellationToken cancellationToken = default)
@@ -150,7 +154,10 @@ public sealed class PrintExecutionService : IPrintExecutionService
         // Guard-rail: si el monitor de conectividad marca KO reciente, evitamos
         // enviar al spooler porque puede devolver "aceptado" aunque el dispositivo
         // fisico esté apagado/no alcanzable.
-        if (printer.LastConnectionOk == false && printer.LastConnectionCheckAtUtc.HasValue)
+        // Sin IP ni cola UNC el monitor no tiene a quién sondear (HOST_NOT_CONFIGURED): eso no es
+        // «no alcanzable», y una impresora con solo cola local no imprimiría nunca.
+        if (printer.LastConnectionOk == false && printer.LastConnectionCheckAtUtc.HasValue
+            && !Domain.Connectivity.PrinterConnectivityState.IsHostNotConfiguredError(printer.LastConnectionError))
         {
             var lastCheckAge = _timeProvider.GetUtcNow() - printer.LastConnectionCheckAtUtc.Value;
             if (lastCheckAge <= TimeSpan.FromSeconds(90))
@@ -235,13 +242,19 @@ public sealed class PrintExecutionService : IPrintExecutionService
             return false;
         }
 
+        // Desde aquí, sin el token de parada (auditoría M1): cortar el envío puede sacar papel a medias
+        // y perder el resultado deja «Sin confirmar» lo que se sabía. Parar el servicio espera a este
+        // trabajo (el lote no empieza otro) hasta HostOptions.ShutdownTimeout, que cubre un envío. Si se
+        // encadenan PDF, imagen y cola, o Windows se apaga, puede cortarse: queda PRINTING_INTERRUPTED, sin duplicar.
+        ct = CancellationToken.None;
+
         PrintSpoolResult result;
         try
         {
             if (job.PdfBlob is null || job.PdfBlob.Length == 0)
                 result = new PrintSpoolResult(false, "PDF_MISSING", "PDF no disponible en la base de datos.", false);
             else
-                result = await _spooler.SendToPrinterAsync(job.PdfBlob, printer.SpoolQueue, ct);
+                result = await EnviarAsync(job, job.PdfBlob, printer, ct);
         }
         catch (OperationCanceledException)
         {
@@ -261,29 +274,37 @@ public sealed class PrintExecutionService : IPrintExecutionService
         // trabajaba, su decisión manda y aquí no se pisa.
         if (result.Success)
         {
-            await TryTransitionAsync(
+            var aceptado = await TryTransitionAsync(
                 jobId, [PrintJobStatus.Printing], PrintJobStatus.SpoolAccepted,
                 errorCode: null, errorMessage: null,
                 nextRetryAtUtc: null, newAttemptCount: null, ct,
-                eventMessage: "Spooler aceptó el trabajo");
+                eventMessage: result.Detalle ?? "Spooler aceptó el trabajo");
+
+            // Aparte de la transición: si fallara, el watchdog confirma por el estado de la impresora.
+            // Por la cola queda null, para que no se confirme con el número de un envío anterior.
+            if (aceptado)
+                await _db.PrintJobs.Where(j => j.JobId == jobId)
+                    .ExecuteUpdateAsync(s => s.SetProperty(x => x.IppJobId, result.IppJobId), ct);
 
             return true;
         }
 
-        if (result.ErrorCode == "NET_TIMEOUT")
+        if (result.ErrorCode is "NET_TIMEOUT" or "IPP_ERROR_WHILE_PRINTING")
         {
-            // El envío se cortó a medias: pudo haber llegado a la cola de Windows. Ni error (afirmaría
-            // que no se imprimió) ni reintento (duplicaría). Mismo tratamiento que el Printing stale:
-            // se marca la incertidumbre y decide un operador desde la cola.
+            // El envío se cortó a medias, o la impresora falló con el trabajo a medias: pudo salir
+            // papel. Ni error (afirmaría que no se imprimió) ni reintento (duplicaría). Mismo
+            // tratamiento que el Printing stale: se marca la incertidumbre y decide un operador.
             await TryTransitionAsync(
                 jobId, [PrintJobStatus.Printing], PrintJobStatus.PrintedUnknown,
                 result.ErrorCode,
-                "El envío a la impresora se agotó de tiempo sin conocerse el resultado. Puede haberse impreso: compruébelo antes de reimprimir.",
+                result.ErrorCode == "NET_TIMEOUT"
+                    ? "El envío a la impresora se agotó de tiempo sin conocerse el resultado. Puede haberse impreso: compruébelo antes de reimprimir."
+                    : result.ErrorMessage,
                 nextRetryAtUtc: null, newAttemptCount: null, ct);
 
             _logger.LogWarning(
-                "JobId={JobId}: timeout de impresión. Marcado PrintedUnknown; requiere decisión manual (no se reenvía para no duplicar).",
-                jobId);
+                "JobId={JobId}: {Code}. Marcado PrintedUnknown; requiere decisión manual (no se reenvía para no duplicar).",
+                jobId, result.ErrorCode);
 
             return true;
         }
@@ -304,13 +325,40 @@ public sealed class PrintExecutionService : IPrintExecutionService
         var errCode = result.ErrorCode ?? "UNKNOWN";
         var errMsg = result.ErrorMessage ?? "Error desconocido";
         _logger.LogWarning("Impresion fallida JobId={JobId} Printer={Printer} Code={Code} Msg={Msg}",
-            jobId, printer.SpoolQueue, errCode, errMsg);
+            jobId, printer.PrinterName, errCode, errMsg);
 
         await TryTransitionAsync(
             jobId, [PrintJobStatus.Printing], PrintJobStatus.ErrorFinal,
             errCode, errMsg, nextRetryAtUtc: null, newAttemptCount: null, ct);
 
         return true;
+    }
+
+    // Primero por IP (IPP: sin cola, driver ni Sumatra); si no sale nada por IP (no responde, no
+    // acepta el formato, rechaza el trabajo), por su cola de Windows (decisión del usuario,
+    // 26/10/2026). Sin cola, el motivo de IPP. Si el envío por IP se corta a medias no se prueba la
+    // cola: podría salir dos veces.
+    private async Task<PrintSpoolResult> EnviarAsync(PrintJob job, byte[] pdf, Printer printer, CancellationToken ct)
+    {
+        // Simulación (UseRealSpooler=false): tampoco por IP, que también es papel real.
+        if (_spooler is NoOpPrintSpooler)
+            return await _spooler.SendToPrinterAsync(pdf, printer.SpoolQueue ?? "", ct);
+
+        PrintSpoolResult? porIp = null;
+        if (_ipp is not null && !string.IsNullOrWhiteSpace(printer.Host))
+        {
+            // Si la impresora ya abortó este documento al leerlo, esta vez como imagen (decisión D2).
+            var comoImagen = await _db.PrintJobEvents.AnyAsync(
+                e => e.JobId == job.JobId && e.ErrorCode == "IPP_DOCUMENT_ERROR", ct);
+            porIp = await _ipp.PrintPdfAsync(printer.Host, pdf, IIppConfirmationService.JobNameFor(job.DocumentType, job.ExternalJobId), comoImagen, ct);
+            if (porIp is { SinEnviar: false })
+                return porIp;
+        }
+
+        if (!string.IsNullOrWhiteSpace(printer.SpoolQueue))
+            return await _spooler.SendToPrinterAsync(pdf, printer.SpoolQueue, ct);
+        return porIp ?? new PrintSpoolResult(false, "NO_PRINT_ROUTE",
+            "La impresora no tiene IP válida ni cola de Windows.", false);
     }
 
     private async Task<bool> RescuePendingJobAsync(

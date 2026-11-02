@@ -8,6 +8,11 @@ using System.Globalization;
 DotEnv.Load();
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddWindowsService(options => options.ServiceName = "ImpresorasService.Worker");
+// Parar espera al trabajo que se está enviando (auditoría M1): el plazo de un envío y margen para la
+// consulta previa. ponytail: no cubre PDF, imagen y cola encadenados (hasta 3 plazos); eso acaba en
+// PRINTING_INTERRUPTED, sin duplicar. Un plazo único para todo el envío si molesta.
+builder.Services.Configure<HostOptions>(o => o.ShutdownTimeout =
+    TimeSpan.FromSeconds(builder.Configuration.GetValue("PrintExecution:TimeoutSeconds", 120) + 30));
 var appCultureName = builder.Configuration["Globalization:Culture"] ?? "es-ES";
 var appCulture = CultureInfo.GetCultureInfo(appCultureName);
 CultureInfo.DefaultThreadCurrentCulture = appCulture;
@@ -33,8 +38,17 @@ await using (var scope = host.Services.CreateAsyncScope())
     var logger = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<ImpresorasService.Worker.IngestionBackgroundService>>();
     logger.LogInformation("Worker usando PostgreSQL Host={Host} Database={Database}", conn.DataSource, conn.Database);
 
-    var rulesCount = await dbContext.RoutingRules.CountAsync(r => r.IsActive);
-    logger.LogInformation("Reglas de enrutado activas: {Count}", rulesCount);
+    // Sin base al arrancar no se cae (auditoría L17): los servicios esperan y se reconectan solos
+    // (EstadoBd anota el corte y su vuelta), como cuando la base cae con el Worker ya en marcha.
+    try
+    {
+        var rulesCount = await dbContext.RoutingRules.CountAsync(r => r.IsActive);
+        logger.LogInformation("Reglas de enrutado activas: {Count}", rulesCount);
+    }
+    catch (Exception ex) when (FallosBd.EsFalloDeConexion(ex))
+    {
+        logger.LogWarning("La base de datos no responde al arrancar; el Worker sigue y se reconectará solo.");
+    }
 
     // En Production esto es inalcanzable (AddInfrastructure ya habría fallado), pero fuera de
     // Production la simulación es legítima y debe verse: un "impreso" de esta instancia no es papel.

@@ -17,13 +17,15 @@ public static class DashboardPrintJobPredicates
     /// operador que cierra el trabajo, así que un cancelado tras agotar reintentos no está pendiente
     /// de reenvío. Mientras contaba, inflaba el KPI de forma permanente (nunca se resuelve solo),
     /// degradaba la salud de la tienda y mantenía viva la alerta de Telegram por trabajos ya cerrados.
+    /// <see cref="PrintJobStatus.PrinterBlocked"/> cuenta desde el primer intento (D3, 27/10/2026): un
+    /// pedido parado por falta de papel o un atasco es una incidencia de la tienda desde que se para.
     /// </remarks>
     public static readonly Expression<Func<PrintJob, bool>> FailedWithoutRetryCurrent =
         x => x.Status == PrintJobStatus.ErrorFinal
+             || x.Status == PrintJobStatus.PrinterBlocked
              || ((x.Status == PrintJobStatus.Pending
                   || x.Status == PrintJobStatus.Routed
-                  || x.Status == PrintJobStatus.Printing
-                  || x.Status == PrintJobStatus.PrinterBlocked)
+                  || x.Status == PrintJobStatus.Printing)
                  && x.AttemptCount > 1);
 
     /// <summary>

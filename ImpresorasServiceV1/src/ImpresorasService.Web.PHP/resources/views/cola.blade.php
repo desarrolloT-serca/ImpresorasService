@@ -171,11 +171,18 @@
                     };
                     $pillTitle = in_array($stInt, [8, 9], true) ? ($job['lastErrorMessage'] ?? $job['LastErrorMessage'] ?? null) : null;
                     $lastErrorCode = $job['lastErrorCode'] ?? $job['LastErrorCode'] ?? null;
+                    // El código para la gente y qué hacer, si la API los manda (ErroresTrabajo, 26/10/2026).
+                    $lastErrorText = $job['lastErrorText'] ?? $job['LastErrorText'] ?? null;
+                    $errorTitle = implode("\n", array_filter([
+                        $lastErrorCode,
+                        $job['lastErrorMessage'] ?? $job['LastErrorMessage'] ?? null,
+                        $job['lastErrorHint'] ?? $job['LastErrorHint'] ?? null,
+                    ]));
                 @endphp
                 <td class="status-col"><span class="dbx-pill {{ $statusClass }}"{!! $pillTitle ? ' title="'.e($pillTitle).'"' : '' !!}>{{ \App\Helpers\StatusLabels::get($stRaw) }}</span></td>
                 <td class="status-col" data-col="error">
                     @if($stInt === 8 && filled($lastErrorCode))
-                        <span class="badge badge-danger"{!! $pillTitle ? ' title="'.e($pillTitle).'"' : '' !!}>{{ $lastErrorCode }}</span>
+                        <span class="badge badge-danger" title="{{ $errorTitle }}">{{ $lastErrorText ?? $lastErrorCode }}</span>
                     @else
                         -
                     @endif
@@ -194,8 +201,8 @@
                     @endphp
                     @php
                         // 0 Pendiente y 8 Error: el trabajo no ha salido, reintentar es seguro.
-                        // 5 Sin confirmar y 9 Bloqueado: el sistema no sabe si el documento salio,
-                        // asi que la decision es del operador y reimprimir puede duplicarlo.
+                        // 5 Sin confirmar y 9 Bloqueado: el sistema no sabe si el documento salio;
+                        // aqui solo se cancela, reimprimir (puede duplicarlo) va por la web o el ERP.
                         $canRetry = in_array($st, [0, 8], true);
                         $isUncertain = in_array($st, [5, 9], true);
                         $canManage = ($isAdmin ?? false) || ($isStoreManager ?? false);
@@ -208,15 +215,7 @@
                         <button type="submit" class="btn btn-ghost">Reintentar</button>
                     </form>
                     @endif
-                    {{-- Solo desde "Sin confirmar": con la impresora bloqueada la API no admite reimprimir. --}}
-                    @if($st === 5)
-                    <form action="{{ url("/cola/{$jobId}/reintentar") }}" method="POST" class="inline"
-                        data-cola-action="reintentar" data-confirm-danger="1"
-                        data-confirm="Este trabajo puede haberse impreso ya. Si lo reimprimes y sí había salido, el documento saldrá por duplicado. ¿Continuar?">
-                        @csrf
-                        <button type="submit" class="btn btn-warning">Reimprimir</button>
-                    </form>
-                    @endif
+                    {{-- Reimprimir lo que ya salió va con motivo, desde la web o el ERP (decisión D1, 27/10/2026). --}}
                     <form action="{{ url("/cola/{$jobId}/cancelar") }}" method="POST" class="inline"
                         data-cola-action="cancelar" data-confirm="¿Cancelar este trabajo?">
                         @csrf
@@ -353,15 +352,6 @@
                 '<form action="' + base + '/reintentar" method="POST" data-cola-action="reintentar">' +
                     token +
                     '<button type="submit" class="btn btn-ghost">Reintentar</button>' +
-                '</form>';
-        }
-
-        // Solo desde "Sin confirmar": con la impresora bloqueada la API no admite reimprimir.
-        if (statusInt === 5) {
-            html +=
-                '<form action="' + base + '/reintentar" method="POST" class="inline" data-cola-action="reintentar" data-confirm-danger="1" data-confirm="Este trabajo puede haberse impreso ya. Si lo reimprimes y sí había salido, el documento saldrá por duplicado. ¿Continuar?">' +
-                    token +
-                    '<button type="submit" class="btn btn-warning">Reimprimir</button>' +
                 '</form>';
         }
 

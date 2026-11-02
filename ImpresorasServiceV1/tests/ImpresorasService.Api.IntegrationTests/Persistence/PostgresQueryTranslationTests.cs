@@ -40,6 +40,25 @@ public sealed class PostgresQueryTranslationTests
     }
 
     [Fact]
+    public void UltimoAvisoTelegram_TranslatesOnPostgres()
+    {
+        using var db = PostgresContext();
+
+        // Misma forma que StoreHealthAlertBackgroundService (no repetir el aviso que no llegó): el último
+        // evento de la tienda y, sobre él, el filtro (allí con AnyAsync).
+        var jobId = TelegramMensajes.JobIdHistorial(1);
+        var sql = db.PrintJobEvents.AsNoTracking()
+            .Where(e => e.JobId == jobId && e.EventType == TelegramMensajes.EventoHistorial)
+            .OrderByDescending(e => e.OccurredAtUtc)
+            .Select(e => new { e.Message, e.MetadataJson })
+            .Take(1)
+            .Where(e => e.Message == "x" && e.MetadataJson == "y")
+            .ToQueryString();
+
+        Assert.Contains("LIMIT", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void FailedWithoutRetryCurrentPredicate_TranslatesOnPostgres()
     {
         using var db = PostgresContext();
