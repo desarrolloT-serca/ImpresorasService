@@ -54,6 +54,54 @@ public sealed record IppEstadoImpresora(
         printer.IppMoreInfoUrl = estado?.MoreInfoUrl;
         printer.IppCheckedAtUtc = estado is null ? null : leidoUtc;
     }
+
+    // ponytail: umbral fijo; el monitor lee cada 30 s (PrinterConnectivity:IntervalSeconds). Si alguien
+    // sube ese intervalo por encima de unos minutos, este valor tiene que salir de la misma opción.
+    public static readonly TimeSpan LecturaVieja = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// Gravedad (las de <see cref="Domain.Connectivity.PrinterConnectivityState"/>) y texto en castellano de la
+    /// última lectura (ERP_SERCA docs/72, R2). Por el sufijo de cada motivo (RFC 8011 §5.4.12): -error
+    /// o sin sufijo, crítica; -warning, aviso; -report, nada. Tóner por debajo del umbral de la propia
+    /// impresora, aviso. Sin lectura o con más de <see cref="LecturaVieja"/>, neutral: no se sabe.
+    /// </summary>
+    public static (string Gravedad, string? Texto) Describir(Printer p, DateTimeOffset ahora)
+    {
+        const string critica = Domain.Connectivity.PrinterConnectivityState.SeverityCritical;
+        const string aviso = Domain.Connectivity.PrinterConnectivityState.SeverityWarning;
+        if (p.IppCheckedAtUtc is not { } leido)
+            return (Domain.Connectivity.PrinterConnectivityState.SeverityNeutral, null);
+        if (ahora - leido > LecturaVieja)
+            return (Domain.Connectivity.PrinterConnectivityState.SeverityNeutral, "Sin lectura reciente");
+
+        var gravedad = Domain.Connectivity.PrinterConnectivityState.SeverityHealthy;
+        void Sube(string g) { if (g == critica || gravedad != critica) gravedad = g; }
+        var textos = new List<string>();
+        foreach (var motivo in (p.IppStateReasons ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (motivo.EndsWith("-report", StringComparison.OrdinalIgnoreCase)) continue;
+            Sube(motivo.EndsWith("-warning", StringComparison.OrdinalIgnoreCase) ? aviso : critica);
+            textos.Add(Domain.ErroresTrabajo.MotivoIpp(motivo) ?? motivo);
+        }
+        var consumibles = p.IppMarkersJson is null
+            ? []
+            : JsonSerializer.Deserialize<List<IppConsumible>>(p.IppMarkersJson, Json) ?? [];
+        foreach (var c in consumibles.Where(c => c is { Nivel: >= 0, Bajo: >= 0 } && c.Nivel <= c.Bajo))
+        {
+            Sube(aviso);
+            textos.Add($"{c.Nombre ?? "Consumible"} al {c.Nivel} %");
+        }
+        if (p.IppState == 5)
+        {
+            Sube(critica);
+            if (textos.Count == 0) textos.Add("La impresora está detenida");
+        }
+
+        var texto = textos.Count > 0 ? string.Join(". ", textos.Distinct())
+            : p.IppState == 4 ? "Imprimiendo"
+            : "Lista";
+        return (gravedad, texto);
+    }
 }
 
 /// <summary>Un consumible (marker-*): nivel y umbral bajo en %, o -1/-2/-3 (sin dato, desconocido, queda algo).</summary>

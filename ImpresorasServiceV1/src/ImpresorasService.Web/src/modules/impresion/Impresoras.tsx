@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import type { ColumnDef } from "@tanstack/react-table"
-import { PlusIcon } from "lucide-react"
+import { ExternalLinkIcon, PlusIcon } from "lucide-react"
 import { toast } from "sonner"
 import {
   PERMISOS_IMPRESION as P,
@@ -34,12 +34,15 @@ import { FormularioImpresora } from "./FormularioImpresora"
 import {
   CLASE_TONO,
   COLOR_PUNTO,
+  conNivel,
   conProblema,
   fechaHora,
+  hace,
   nombreTienda,
   puerto,
   resumen,
   TONO_SEVERIDAD,
+  webImpresora,
   type Tono,
 } from "./formato"
 import { SinActualizar } from "./formulario"
@@ -47,20 +50,36 @@ import { SinActualizar } from "./formulario"
 const Etiqueta = ({
   tono,
   title,
+  className,
   children,
 }: {
   tono: Tono
   title?: string
+  className?: string
   children: React.ReactNode
 }) => (
   <Badge
     variant="outline"
-    className={cn("border-transparent", CLASE_TONO[tono])}
+    className={cn("border-transparent", CLASE_TONO[tono], className)}
     title={title}
   >
     {children}
   </Badge>
 )
+
+// Lo que dijo la impresora, para el title del estado: su mensaje, el modelo y
+// cuándo se leyó.
+const detalleIpp = (i: Impresora) =>
+  [
+    i.ippStateMessage,
+    i.ippMakeAndModel,
+    i.ippQueuedJobs ? `${i.ippQueuedJobs} en su cola` : null,
+    i.ippCheckedAtUtc
+      ? `Leído: ${fechaHora(i.ippCheckedAtUtc)} (${hace(i.ippCheckedAtUtc)})`
+      : null,
+  ]
+    .filter(Boolean)
+    .join("\n") || undefined
 
 const TODAS = "todas"
 const CONEXION_ITEMS = [
@@ -164,7 +183,7 @@ export default function Impresoras({ clave }: PropsPanel) {
   )
 
   return (
-    <Panel className="[&_table]:min-w-[60rem] [&_table]:table-fixed">
+    <Panel className="[&_table]:min-w-[76rem] [&_table]:table-fixed">
       <SinActualizar consultas={[impresoras]} />
       <DataTable
         key={reinicio}
@@ -322,9 +341,31 @@ function columnasImpresoras({
       // (decisión del usuario, 27/10/2026).
       size: 180,
       accessorKey: "printerName",
-      cell: ({ row: { original: i } }) => (
-        <span className="block truncate font-medium">{i.printerName}</span>
-      ),
+      cell: ({ row: { original: i } }) => {
+        const web = webImpresora(i)
+        return (
+          <span className="flex items-center gap-1">
+            <span
+              className="truncate font-medium"
+              title={i.ippMakeAndModel ?? undefined}
+            >
+              {i.printerName}
+            </span>
+            {web && (
+              <a
+                href={web}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Abrir la web de la impresora"
+                aria-label={`Abrir la web de ${i.printerName}`}
+                className="shrink-0 text-muted-foreground hover:text-foreground"
+              >
+                <ExternalLinkIcon className="size-3.5" />
+              </a>
+            )}
+          </span>
+        )
+      },
     },
     {
       id: "cola",
@@ -385,6 +426,70 @@ function columnasImpresoras({
             : i.connectivityLabel}
         </Etiqueta>
       ),
+    },
+    {
+      // Lo que dice la impresora por IPP (docs/72, R2): parada, atasco, tóner…
+      id: "estado",
+      header: "Estado",
+      size: 200,
+      accessorFn: (i) => i.ippStateText ?? "",
+      cell: ({ row: { original: i } }) =>
+        i.ippStateText ? (
+          <Etiqueta
+            tono={TONO_SEVERIDAD[i.ippSeverity ?? "neutral"]}
+            title={detalleIpp(i)}
+            className="max-w-full"
+          >
+            <span className="truncate">{i.ippStateText}</span>
+          </Etiqueta>
+        ) : (
+          <span className="text-muted-foreground">-</span>
+        ),
+    },
+    {
+      id: "toner",
+      header: "Tóner",
+      size: 110,
+      cell: ({ row: { original: i } }) => {
+        const consumibles = conNivel(i)
+        if (!consumibles.length)
+          return <span className="text-muted-foreground">-</span>
+        return (
+          <span className="flex flex-col gap-0.5">
+            {consumibles.map((c, n) => {
+              const bajo = c.bajo !== null && c.bajo >= 0 && c.nivel <= c.bajo
+              return (
+                <span
+                  key={n}
+                  className="flex items-center gap-1.5"
+                  title={c.nombre ?? undefined}
+                >
+                  <span
+                    aria-hidden
+                    className="h-1.5 w-12 overflow-hidden rounded-full bg-muted"
+                  >
+                    <span
+                      className={cn(
+                        "block h-full rounded-full",
+                        bajo ? "bg-warning" : "bg-success"
+                      )}
+                      style={{ width: `${c.nivel}%` }}
+                    />
+                  </span>
+                  <span
+                    className={cn(
+                      "text-xs tabular-nums",
+                      bajo && "font-semibold text-warning"
+                    )}
+                  >
+                    {c.nivel} %
+                  </span>
+                </span>
+              )
+            })}
+          </span>
+        )
+      },
     },
     {
       id: "puerto",

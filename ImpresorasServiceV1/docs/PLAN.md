@@ -164,8 +164,8 @@ parque (R0): 7 Canon imageFORCE 1643 (el 80 % previsto), 2 Brother MFC-L2710DW y
 
 | # | Acción | Estado |
 |---|---|---|
-| B11.1 | R1: el monitor guarda lo que ya leía por IPP (estado, motivos, mensaje, trabajos en cola, consumibles, modelo y su web) en 8 columnas `ipp_*` de `printer_printer`; la API las devuelve y las borra al cambiar el host. Lector IPP: `textWithLanguage`/`nameWithLanguage` sin los bytes del idioma (Brother) | 🟡 Rama `feat/estado-impresoras`, pruebas en verde. Migración `2026-11-10-estado-ipp.sql` aplicada en `admon` el 10/11/2026. Falta desplegar |
-| B11.2 | R2: verlo en Impresoras, incidencias y dashboard (gravedad por el sufijo del motivo) | ⏳ |
+| B11.1 | R1: el monitor guarda lo que ya leía por IPP (estado, motivos, mensaje, trabajos en cola, consumibles, modelo y su web) en 8 columnas `ipp_*` de `printer_printer`; la API las devuelve y las borra al cambiar el host. Lector IPP: `textWithLanguage`/`nameWithLanguage` sin los bytes del idioma (Brother) | 🟡 Rama `feat/estado-impresoras`, pruebas en verde. ✅ 10/11/2026: migración aplicada en `admon`, en `main` (PR #16) y desplegado; a las 08:44 UTC, 19 de 21 impresoras con lectura |
+| B11.2 | R2: verlo en Impresoras, incidencias y dashboard (gravedad por el sufijo del motivo). La API añade `ippSeverity` e `ippStateText` (`IppEstadoImpresora.Describir`); la web, columnas Estado y Tóner, enlace a la web de la impresora e incidencia «Impresora» | 🟡 Rama `feat/estado-impresoras-r2`, pruebas en verde, sin commit. El mismo cambio en `ERP_SERCA` (rama `impresion-estado`) |
 | B11.3 | R3: estado en vivo y cola de la impresora (Get-Jobs) | ⏳ |
 
 ### ~~B8 · Caídas de la base de datos~~ ✅ 26/10/2026
