@@ -24,4 +24,15 @@ public class Printer
 
     // null = sin comprobar, true = soporta IPP, false = no soporta IPP
     public bool? IppSupported { get; set; }
+
+    // Último estado leído por IPP (Worker, cada 30 s). Se queda la última lectura aunque luego deje de
+    // responder: IppCheckedAtUtc dice de cuándo es. Se borra al cambiar de host (ERP_SERCA docs/72, R1).
+    public int? IppState { get; set; }
+    public string? IppStateReasons { get; set; }
+    public string? IppStateMessage { get; set; }
+    public int? IppQueuedJobs { get; set; }
+    public string? IppMarkersJson { get; set; }
+    public string? IppMakeAndModel { get; set; }
+    public string? IppMoreInfoUrl { get; set; }
+    public DateTimeOffset? IppCheckedAtUtc { get; set; }
 }

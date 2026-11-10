@@ -23,6 +23,46 @@ internal sealed class IppConfirmationService : IIppConfirmationService, IDisposa
     // algunos HP antiguos. Comprobado en impresoras reales el 26/10/2026.
     private static readonly string[] Rutas = ["/ipp/print", "/ipp/printer"];
 
+    // Lo que se guarda de cada impresora en cada sondeo (ERP_SERCA docs/72, R0 y R1): todo en la
+    // misma petición que ya se hacía. printer-alert-description es el aviso del panel de las Brother.
+    private static readonly string[] AtributosEstado =
+    [
+        "printer-state", "printer-state-reasons", "printer-state-message", "printer-alert-description",
+        "queued-job-count", "marker-names", "marker-colors", "marker-types", "marker-levels",
+        "marker-low-levels", "printer-make-and-model", "printer-more-info"
+    ];
+
+    internal static IppEstadoImpresora LeerEstado(IppRespuesta r)
+    {
+        static string? Recorta(string? s, int max) =>
+            string.IsNullOrWhiteSpace(s) ? null : s.Trim().Length > max ? s.Trim()[..max] : s.Trim();
+        static string? Une(IEnumerable<string> v) =>
+            v.Where(x => !string.IsNullOrWhiteSpace(x)).ToList() is { Count: > 0 } l ? string.Join(", ", l) : null;
+
+        // La Canon manda «none» de mensaje: no es un mensaje.
+        var mensaje = r.Textos("printer-state-message").FirstOrDefault(m => m.Trim() is not ("" or "none"))
+            ?? Une(r.Textos("printer-alert-description"));
+        var nombres = r.Textos("marker-names").ToList();
+        var colores = r.Textos("marker-colors").ToList();
+        var tipos = r.Textos("marker-types").ToList();
+        var niveles = r.Enteros("marker-levels").ToList();
+        var bajos = r.Enteros("marker-low-levels").ToList();
+        var consumibles = Enumerable.Range(0, Math.Max(nombres.Count, niveles.Count))
+            .Select(i => new IppConsumible(
+                nombres.ElementAtOrDefault(i), colores.ElementAtOrDefault(i), tipos.ElementAtOrDefault(i),
+                i < niveles.Count ? niveles[i] : null, i < bajos.Count ? bajos[i] : null))
+            .ToList();
+
+        return new IppEstadoImpresora(
+            r.Entero("printer-state"),
+            Recorta(Une(r.Textos("printer-state-reasons").Where(x => x != "none")), 400),
+            Recorta(mensaje, 400),
+            r.Entero("queued-job-count"),
+            consumibles,
+            Recorta(r.Textos("printer-make-and-model").FirstOrDefault(), 200),
+            Recorta(r.Textos("printer-more-info").FirstOrDefault(), 400));
+    }
+
     private readonly HttpClient _http;
     private readonly IOptions<PrintExecutionOptions> _options;
     private readonly ILogger<IppConfirmationService> _logger;
@@ -48,15 +88,14 @@ internal sealed class IppConfirmationService : IIppConfirmationService, IDisposa
         var timeoutMs = _options.Value.IppTimeoutMs;
         try
         {
-            var atributos = await GetPrinterAttributesAsync(
-                ip, ["printer-state", "printer-state-reasons", "printer-state-message"], ct);
+            var atributos = await GetPrinterAttributesAsync(ip, AtributosEstado, ct);
             if (atributos is null)
                 return new IppQueryResult(IppOutcome.Unavailable, null, "IPP no responde.");
 
             var (_, respuesta) = atributos.Value;
-            var state = respuesta.Entero("printer-state");
-            var reasonsList = respuesta.Textos("printer-state-reasons").Where(r => r != "none").ToList();
-            var reasons = reasonsList.Count > 0 ? string.Join(", ", reasonsList) : null;
+            var estado = LeerEstado(respuesta);
+            var state = estado.State;
+            var reasons = estado.Reasons;
 
             if (state == StateStopped)
             {
@@ -67,23 +106,23 @@ internal sealed class IppConfirmationService : IIppConfirmationService, IDisposa
                     : "IPP_PRINTER_STOPPED";
                 var msg = TranslateReasons(reasons);
                 _logger.LogWarning("IPP: {Host} detenida — {Reasons}.", ip, reasons);
-                return new IppQueryResult(IppOutcome.PrinterStopped, errorCode, msg);
+                return new IppQueryResult(IppOutcome.PrinterStopped, errorCode, msg) { Estado = estado };
             }
 
             if (state == StateIdle)
             {
                 _logger.LogInformation("IPP: {Host} idle → trabajo confirmado.", ip);
-                return new IppQueryResult(IppOutcome.PrinterIdle);
+                return new IppQueryResult(IppOutcome.PrinterIdle) { Estado = estado };
             }
 
             if (state == StateProcessing)
             {
                 _logger.LogInformation("IPP: {Host} processing → esperando que termine.", ip);
-                return new IppQueryResult(IppOutcome.PrinterProcessing);
+                return new IppQueryResult(IppOutcome.PrinterProcessing) { Estado = estado };
             }
 
             _logger.LogDebug("IPP: {Host} estado desconocido ({State}).", ip, state?.ToString() ?? "null");
-            return new IppQueryResult(IppOutcome.Unavailable, null, $"IPP: estado inesperado ({state}).");
+            return new IppQueryResult(IppOutcome.Unavailable, null, $"IPP: estado inesperado ({state}).") { Estado = estado };
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
@@ -518,6 +557,9 @@ internal sealed class IppConfirmationService : IIppConfirmationService, IDisposa
                 // resolution: x, y y unidades (3 = por pulgada, 4 = por centímetro); se guarda x en ppp.
                 0x32 when valueLen == 9 =>
                     (int)(((data[i] << 24) | (data[i + 1] << 16) | (data[i + 2] << 8) | data[i + 3]) * (data[i + 8] == 4 ? 2.54 : 1)),
+                // textWithLanguage y nameWithLanguage (RFC 8010 §3.9): idioma y texto, cada uno con su
+                // longitud. Las Brother mandan así el modelo, los consumibles y el aviso del panel.
+                0x35 or 0x36 when valueLen >= 4 => TextoConIdioma(data, i, valueLen),
                 >= 0x30 and <= 0x4F => Encoding.UTF8.GetString(data, i, valueLen),
                 _ => null
             };
@@ -532,6 +574,16 @@ internal sealed class IppConfirmationService : IIppConfirmationService, IDisposa
         }
 
         return new IppRespuesta(http, estado, valores);
+    }
+
+    // Valor de textWithLanguage: [largo idioma][idioma][largo texto][texto]. Mal formado, tal cual.
+    private static string TextoConIdioma(byte[] data, int i, int valueLen)
+    {
+        var idioma = (data[i] << 8) | data[i + 1];
+        if (4 + idioma > valueLen)
+            return Encoding.UTF8.GetString(data, i, valueLen);
+        var texto = (data[i + 2 + idioma] << 8) | data[i + 3 + idioma];
+        return Encoding.UTF8.GetString(data, i + 4 + idioma, Math.Min(texto, valueLen - 4 - idioma));
     }
 
     // Motivos de IPP en castellano (catálogo de ErroresTrabajo); los que no conoce, tal cual.

@@ -43,6 +43,15 @@ CREATE TABLE printer_printer (
     last_connection_error varchar(400),
     connection_failing_since_utc timestamptz,
     ipp_supported boolean,
+    -- Ultimo estado IPP (monitor de conectividad, cada 30 s): ERP_SERCA docs/72, R1.
+    ipp_state integer,
+    ipp_state_reasons varchar(400),
+    ipp_state_message varchar(400),
+    ipp_queued_jobs integer,
+    ipp_markers_json text,
+    ipp_make_and_model varchar(200),
+    ipp_more_info_url varchar(400),
+    ipp_checked_at_utc timestamptz,
     PRIMARY KEY (printer_id)
 );
 CREATE UNIQUE INDEX ix_printer_printer_store_id_spool_queue ON printer_printer (store_id, spool_queue);

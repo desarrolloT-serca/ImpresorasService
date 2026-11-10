@@ -294,6 +294,14 @@ public class ImpresorasDbContext : DbContext
             entity.Property(x => x.LastConnectionTransport).HasMaxLength(40);
             entity.Property(x => x.LastConnectionError).HasMaxLength(400);
             entity.Property(x => x.IppSupported).HasColumnName("ipp_supported");
+            entity.Property(x => x.IppState).HasColumnName("ipp_state");
+            entity.Property(x => x.IppStateReasons).HasColumnName("ipp_state_reasons").HasMaxLength(400);
+            entity.Property(x => x.IppStateMessage).HasColumnName("ipp_state_message").HasMaxLength(400);
+            entity.Property(x => x.IppQueuedJobs).HasColumnName("ipp_queued_jobs");
+            entity.Property(x => x.IppMarkersJson).HasColumnName("ipp_markers_json");
+            entity.Property(x => x.IppMakeAndModel).HasColumnName("ipp_make_and_model").HasMaxLength(200);
+            entity.Property(x => x.IppMoreInfoUrl).HasColumnName("ipp_more_info_url").HasMaxLength(400);
+            entity.Property(x => x.IppCheckedAtUtc).HasColumnName("ipp_checked_at_utc");
 
             entity.HasIndex(x => new { x.StoreId, x.SpoolQueue }).IsUnique();
         });

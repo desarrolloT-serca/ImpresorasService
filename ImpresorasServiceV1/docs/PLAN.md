@@ -157,6 +157,17 @@ duplicado, así que todo queda registrado. Sin límite de veces; el motivo, obli
 | B10.3 | Registro «Reimpresiones» (`GET /api/printjobs/reprints`): quién, cuándo, motivo, documento, tienda e impresora, por periodo, tienda y motivo. Para quien puede reimprimir; cada uno ve su tienda. KPI «Reimpresiones» del periodo en el dashboard, que abre el registro. Por SQL: `printer_print_job_event` con `event_type = 'REPRINT'` (`metadata_json::jsonb->>'reason'`) | ✅ 26/10/2026 |
 | B10.4 | Migraciones del 27/10/2026 (`scripts/sql/migraciones/`), estado en `admon` comprobado el 27/10: `telegram-bot-token` aplicada; `orden-cola` aplicada (con el relleno desde REPRINT/RETRY_ROUTE); `indice-reimpresiones` sin aplicar (no hace falta para desplegar); `reimpresiones-antiguas` (opcional) sin filas que cambiar; `impresora-falla-desde` (el «Desde» de las incidencias de conexión) **sin aplicar**. `telegram-bot-token`, `orden-cola` e `impresora-falla-desde` son necesarias para la Api y el Worker de esta rama | ⏳ `impresora-falla-desde` (antes de desplegar), `indice-reimpresiones` |
 
+### B11 · Estado de la impresora, no solo si responde
+
+Hoja de ruta y decisiones en `ERP_SERCA/docs/72_roadmap_estado_impresoras.md` (10/11/2026). Medición del
+parque (R0): 7 Canon imageFORCE 1643 (el 80 % previsto), 2 Brother MFC-L2710DW y 1 MFC-L2800DW por IPP.
+
+| # | Acción | Estado |
+|---|---|---|
+| B11.1 | R1: el monitor guarda lo que ya leía por IPP (estado, motivos, mensaje, trabajos en cola, consumibles, modelo y su web) en 8 columnas `ipp_*` de `printer_printer`; la API las devuelve y las borra al cambiar el host. Lector IPP: `textWithLanguage`/`nameWithLanguage` sin los bytes del idioma (Brother) | 🟡 Rama `feat/estado-impresoras`, pruebas en verde. Migración `2026-11-10-estado-ipp.sql` aplicada en `admon` el 10/11/2026. Falta desplegar |
+| B11.2 | R2: verlo en Impresoras, incidencias y dashboard (gravedad por el sufijo del motivo) | ⏳ |
+| B11.3 | R3: estado en vivo y cola de la impresora (Get-Jobs) | ⏳ |
+
 ### ~~B8 · Caídas de la base de datos~~ ✅ 26/10/2026
 
 El 26/10/2026 la base dejó de responder desde las 07:53: la Api no arrancaba (leía los usuarios al

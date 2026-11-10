@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
+using ImpresorasService.Application.Abstractions;
 using ImpresorasService.Api.IntegrationTests;
 using ImpresorasService.Domain.Connectivity;
 using ImpresorasService.Domain.Entities;
@@ -532,6 +534,8 @@ public sealed class PrintersControllerTests : IntegrationTestBase
             printer.IppSupported = true;
             printer.ConnectionFailuresStreak = 2;
             printer.LastConnectionTransport = "tcp/9100";
+            IppEstadoImpresora.AplicarA(printer, new IppEstadoImpresora(3, null, null, 0,
+                [new IppConsumible("BK", null, "toner", 83, 7)], "Canon imageFORCE 1643", null), DateTimeOffset.UtcNow);
         });
         var request = new { printerName = N("P-Ipp-2"), spoolQueue = queue, host = newHost, storeId = 1, isActive = true };
 
@@ -543,6 +547,14 @@ public sealed class PrintersControllerTests : IntegrationTestBase
         Assert.Equal(N("P-Ipp-2"), stored.PrinterName);
         Assert.Equal(newHost, stored.Host);
         Assert.Equal(expectedIpp, stored.IppSupported);
+        // El estado IPP era de la impresora del host anterior.
+        Assert.Equal(changeHost ? null : 3, stored.IppState);
+        Assert.Equal(changeHost ? null : "Canon imageFORCE 1643", stored.IppMakeAndModel);
+        var dto = await Client.GetFromJsonAsync<JsonElement>($"/api/printers/{created.PrinterId}");
+        if (changeHost)
+            Assert.Equal(JsonValueKind.Null, dto.GetProperty("ippMarkers").ValueKind);
+        else
+            Assert.Equal(83, dto.GetProperty("ippMarkers")[0].GetProperty("nivel").GetInt32());
         // La telemetría la escribe el Worker: editar la impresora no debe pisarla.
         Assert.Equal(2, stored.ConnectionFailuresStreak);
         Assert.Equal("tcp/9100", stored.LastConnectionTransport);
