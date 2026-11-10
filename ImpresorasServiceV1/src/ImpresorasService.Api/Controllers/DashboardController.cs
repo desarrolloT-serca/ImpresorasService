@@ -543,6 +543,22 @@ public class DashboardController : ControllerBase
         var printersConnStats = await LoadConnectivityStatsAsync(
             printers, thresholds.ConnWarningFailuresMin, thresholds.ConnCriticalFailuresMin, cancellationToken);
 
+        // Estado de la propia impresora, como lo ve la pantalla Impresoras (docs/72, mejora 5).
+        var ahoraIpp = _timeProvider.GetUtcNow();
+        var ippStats = (await printers
+                .Select(p => new Domain.Entities.Printer
+                {
+                    StoreId = p.StoreId, IppState = p.IppState, IppStateReasons = p.IppStateReasons,
+                    IppMarkersJson = p.IppMarkersJson, IppCheckedAtUtc = p.IppCheckedAtUtc
+                })
+                .ToListAsync(cancellationToken))
+            .GroupBy(p => p.StoreId)
+            .ToDictionary(g => g.Key, g =>
+            {
+                var gravedades = g.Select(p => IppEstadoImpresora.Describir(p, ahoraIpp, rules.Toner).Gravedad).ToList();
+                return (Critical: gravedades.Count(x => x == "critical"), Warning: gravedades.Count(x => x == "warning"));
+            });
+
         var receivedStats = await jobsInWindow
             .GroupBy(x => x.StoreId)
             .Select(x => new { StoreId = x.Key, Received = x.Count() })
@@ -693,9 +709,11 @@ public class DashboardController : ControllerBase
                 : null;
             reprintsTodayStats.TryGetValue(store.StoreId, out var reprintsToday);
 
+            ippStats.TryGetValue(store.StoreId, out var ipp);
+
             var (health, healthReason) = StoreHealthEvaluator.Compute(
                 connected, queuedCurrent, failedWithoutRetryCurrent, missingHost,
-                connMaxStreak, connCrit, connWarn, rules, silentMinutes, reprintsToday);
+                connMaxStreak, connCrit, connWarn, rules, silentMinutes, reprintsToday, ipp.Critical, ipp.Warning);
 
             rows.Add(new StoreDashboardRow(
                 StoreId: store.StoreId,
@@ -717,7 +735,7 @@ public class DashboardController : ControllerBase
 
             alertInputs.Add(new StoreAlertInput(
                 store.StoreId, store.Name, connected, queuedCurrent, failedWithoutRetryCurrent,
-                missingHost, connMaxStreak, connCrit, connWarn, silentMinutes, reprintsToday));
+                missingHost, connMaxStreak, connCrit, connWarn, silentMinutes, reprintsToday, ipp.Critical, ipp.Warning));
         }
 
         var alerts = StoreHealthEvaluator.BuildAlerts(alertInputs, rules).ToList();

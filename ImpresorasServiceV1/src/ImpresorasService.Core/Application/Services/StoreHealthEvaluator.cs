@@ -21,7 +21,11 @@ public sealed record StoreAlertInput(
     // Opcionales (27/10/2026): minutos sin recibir en horario (null = fuera de horario o nunca
     // recibió) y reimpresiones de hoy.
     int? SilentMinutes = null,
-    int ReprintsToday = 0);
+    int ReprintsToday = 0,
+    // Estado de la propia impresora (ERP_SERCA docs/72, mejora 5): activas con lectura IPP crítica o
+    // de aviso (IppEstadoImpresora.Describir con los umbrales de tóner).
+    int IppCritical = 0,
+    int IppWarning = 0);
 
 /// <summary>
 /// G5.3: puerto exacto de computeHealth()/buildPrioritizedAlerts() de DashboardController.php —
@@ -44,7 +48,9 @@ public static class StoreHealthEvaluator
         int connWarning,
         ThresholdRuleSet rules,
         int? silentMinutes = null,
-        int reprintsToday = 0)
+        int reprintsToday = 0,
+        int ippCritical = 0,
+        int ippWarning = 0)
     {
         var connRule = ThresholdRuleEngine.MatchThresholdRule(rules.Conn, connMaxStreak);
         var queueRule = ThresholdRuleEngine.MatchThresholdRule(rules.Queue, queuedCurrent);
@@ -61,6 +67,9 @@ public static class StoreHealthEvaluator
 
         if (connectedPrinters == 0 && queuedCurrent > 0)
             return ("critical", "Hay cola pero no hay impresoras activas");
+
+        if (ippCritical > 0)
+            return ("critical", IppCriticalReason);
 
         if (failedRule is { Severity: "critical" })
             return (ToHealth(failedRule.Severity), Prefix(failedRule.Severity) + $"Acumula {failedRule.Min} o mas fallos sin reenviar");
@@ -82,6 +91,9 @@ public static class StoreHealthEvaluator
 
         if (connRule is not null)
             return (ToHealth(connRule.Severity), Prefix(connRule.Severity) + "Impresora(s) con fallos de conexion (conectividad)");
+
+        if (ippWarning > 0)
+            return ("warning", IppWarningReason);
 
         if (missingHostRule is not null && missingHost > 0)
             return (ToHealth(missingHostRule.Severity), Prefix(missingHostRule.Severity) + "Impresora(s) sin host configurado");
@@ -139,6 +151,11 @@ public static class StoreHealthEvaluator
             if (s.ConnectedPrinters == 0)
                 alerts.Add(s.ToAlert("warning", "Sin impresoras activas en la tienda"));
 
+            if (s.IppCritical > 0)
+                alerts.Add(s.ToAlert("critical", IppCriticalReason));
+            else if (s.IppWarning > 0)
+                alerts.Add(s.ToAlert("warning", IppWarningReason));
+
             if (missingHostRule is not null && s.MissingHost > 0)
                 alerts.Add(s.ToAlert(ToAlertHealth(missingHostRule.Severity), "Impresora(s) sin host configurado"));
 
@@ -172,6 +189,10 @@ public static class StoreHealthEvaluator
         var s = severity.Trim().ToLowerInvariant();
         return s == "critical" ? "critical" : (s == "warning" ? "warning" : "info");
     }
+
+    // El ERP las reconoce por «(estado de la impresora)» y pone en su lugar una fila por impresora.
+    public const string IppCriticalReason = "Impresora(s) parada(s) o con tóner crítico (estado de la impresora)";
+    public const string IppWarningReason = "Impresora(s) con avisos (estado de la impresora)";
 
     private static string SilentReason(int minutes) =>
         $"Sin recibir trabajos desde hace {minutes} min en horario de tienda";

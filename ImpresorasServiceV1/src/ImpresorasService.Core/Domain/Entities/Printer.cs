@@ -35,4 +35,24 @@ public class Printer
     public string? IppMakeAndModel { get; set; }
     public string? IppMoreInfoUrl { get; set; }
     public DateTimeOffset? IppCheckedAtUtc { get; set; }
+    // Desde cuándo dura el estado y los motivos de ahora: el «Desde» de sus incidencias (docs/72, mejora 3).
+    public DateTimeOffset? IppStateSinceUtc { get; set; }
+    // Para la ficha (docs/72, mejora 6): firmware, desde cuándo está encendida y bandejas (JSON).
+    public string? IppFirmware { get; set; }
+    public DateTimeOffset? IppUpSinceUtc { get; set; }
+    public string? IppTraysJson { get; set; }
+}
+
+/// <summary>
+/// Nivel de un consumible cuando cambia (docs/72, mejora 7): para prever cuándo se acaba. Solo se guarda al
+/// cambiar, así son pocas filas; las de más de <c>TonerReadings.Retencion</c> se borran.
+/// </summary>
+public class TonerReading
+{
+    public long Id { get; set; }
+    public int PrinterId { get; set; }
+    /// <summary>Posición del consumible en marker-* (0 = el primero; en las B/N, el único).</summary>
+    public int Marker { get; set; }
+    public int Level { get; set; }
+    public DateTimeOffset ReadAtUtc { get; set; }
 }

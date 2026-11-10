@@ -27,23 +27,29 @@ import { useEsc, type PropsPanel } from "@/workspace/modulo"
 import {
   useBorrarImpresora,
   useComprobarImpresora,
+  useIdentificarImpresora,
   useImpresoras,
   useTiendas,
 } from "./api"
+import { FichaImpresora } from "./FichaImpresora"
 import { FormularioImpresora } from "./FormularioImpresora"
 import {
   CLASE_TONO,
   COLOR_PUNTO,
   conNivel,
   conProblema,
+  FILTROS_ESTADO,
   fechaHora,
   hace,
   nombreTienda,
+  pasaFiltroEstado,
   puerto,
   resumen,
+  textoPrevision,
   TONO_SEVERIDAD,
   tonoToner,
   webImpresora,
+  type FiltroEstado,
   type Tono,
 } from "./formato"
 import { SinActualizar } from "./formulario"
@@ -100,8 +106,11 @@ export default function Impresoras({ clave }: PropsPanel) {
   const impresoras = useImpresoras()
   const tiendas = useTiendas().data ?? []
   const comprobar = useComprobarImpresora()
+  const identificar = useIdentificarImpresora()
   const borrar = useBorrarImpresora()
   const [editando, setEditando] = useState<Impresora | "nueva">()
+  // La ficha, por número: así se ve lo último que trae la lista (docs/72, mejora 6).
+  const [ficha, setFicha] = useState<number>()
   // Abierta desde el dashboard, la clave trae los filtros: «tienda=12&conexion=problemas».
   const [tienda, setTienda] = useState(
     () =>
@@ -112,6 +121,8 @@ export default function Impresoras({ clave }: PropsPanel) {
       ? "problemas"
       : TODAS
   )
+  // Lo que dice la propia impresora (docs/72, mejora 2).
+  const [estado, setEstado] = useState<FiltroEstado>("todas")
   const [reinicio, setReinicio] = useState(0)
   // Esc: quita lo buscado; los filtros se quedan (regla del ERP).
   useEsc(() => setReinicio((n) => n + 1))
@@ -119,7 +130,34 @@ export default function Impresoras({ clave }: PropsPanel) {
   const lista = impresoras.data ?? []
   const deTienda =
     tienda === TODAS ? lista : lista.filter((i) => String(i.storeId) === tienda)
-  const visibles = conexion === TODAS ? deTienda : deTienda.filter(conProblema)
+  const visibles = (
+    conexion === TODAS ? deTienda : deTienda.filter(conProblema)
+  ).filter((i) => pasaFiltroEstado(i, estado))
+  const enFicha = lista.find((i) => i.printerId === ficha)
+
+  // «Comprobar» lee también el estado IPP (docs/72, mejora 1): la lista se relee al acabar.
+  const comprobarImpresora = (id: number) =>
+    comprobar.mutate(id, {
+      onSuccess: (r) =>
+        r.reachable
+          ? toast.success(
+              `Conectada${r.transport ? ` por ${r.transport}` : ""}${r.latencyMs !== null ? ` en ${r.latencyMs} ms` : ""}`
+            )
+          : toast.error(`Sin conexión: ${r.connectivityLabel}`),
+      onError: (e) =>
+        toast.error(
+          e instanceof ErrorApi ? e.problema.title : "No se pudo comprobar"
+        ),
+    })
+  const identificarImpresora = (id: number) =>
+    identificar.mutate(id, {
+      onSuccess: (r) =>
+        r.identified ? toast.success(r.message) : toast.warning(r.message),
+      onError: (e) =>
+        toast.error(
+          e instanceof ErrorApi ? e.problema.title : "No se pudo identificar"
+        ),
+    })
   const total = resumen(deTienda)
   // «5 con error»: el número en negrita, como el total (decisión del usuario).
   const [problemas, ...queTienen] = total.texto.split(" ")
@@ -142,21 +180,8 @@ export default function Impresoras({ clave }: PropsPanel) {
         admin,
         gestionar,
         comprobando: comprobar.isPending ? comprobar.variables : undefined,
-        onComprobar: (id) =>
-          comprobar.mutate(id, {
-            onSuccess: (r) =>
-              r.reachable
-                ? toast.success(
-                    `Conectada${r.transport ? ` por ${r.transport}` : ""}${r.latencyMs !== null ? ` en ${r.latencyMs} ms` : ""}`
-                  )
-                : toast.error(`Sin conexión: ${r.connectivityLabel}`),
-            onError: (e) =>
-              toast.error(
-                e instanceof ErrorApi
-                  ? e.problema.title
-                  : "No se pudo comprobar"
-              ),
-          }),
+        onComprobar: comprobarImpresora,
+        onFicha: setFicha,
         onEditar: setEditando,
         onBorrar: (i) =>
           window.confirm(
@@ -170,7 +195,7 @@ export default function Impresoras({ clave }: PropsPanel) {
               ),
           }),
       }),
-    // comprobar.mutate y borrar.mutate son estables.
+    // comprobar.mutate, borrar.mutate y setFicha son estables.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       tiendas,
@@ -196,9 +221,9 @@ export default function Impresoras({ clave }: PropsPanel) {
         emptyContent={
           impresoras.isPending
             ? undefined
-            : conexion === TODAS
+            : conexion === TODAS && estado === "todas"
               ? "No hay impresoras configuradas."
-              : "Ninguna impresora con problemas."
+              : "Ninguna impresora con lo que se busca."
         }
         toolbar={
           verTodas && (
@@ -258,6 +283,24 @@ export default function Impresoras({ clave }: PropsPanel) {
                   </SelectContent>
                 </Select>
               </CampoFiltro>
+              <CampoFiltro etiqueta="Estado">
+                <Select
+                  items={[...FILTROS_ESTADO]}
+                  value={estado}
+                  onValueChange={(v) => setEstado(v as FiltroEstado)}
+                >
+                  <SelectTrigger className="w-48">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FILTROS_ESTADO.map((i) => (
+                      <SelectItem key={i.value} value={i.value}>
+                        {i.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </CampoFiltro>
               <span className="ml-auto flex h-8 items-center gap-2 rounded-lg border bg-card px-3 text-sm">
                 <span>
                   <b className="font-semibold tabular-nums">
@@ -297,6 +340,20 @@ export default function Impresoras({ clave }: PropsPanel) {
           onCerrar={() => setEditando(undefined)}
         />
       )}
+      {enFicha && (
+        <FichaImpresora
+          impresora={enFicha}
+          tiendas={tiendas}
+          gestionar={gestionar}
+          comprobando={
+            comprobar.isPending && comprobar.variables === enFicha.printerId
+          }
+          identificando={identificar.isPending}
+          onComprobar={() => comprobarImpresora(enFicha.printerId)}
+          onIdentificar={() => identificarImpresora(enFicha.printerId)}
+          onCerrar={() => setFicha(undefined)}
+        />
+      )}
     </Panel>
   )
 }
@@ -308,6 +365,7 @@ function columnasImpresoras({
   gestionar,
   comprobando,
   onComprobar,
+  onFicha,
   onEditar,
   onBorrar,
 }: {
@@ -317,6 +375,7 @@ function columnasImpresoras({
   gestionar: boolean
   comprobando: number | undefined
   onComprobar: (id: number) => void
+  onFicha: (id: number) => void
   onEditar: (i: Impresora) => void
   onBorrar: (i: Impresora) => void
 }): ColumnDef<Impresora, unknown>[] {
@@ -346,12 +405,14 @@ function columnasImpresoras({
         const web = webImpresora(i)
         return (
           <span className="flex items-center gap-1">
-            <span
-              className="truncate font-medium"
-              title={i.ippMakeAndModel ?? undefined}
+            <button
+              type="button"
+              className="truncate text-left font-medium underline-offset-4 hover:underline"
+              title={`Ver la ficha${i.ippMakeAndModel ? ` · ${i.ippMakeAndModel}` : ""}`}
+              onClick={() => onFicha(i.printerId)}
             >
               {i.printerName}
-            </span>
+            </button>
             {web && (
               <a
                 href={web}
@@ -463,7 +524,11 @@ function columnasImpresoras({
                 <span
                   key={n}
                   className="flex items-center gap-1.5"
-                  title={c.nombre ?? undefined}
+                  title={
+                    [c.nombre, textoPrevision(i.tonerDaysLeft)]
+                      .filter(Boolean)
+                      .join("\n") || undefined
+                  }
                 >
                   <span
                     aria-hidden

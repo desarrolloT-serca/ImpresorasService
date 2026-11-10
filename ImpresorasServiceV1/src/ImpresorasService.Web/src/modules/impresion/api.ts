@@ -14,6 +14,7 @@ import {
   Conexion,
   DatosChat,
   EdicionChat,
+  Identificacion,
   Impresora,
   PaginaCola,
   PruebaCreada,
@@ -483,3 +484,10 @@ export function useComprobarImpresora() {
       cache.invalidateQueries({ queryKey: ["impresion", "impresoras"] }),
   })
 }
+
+// Que la impresora pite o parpadee para encontrarla (docs/72, mejora 4).
+export const useIdentificarImpresora = () =>
+  useMutation({
+    mutationFn: (id: number) =>
+      api(`/impresion/printers/${id}/identify`, Identificacion, { body: {} }),
+  })

@@ -35,16 +35,27 @@ public sealed record IppEstadoImpresora(
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
+    // Para la ficha (docs/72, mejora 6): con init para no tocar a quien ya construye el estado.
+    public string? Firmware { get; init; }
+    /// <summary>printer-up-time: segundos desde que se encendió.</summary>
+    public int? EncendidaSegundos { get; init; }
+    public IReadOnlyList<IppBandeja> Bandejas { get; init; } = [];
+
     /// <summary>Las propiedades de <see cref="Printer"/> que escribe <see cref="AplicarA"/> (para marcarlas modificadas).</summary>
     public static readonly string[] Propiedades =
     [
         nameof(Printer.IppState), nameof(Printer.IppStateReasons), nameof(Printer.IppStateMessage),
         nameof(Printer.IppQueuedJobs), nameof(Printer.IppMarkersJson), nameof(Printer.IppMakeAndModel),
-        nameof(Printer.IppMoreInfoUrl), nameof(Printer.IppCheckedAtUtc)
+        nameof(Printer.IppMoreInfoUrl), nameof(Printer.IppCheckedAtUtc), nameof(Printer.IppStateSinceUtc),
+        nameof(Printer.IppFirmware), nameof(Printer.IppUpSinceUtc), nameof(Printer.IppTraysJson)
     ];
 
-    /// <summary>Guarda esta lectura en la impresora; <c>null</c> la borra (host nuevo: es otra impresora).</summary>
-    public static void AplicarA(Printer printer, IppEstadoImpresora? estado, DateTimeOffset? leidoUtc)
+    /// <summary>
+    /// Guarda esta lectura en la impresora; <c>null</c> la borra (host nuevo: es otra impresora).
+    /// <paramref name="desdeUtc"/>: desde cuándo dura este estado (<see cref="Desde"/>); sin él, desde ahora.
+    /// </summary>
+    public static void AplicarA(Printer printer, IppEstadoImpresora? estado, DateTimeOffset? leidoUtc,
+        DateTimeOffset? desdeUtc = null)
     {
         printer.IppState = estado?.State;
         printer.IppStateReasons = estado?.Reasons;
@@ -54,7 +65,22 @@ public sealed record IppEstadoImpresora(
         printer.IppMakeAndModel = estado?.MakeAndModel;
         printer.IppMoreInfoUrl = estado?.MoreInfoUrl;
         printer.IppCheckedAtUtc = estado is null ? null : leidoUtc;
+        printer.IppStateSinceUtc = estado is null ? null : desdeUtc ?? leidoUtc;
+        printer.IppFirmware = estado?.Firmware;
+        // Al segundo: printer-up-time va en segundos y así no cambia en cada lectura.
+        printer.IppUpSinceUtc = estado?.EncendidaSegundos is { } s && leidoUtc is { } l
+            ? DateTimeOffset.FromUnixTimeSeconds(l.ToUnixTimeSeconds() - s)
+            : null;
+        printer.IppTraysJson = estado?.Bandejas is { Count: > 0 } b ? JsonSerializer.Serialize(b, Json) : null;
     }
+
+    /// <summary>
+    /// Desde cuándo dura el estado (estado y motivos) que trae esta lectura: el de antes si no ha cambiado, si
+    /// no, ahora. Es el «Desde» de las incidencias de la impresora (docs/72, mejora 3).
+    /// </summary>
+    public DateTimeOffset Desde(int? estadoAnterior, string? motivosAnteriores, DateTimeOffset? desdeAnterior,
+        DateTimeOffset ahora) =>
+        desdeAnterior is { } d && estadoAnterior == State && motivosAnteriores == Reasons ? d : ahora;
 
     // ponytail: umbral fijo; el monitor lee cada 30 s (PrinterConnectivity:IntervalSeconds). Si alguien
     // sube ese intervalo por encima de unos minutos, este valor tiene que salir de la misma opción.
@@ -110,6 +136,12 @@ public sealed record IppEstadoImpresora(
 /// <summary>Un consumible (marker-*): nivel y umbral bajo en %, o -1/-2/-3 (sin dato, desconocido, queda algo).</summary>
 public sealed record IppConsumible(string? Nombre, string? Color, string? Tipo, int? Nivel, int? Bajo);
 
+/// <summary>
+/// Una bandeja de entrada (printer-input-tray, PWG 5100.13): hojas que caben y que hay, o -2/-3 (desconocido,
+/// «hay algo»). La Canon da más hojas que capacidad en el cajón (1100 de 550): se enseña tal cual.
+/// </summary>
+public sealed record IppBandeja(string? Nombre, int? Capacidad, int? Nivel);
+
 public interface IIppConfirmationService
 {
     /// <summary>
@@ -145,6 +177,13 @@ public interface IIppConfirmationService
     /// reinicia puede reutilizar números y se cancelaría otro documento (3b.8).
     /// </summary>
     Task<CancelacionEnImpresora> CancelJobAsync(string printerHost, int jobId, string jobName, CancellationToken ct);
+
+    /// <summary>
+    /// Identify-Printer (PWG 5100.13): la impresora pita o parpadea para encontrarla (docs/72, mejora 4).
+    /// <c>true</c> si lo acepta, <c>false</c> si no lo admite, <c>null</c> si no responde. Por defecto,
+    /// <c>null</c>: así los dobles de prueba que no lo necesitan no tienen que implementarlo.
+    /// </summary>
+    Task<bool?> IdentifyAsync(string printerHost, CancellationToken ct) => Task.FromResult<bool?>(null);
 
     /// <summary>
     /// El job-name con que se manda un trabajo a la impresora (como mucho 100 caracteres). El mismo al

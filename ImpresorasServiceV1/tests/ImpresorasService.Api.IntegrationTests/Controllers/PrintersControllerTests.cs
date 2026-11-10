@@ -99,6 +99,57 @@ public sealed class PrintersControllerTests : IntegrationTestBase
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
+    // ERP_SERCA docs/72, mejoras 3, 6 y 7: la API da desde cuándo, la ficha y los días que le quedan al tóner.
+    [Fact]
+    public async Task GetById_DaLaFichaYLaPrevisionDelToner()
+    {
+        var created = await CreatePrinterAsync(N("P-Toner"), $"\\\\srv\\q{Guid.NewGuid():N}"[..30], 1,
+            host: $"10.3.{Random.Shared.Next(1, 250)}.{Random.Shared.Next(1, 250)}");
+        var ahora = DateTimeOffset.UtcNow;
+        await UpdatePrinterAsync(created.PrinterId, p =>
+        {
+            var e = new IppEstadoImpresora(3, "opc-life-over-warning", null, 0,
+                [new IppConsumible("BK", null, "toner", 30, 7)], "Brother MFC-L2710DW series", null)
+            {
+                Firmware = "1.05",
+                EncendidaSegundos = 3600,
+                Bandejas = [new IppBandeja("TRAY1", 250, -3)]
+            };
+            IppEstadoImpresora.AplicarA(p, e, ahora, ahora.AddHours(-3));
+        });
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
+            // 1 % al día durante 10 días: de 30 % a 10 % (crítico por defecto) quedan 20.
+            db.TonerReadings.AddRange(Enumerable.Range(0, 11).Select(d => new TonerReading
+            {
+                PrinterId = created.PrinterId, Marker = 0, Level = 40 - d, ReadAtUtc = ahora.AddDays(d - 10)
+            }));
+            await db.SaveChangesAsync();
+        }
+
+        var dto = await Client.GetFromJsonAsync<JsonElement>($"/api/printers/{created.PrinterId}");
+
+        Assert.Equal(20, dto.GetProperty("tonerDaysLeft").GetInt32());
+        Assert.Equal("1.05", dto.GetProperty("ippFirmware").GetString());
+        Assert.Equal("TRAY1", dto.GetProperty("ippTrays")[0].GetProperty("nombre").GetString());
+        Assert.True(dto.GetProperty("ippStateSinceUtc").GetDateTimeOffset() < ahora.AddHours(-2));
+        Assert.True(dto.GetProperty("ippUpSinceUtc").GetDateTimeOffset() < ahora.AddMinutes(-59));
+    }
+
+    // Sin IP no se puede identificar: lo dice sin llamar a nadie.
+    [Fact]
+    public async Task Identify_SinIp_LoDice()
+    {
+        var created = await CreatePrinterAsync(N("P-Ident"), $"\\\\srv\\q{Guid.NewGuid():N}"[..30], 1);
+
+        var r = await (await Client.PostAsJsonAsync($"/api/printers/{created.PrinterId}/identify", new { }))
+            .Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal(JsonValueKind.Null, r.GetProperty("identified").ValueKind);
+        Assert.Contains("no tiene IP", r.GetProperty("message").GetString());
+    }
+
     [Fact]
     public async Task GetAll_ReturnsCalculatedConnectivityFields()
     {

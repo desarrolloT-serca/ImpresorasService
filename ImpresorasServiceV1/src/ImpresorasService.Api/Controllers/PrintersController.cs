@@ -22,15 +22,43 @@ public class PrintersController : ControllerBase
 {
     private readonly ImpresorasDbContext _dbContext;
     private readonly IDashboardThresholdRuleStore _ruleStore;
+    private readonly IIppConfirmationService _ipp;
 
-    public PrintersController(ImpresorasDbContext dbContext, IDashboardThresholdRuleStore ruleStore)
+    public PrintersController(ImpresorasDbContext dbContext, IDashboardThresholdRuleStore ruleStore,
+        IIppConfirmationService ipp)
     {
         _dbContext = dbContext;
         _ruleStore = ruleStore;
+        _ipp = ipp;
     }
 
-    // Umbrales de tóner de la pantalla Umbrales (fichero de reglas, como el dashboard).
-    private async Task<UmbralToner> TonerAsync(CancellationToken ct) => (await _ruleStore.LoadAsync(ct)).Toner;
+    // ponytail: medio año de lecturas basta para el cartucho que está puesto; si se quiere ver la
+    // duración de cartuchos anteriores, otra consulta.
+    private static readonly TimeSpan VentanaPrevision = TimeSpan.FromDays(180);
+
+    /// <summary>
+    /// Cómo se convierte cada impresora en su DTO: con los umbrales de tóner de la pantalla Umbrales
+    /// (fichero de reglas, como el dashboard) y los días que le quedan al tóner (docs/72, mejora 7).
+    /// </summary>
+    private async Task<Func<Printer, PrinterDto>> DtoAsync(IReadOnlyCollection<int> ids, CancellationToken ct)
+    {
+        var toner = (await _ruleStore.LoadAsync(ct)).Toner;
+        var ahora = DateTimeOffset.UtcNow;
+        var desde = ahora - VentanaPrevision;
+        var lecturas = await _dbContext.TonerReadings.AsNoTracking()
+            .Where(r => ids.Contains(r.PrinterId) && r.ReadAtUtc >= desde)
+            .Select(r => new { r.PrinterId, r.Marker, r.ReadAtUtc, r.Level })
+            .ToListAsync(ct);
+        var dias = lecturas
+            .GroupBy(r => r.PrinterId)
+            .ToDictionary(g => g.Key, g => g
+                .GroupBy(r => r.Marker)
+                .Select(m => TonerReadings.DiasHasta(
+                    m.OrderBy(r => r.ReadAtUtc).Select(r => (r.ReadAtUtc, r.Level)).ToList(), toner.Critico, ahora))
+                .Where(d => d is not null)
+                .Min());
+        return p => ToPrinterDto(p, toner, dias.GetValueOrDefault(p.PrinterId));
+    }
 
     /// <summary>
     /// Lista impresoras, opcionalmente filtradas por tienda.
@@ -56,8 +84,8 @@ public class PrintersController : ControllerBase
             .ThenBy(x => x.PrinterName)
             .ToListAsync(cancellationToken);
 
-        var toner = await TonerAsync(cancellationToken);
-        return Ok(results.Select(p => ToPrinterDto(p, toner)));
+        var dto = await DtoAsync(results.Select(p => p.PrinterId).ToList(), cancellationToken);
+        return Ok(results.Select(dto));
     }
 
     /// <summary>
@@ -75,7 +103,7 @@ public class PrintersController : ControllerBase
         if (!User.VeTodasLasTiendas() && printer.StoreId != GetCurrentUserStoreId())
             return Forbid();
 
-        return Ok(ToPrinterDto(printer, await TonerAsync(cancellationToken)));
+        return Ok((await DtoAsync([printer.PrinterId], cancellationToken))(printer));
     }
 
     /// <summary>
@@ -124,7 +152,7 @@ public class PrintersController : ControllerBase
             return Conflict(new { error = "Ya hay una impresora con esa cola de Windows en la tienda." });
         }
 
-        return CreatedAtAction(nameof(GetById), new { id = printer.PrinterId }, ToPrinterDto(printer, await TonerAsync(cancellationToken)));
+        return CreatedAtAction(nameof(GetById), new { id = printer.PrinterId }, (await DtoAsync([printer.PrinterId], cancellationToken))(printer));
     }
 
     /// <summary>
@@ -190,7 +218,7 @@ public class PrintersController : ControllerBase
             return Conflict(new { error = "Ya hay otra impresora con esa cola de Windows en la tienda." });
         }
 
-        return Ok(ToPrinterDto(printer, await TonerAsync(cancellationToken)));
+        return Ok((await DtoAsync([printer.PrinterId], cancellationToken))(printer));
     }
 
     /// <summary>
@@ -296,6 +324,9 @@ public class PrintersController : ControllerBase
                 {
                     await connectTask;
                     var result = ConnectivityProbeResult.Ok((int)sw.ElapsedMilliseconds, $"tcp/{port}");
+                    // «Comprobar» también lee el estado IPP, sin esperar al Worker (docs/72, mejora 1).
+                    if (persist)
+                        await LeerEstadoIppAsync(printer, host, cancellationToken);
                     await PersistConnectivityIfRequestedAsync(printer, result, persist, cancellationToken);
                     return Ok(ToConnectivityResponse(result, isAdmin));
                 }
@@ -323,6 +354,52 @@ public class PrintersController : ControllerBase
             await PersistConnectivityIfRequestedAsync(printer, result, persist, cancellationToken);
             return Ok(ToConnectivityResponse(result, isAdmin));
         }
+    }
+
+    // Lo mismo que hace el Worker en cada ciclo: estado, desde cuándo y lecturas de tóner. Sin respuesta
+    // IPP no se toca nada (ni ipp_supported: lo decide el Worker con sus puertos).
+    private async Task LeerEstadoIppAsync(Printer printer, string host, CancellationToken ct)
+    {
+        var r = await _ipp.QueryPrinterStateAsync(host, ct);
+        if (r.Estado is not { } estado)
+            return;
+        var ahora = DateTimeOffset.UtcNow;
+        _dbContext.TonerReadings.AddRange(TonerReadings.Nuevas(printer.PrinterId, printer.IppMarkersJson, estado, ahora));
+        IppEstadoImpresora.AplicarA(printer, estado, ahora,
+            estado.Desde(printer.IppState, printer.IppStateReasons, printer.IppStateSinceUtc, ahora));
+        printer.IppSupported = true;
+    }
+
+    /// <summary>
+    /// Identify-Printer: la impresora pita o parpadea para encontrarla (docs/72, mejora 4). Para quien
+    /// puede gestionar la tienda, como reimprimir.
+    /// </summary>
+    [HttpPost("{id:int}/identify")]
+    [Authorize(Policy = "StoreManagerOrAdmin")]
+    public async Task<IActionResult> Identify(int id, CancellationToken cancellationToken)
+    {
+        var printer = await _dbContext.Printers.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.PrinterId == id, cancellationToken);
+        if (printer is null)
+            return NotFound();
+        if (!User.VeTodasLasTiendas() && printer.StoreId != GetCurrentUserStoreId())
+            return Forbid();
+
+        var host = !string.IsNullOrWhiteSpace(printer.Host) ? ExtractHostFromMaybeUnc(printer.Host) : null;
+        if (string.IsNullOrEmpty(host))
+            return Ok(new { identified = (bool?)null, message = "La impresora no tiene IP: no se puede identificar." });
+
+        var r = await _ipp.IdentifyAsync(host, cancellationToken);
+        return Ok(new
+        {
+            identified = r,
+            message = r switch
+            {
+                true => "La impresora ha recibido el aviso: debería pitar o parpadear.",
+                false => "La impresora responde pero no admite identificarse.",
+                null => "La impresora no responde por IPP."
+            }
+        });
     }
 
     private async Task PersistConnectivityIfRequestedAsync(
@@ -505,7 +582,7 @@ public class PrintersController : ControllerBase
         return int.TryParse(claimValue, out var storeId) ? storeId : null;
     }
 
-    private static PrinterDto ToPrinterDto(Printer printer, UmbralToner toner)
+    private static PrinterDto ToPrinterDto(Printer printer, UmbralToner toner, int? tonerDaysLeft)
     {
         var connectivity = PrinterConnectivityState.FromPrinter(printer);
         var (ippSeverity, ippStateText) = IppEstadoImpresora.Describir(printer, DateTimeOffset.UtcNow, toner);
@@ -543,7 +620,14 @@ public class PrintersController : ControllerBase
             ippSeverity,
             ippStateText,
             toner.Aviso,
-            toner.Critico);
+            toner.Critico,
+            printer.IppStateSinceUtc,
+            printer.IppFirmware,
+            printer.IppUpSinceUtc,
+            printer.IppTraysJson is null
+                ? null
+                : JsonSerializer.Deserialize<List<IppBandeja>>(printer.IppTraysJson, JsonWeb),
+            tonerDaysLeft);
     }
 
     private static readonly JsonSerializerOptions JsonWeb = new(JsonSerializerDefaults.Web);
@@ -582,7 +666,13 @@ public class PrintersController : ControllerBase
         string? IppStateText,
         // Umbrales de tóner con que se ha calculado: la barra se pinta con ellos.
         int TonerWarningPct,
-        int TonerCriticalPct);
+        int TonerCriticalPct,
+        // docs/72, mejoras 3, 6 y 7: desde cuándo dura el estado, ficha y días hasta el tóner crítico.
+        DateTimeOffset? IppStateSinceUtc,
+        string? IppFirmware,
+        DateTimeOffset? IppUpSinceUtc,
+        IReadOnlyList<IppBandeja>? IppTrays,
+        int? TonerDaysLeft);
 
     private sealed record ConnectivityProbeResult(
         bool Reachable,

@@ -491,6 +491,15 @@ export const ConsumibleImpresora = z.object({
 })
 export type ConsumibleImpresora = z.infer<typeof ConsumibleImpresora>
 
+// Una bandeja (printer-input-tray): hojas que caben y que hay, o -2 y -3
+// (desconocido, «hay algo»).
+export const BandejaImpresora = z.object({
+  nombre: z.string().nullable(),
+  capacidad: z.number().int().nullable(),
+  nivel: z.number().int().nullable(),
+})
+export type BandejaImpresora = z.infer<typeof BandejaImpresora>
+
 export const Impresora = z.object({
   printerId: z.number().int(),
   printerName: z.string(),
@@ -531,6 +540,14 @@ export const Impresora = z.object({
   // ReglasUmbral.toner): la barra se pinta con ellos.
   tonerWarningPct: z.number().int().optional(),
   tonerCriticalPct: z.number().int().optional(),
+  // Paquete del 10/11/2026 (docs/72): desde cuándo dura el estado (el «Desde»
+  // de sus incidencias), ficha y días hasta el tóner crítico (null: sin
+  // historial suficiente).
+  ippStateSinceUtc: z.string().nullable().optional(),
+  ippFirmware: z.string().nullable().optional(),
+  ippUpSinceUtc: z.string().nullable().optional(),
+  ippTrays: z.array(BandejaImpresora).nullable().optional(),
+  tonerDaysLeft: z.number().int().nullable().optional(),
 })
 export type Impresora = z.infer<typeof Impresora>
 
@@ -575,6 +592,14 @@ export const DatosImpresora = z
     path: ["host"],
   })
 export type DatosImpresora = z.output<typeof DatosImpresora>
+
+// POST /api/printers/{id}/identify (docs/72, mejora 4): identified null si no
+// responde o no tiene IP.
+export const Identificacion = z.object({
+  identified: z.boolean().nullable(),
+  message: z.string(),
+})
+export type Identificacion = z.infer<typeof Identificacion>
 
 // POST /api/printers/{id}/netconnection
 export const Conexion = z.object({
