@@ -50,7 +50,7 @@ export function FichaImpresora({
   const web = webImpresora(i)
   const consumibles = conNivel(i)
   const bandejas = i.ippTrays ?? []
-  const prevision = textoPrevision(i.tonerDaysLeft)
+  const prevision = textoPrevision(i.tonerDaysLeft, i.tonerDaysSource)
   return (
     <Dialog open onOpenChange={(open) => !open && onCerrar()}>
       <DialogContent className="sm:max-w-lg">

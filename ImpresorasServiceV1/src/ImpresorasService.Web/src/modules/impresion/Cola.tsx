@@ -155,6 +155,8 @@ export default function Cola({ clave }: PropsPanel) {
     () =>
       columnasCola(
         tiendas,
+        // Con una tienda elegida, o si solo se ve la propia, la columna sobra.
+        verTodas && consulta.tienda === undefined,
         gestionar,
         accion.isPending,
         ejecutar,
@@ -162,7 +164,7 @@ export default function Cola({ clave }: PropsPanel) {
       ),
     // ejecutar solo usa accion.mutateAsync, estable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tiendas, gestionar, accion.isPending]
+    [tiendas, verTodas, consulta.tienda, gestionar, accion.isPending]
   )
   const tiendaItems = [
     { value: "todas", label: "Todas" },
@@ -358,6 +360,7 @@ const columnaError: ColumnDef<TrabajoCola, unknown> = {
 
 function columnasCola(
   tiendas: readonly Tienda[],
+  conTienda: boolean,
   gestionar: boolean,
   ocupado: boolean,
   ejecutar: (t: TrabajoCola[], tipo: AccionTrabajo) => void,
@@ -380,16 +383,20 @@ function columnasCola(
         )
       },
     },
-    {
-      id: "tienda",
-      header: "Tienda",
-      size: 170,
-      cell: ({ row: { original: t } }) => (
-        <span className="block truncate">
-          {nombreTienda(t.storeId, tiendas)}
-        </span>
-      ),
-    },
+    ...(conTienda
+      ? [
+          {
+            id: "tienda",
+            header: "Tienda",
+            size: 170,
+            cell: ({ row: { original: t } }) => (
+              <span className="block truncate">
+                {nombreTienda(t.storeId, tiendas)}
+              </span>
+            ),
+          } satisfies ColumnDef<TrabajoCola, unknown>,
+        ]
+      : []),
     {
       id: "tipo",
       header: "Tipo",

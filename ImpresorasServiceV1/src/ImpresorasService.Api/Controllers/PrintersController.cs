@@ -9,6 +9,7 @@ using ImpresorasService.Application.Services;
 using ImpresorasService.Domain.Connectivity;
 using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure.Persistence;
+using ImpresorasService.Infrastructure.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -57,7 +58,23 @@ public class PrintersController : ControllerBase
                     m.OrderBy(r => r.ReadAtUtc).Select(r => (r.ReadAtUtc, r.Level)).ToList(), toner.Critico, ahora))
                 .Where(d => d is not null)
                 .Min());
-        return p => ToPrinterDto(p, toner, dias.GetValueOrDefault(p.PrinterId));
+        // Lo que estima la propia Canon (hasta agotarse, su web; docs/72) manda sobre la recta: lo da desde el
+        // primer día y con el uso que ella mide. Se lee con el contador de las 00:00; se le restan los días
+        // que han pasado desde entonces.
+        var desdeCanon = ahora.AddDays(-3);
+        var canon = (await _dbContext.PageCounterReadings.AsNoTracking()
+                .Where(r => ids.Contains(r.PrinterId) && r.TonerDaysLeft != null && r.ReadAtUtc >= desdeCanon)
+                .Select(r => new { r.PrinterId, r.ReadAtUtc, r.TonerDaysLeft })
+                .ToListAsync(ct))
+            .GroupBy(r => r.PrinterId)
+            .ToDictionary(g => g.Key, g => g.MaxBy(r => r.ReadAtUtc)!)
+            .ToDictionary(x => x.Key, x => x.Value.TonerDaysLeft >= LecturaContador.MasDeUnAno
+                ? LecturaContador.MasDeUnAno
+                : Math.Max(0, x.Value.TonerDaysLeft!.Value - (int)(ahora - x.Value.ReadAtUtc).TotalDays));
+        return p => canon.TryGetValue(p.PrinterId, out var deCanon)
+            ? ToPrinterDto(p, toner, deCanon, "impresora")
+            : ToPrinterDto(p, toner, dias.GetValueOrDefault(p.PrinterId),
+                dias.GetValueOrDefault(p.PrinterId) is null ? null : "calculo");
     }
 
     /// <summary>
@@ -104,6 +121,55 @@ public class PrintersController : ControllerBase
             return Forbid();
 
         return Ok((await DtoAsync([printer.PrinterId], cancellationToken))(printer));
+    }
+
+    // ponytail: dos años por consulta; con más, varias consultas.
+    private const int MaxDiasPaginas = 731;
+
+    /// <summary>
+    /// Páginas impresas por impresora del <paramref name="from"/> al <paramref name="to"/>, ambos incluidos,
+    /// a partir de la lectura diaria del contador (ERP_SERCA docs/73, opción E). Solo administración.
+    /// </summary>
+    [HttpGet("page-counts")]
+    [Authorize(Policy = "AdminOnly")]
+    public async Task<IActionResult> PageCounts(
+        [FromQuery] DateOnly from,
+        [FromQuery] DateOnly to,
+        [FromQuery] int? printerId,
+        CancellationToken cancellationToken)
+    {
+        if (from == default || to == default || to < from)
+            return BadRequest(new { error = "Indique las dos fechas, la primera no posterior a la segunda." });
+        if (to.DayNumber - from.DayNumber >= MaxDiasPaginas)
+            return BadRequest(new { error = "Como mucho dos años por consulta." });
+
+        IQueryable<Printer> query = _dbContext.Printers.AsNoTracking();
+        if (printerId.HasValue)
+            query = query.Where(x => x.PrinterId == printerId.Value);
+        if (!User.VeTodasLasTiendas())
+        {
+            var storeId = GetCurrentUserStoreId();
+            if (!storeId.HasValue)
+                return Forbid();
+            query = query.Where(x => x.StoreId == storeId.Value);
+        }
+        var printers = await query.OrderBy(x => x.StoreId).ThenBy(x => x.PrinterName).ToListAsync(cancellationToken);
+        var lecturas = await ContadorPaginas.LecturasAsync(
+            _dbContext, printers.Select(p => p.PrinterId).ToList(), from, to, cancellationToken);
+
+        return Ok(printers
+            .Select(p => (p, periodos: ContadorPaginas.Periodos(lecturas[p.PrinterId], from, to)))
+            // Las inactivas, solo si tienen lecturas en el rango.
+            .Where(x => x.p.IsActive || x.periodos.Count > 0)
+            .Select(x => new PageCountDto(
+                x.p.PrinterId,
+                x.p.PrinterName,
+                x.p.StoreId,
+                x.p.IsActive,
+                x.periodos.Count > 0 ? x.periodos.Sum(d => d.Paginas ?? 0) : null,
+                lecturas[x.p.PrinterId].MaxBy(r => r.BusinessDay)?.Source,
+                x.periodos.Select(d => new PageCountPeriodDto(
+                    d.Desde, d.Hasta, d.Paginas, d.LeidaDesdeUtc, d.LeidaHastaUtc)).ToList())));
     }
 
     /// <summary>
@@ -582,7 +648,8 @@ public class PrintersController : ControllerBase
         return int.TryParse(claimValue, out var storeId) ? storeId : null;
     }
 
-    private static PrinterDto ToPrinterDto(Printer printer, UmbralToner toner, int? tonerDaysLeft)
+    private static PrinterDto ToPrinterDto(Printer printer, UmbralToner toner, int? tonerDaysLeft,
+        string? tonerDaysSource = null)
     {
         var connectivity = PrinterConnectivityState.FromPrinter(printer);
         var (ippSeverity, ippStateText) = IppEstadoImpresora.Describir(printer, DateTimeOffset.UtcNow, toner);
@@ -627,7 +694,8 @@ public class PrintersController : ControllerBase
             printer.IppTraysJson is null
                 ? null
                 : JsonSerializer.Deserialize<List<IppBandeja>>(printer.IppTraysJson, JsonWeb),
-            tonerDaysLeft);
+            tonerDaysLeft,
+            tonerDaysSource);
     }
 
     private static readonly JsonSerializerOptions JsonWeb = new(JsonSerializerDefaults.Web);
@@ -672,7 +740,10 @@ public class PrintersController : ControllerBase
         string? IppFirmware,
         DateTimeOffset? IppUpSinceUtc,
         IReadOnlyList<IppBandeja>? IppTrays,
-        int? TonerDaysLeft);
+        int? TonerDaysLeft,
+        // De dónde salen: «impresora» (lo que estima la Canon, hasta agotarse; 366 = más de un año) o
+        // «calculo» (la recta de printer_toner_reading, hasta el crítico).
+        string? TonerDaysSource);
 
     private sealed record ConnectivityProbeResult(
         bool Reachable,
@@ -724,6 +795,28 @@ public class PrintersController : ControllerBase
         string? Host,
         string? CapabilitiesJson);
 }
+
+/// <summary>
+/// Páginas de una impresora en el rango pedido: <see cref="Pages"/> suma los periodos que se saben (null
+/// sin lecturas). Cada periodo va de la lectura de las 00:00 de <see cref="PageCountPeriodDto.From"/> a la
+/// de <see cref="PageCountPeriodDto.To"/> (excluido): normalmente un día; más si faltó alguna lectura.
+/// </summary>
+public sealed record PageCountDto(
+    int PrinterId,
+    string PrinterName,
+    int StoreId,
+    bool IsActive,
+    long? Pages,
+    string? Source,
+    IReadOnlyList<PageCountPeriodDto> Periods);
+
+/// <summary>Pages null: el contador bajó (impresora cambiada o reiniciada).</summary>
+public sealed record PageCountPeriodDto(
+    DateOnly From,
+    DateOnly To,
+    long? Pages,
+    DateTimeOffset FromReadAtUtc,
+    DateTimeOffset ToReadAtUtc);
 
 public record CreatePrinterRequest(
     string PrinterName,

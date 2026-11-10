@@ -241,6 +241,7 @@ src/ImpresorasService.Worker/
   StoreHealthAlertBackgroundService.cs    → alertas Telegram
   WorkerLockBackgroundService.cs          → lock de instancia única (el resto lee WorkerLockState)
   PdfRetentionBackgroundService.cs        → libera el PDF de los trabajos cerrados
+  PageCounterBackgroundService.cs         → contador de páginas de cada impresora a las 00:00 (PLAN B11.6)
 
 src/ImpresorasService.Api/
   Controllers/                        → endpoints REST

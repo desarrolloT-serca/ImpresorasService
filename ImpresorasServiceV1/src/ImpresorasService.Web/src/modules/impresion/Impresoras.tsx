@@ -33,6 +33,7 @@ import {
 } from "./api"
 import { FichaImpresora } from "./FichaImpresora"
 import { FormularioImpresora } from "./FormularioImpresora"
+import { PaginasImpresas } from "./PaginasImpresas"
 import {
   CLASE_TONO,
   COLOR_PUNTO,
@@ -109,6 +110,8 @@ export default function Impresoras({ clave }: PropsPanel) {
   const identificar = useIdentificarImpresora()
   const borrar = useBorrarImpresora()
   const [editando, setEditando] = useState<Impresora | "nueva">()
+  // Páginas impresas por impresora y fechas (docs/73 del ERP), para quien administra.
+  const [paginas, setPaginas] = useState(false)
   // La ficha, por número: así se ve lo último que trae la lista (docs/72, mejora 6).
   const [ficha, setFicha] = useState<number>()
   // Abierta desde el dashboard, la clave trae los filtros: «tienda=12&conexion=problemas».
@@ -323,15 +326,31 @@ export default function Impresoras({ clave }: PropsPanel) {
                 )}
               </span>
               {admin && (
-                <Button size="sm" onClick={() => setEditando("nueva")}>
-                  <PlusIcon data-icon="inline-start" />
-                  Nueva impresora
-                </Button>
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setPaginas(true)}
+                  >
+                    Páginas impresas
+                  </Button>
+                  <Button size="sm" onClick={() => setEditando("nueva")}>
+                    <PlusIcon data-icon="inline-start" />
+                    Nueva impresora
+                  </Button>
+                </>
               )}
             </>
           )
         }
       />
+      {paginas && (
+        <PaginasImpresas
+          impresoras={lista}
+          tiendas={tiendas}
+          onCerrar={() => setPaginas(false)}
+        />
+      )}
       {editando && (
         <FormularioImpresora
           impresora={editando === "nueva" ? undefined : editando}
@@ -525,7 +544,7 @@ function columnasImpresoras({
                   key={n}
                   className="flex items-center gap-1.5"
                   title={
-                    [c.nombre, textoPrevision(i.tonerDaysLeft)]
+                    [c.nombre, textoPrevision(i.tonerDaysLeft, i.tonerDaysSource)]
                       .filter(Boolean)
                       .join("\n") || undefined
                   }
