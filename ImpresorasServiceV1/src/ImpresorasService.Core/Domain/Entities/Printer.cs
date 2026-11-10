@@ -56,3 +56,21 @@ public class TonerReading
     public int Level { get; set; }
     public DateTimeOffset ReadAtUtc { get; set; }
 }
+
+/// <summary>
+/// Contador de páginas acumulado que da la impresora a las 00:00 de <see cref="BusinessDay"/> (zona de
+/// negocio), o en cuanto responde si a esa hora no lo hace. Las páginas de un día son la lectura del día
+/// siguiente menos la suya (ERP_SERCA docs/73, opción E). Una por impresora y día; no se borran.
+/// </summary>
+public class PageCounterReading
+{
+    public long Id { get; set; }
+    public int PrinterId { get; set; }
+    public DateOnly BusinessDay { get; set; }
+    public long TotalPages { get; set; }
+    /// <summary>De dónde sale: <c>canon-113</c> (web de la Canon, contador 113) o <c>snmp</c> (Printer MIB).</summary>
+    public string Source { get; set; } = string.Empty;
+    public DateTimeOffset ReadAtUtc { get; set; }
+    /// <summary>Días que la impresora estima que le quedan al tóner al leer (solo Canon; 366 = más de un año).</summary>
+    public int? TonerDaysLeft { get; set; }
+}

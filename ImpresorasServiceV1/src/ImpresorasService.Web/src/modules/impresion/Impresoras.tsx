@@ -1,11 +1,6 @@
 import { useMemo, useState } from "react"
 import type { ColumnDef } from "@tanstack/react-table"
-import {
-  PencilIcon,
-  PlusIcon,
-  RefreshCwIcon,
-  Trash2Icon,
-} from "lucide-react"
+import { PencilIcon, PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react"
 import { toast } from "sonner"
 import {
   PERMISOS_IMPRESION as P,
@@ -42,6 +37,7 @@ import { BarraToner, ChipEstado } from "./ChipEstado"
 import { tiposEstado } from "./estado-impresora"
 import { FichaImpresora } from "./FichaImpresora"
 import { FormularioImpresora } from "./FormularioImpresora"
+import { PaginasImpresas } from "./PaginasImpresas"
 import {
   apiSinEstado,
   CLASE_TONO,
@@ -102,6 +98,8 @@ export default function Impresoras({ clave }: PropsPanel) {
   const identificar = useIdentificarImpresora()
   const borrar = useBorrarImpresora()
   const [editando, setEditando] = useState<Impresora | "nueva">()
+  // Páginas impresas por impresora y fechas (docs/73 del ERP), para quien administra.
+  const [paginas, setPaginas] = useState(false)
   // La ficha, por número: así se ve lo último que trae la lista (docs/72, mejora 6).
   const [ficha, setFicha] = useState<number>()
   // Abierta desde el dashboard, la clave trae los filtros: «tienda=12&conexion=problemas».
@@ -328,15 +326,31 @@ export default function Impresoras({ clave }: PropsPanel) {
                 )}
               </span>
               {admin && (
-                <Button size="sm" onClick={() => setEditando("nueva")}>
-                  <PlusIcon data-icon="inline-start" />
-                  Nueva impresora
-                </Button>
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setPaginas(true)}
+                  >
+                    Páginas impresas
+                  </Button>
+                  <Button size="sm" onClick={() => setEditando("nueva")}>
+                    <PlusIcon data-icon="inline-start" />
+                    Nueva impresora
+                  </Button>
+                </>
               )}
             </>
           )
         }
       />
+      {paginas && (
+        <PaginasImpresas
+          impresoras={lista}
+          tiendas={tiendas}
+          onCerrar={() => setPaginas(false)}
+        />
+      )}
       {editando && (
         <FormularioImpresora
           impresora={editando === "nueva" ? undefined : editando}

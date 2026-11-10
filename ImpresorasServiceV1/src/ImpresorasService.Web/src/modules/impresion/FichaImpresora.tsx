@@ -134,7 +134,7 @@ export function FichaImpresora({
   const web = webImpresora(i)
   const consumibles = conNivel(i)
   const bandejas = i.ippTrays ?? []
-  const prevision = textoPrevision(i.tonerDaysLeft)
+  const prevision = textoPrevision(i.tonerDaysLeft, i.tonerDaysSource)
   const panel = mensajePanel(i)
   const aviso = toner?.aviso ?? i.tonerWarningPct ?? 20
   const critico = toner?.critico ?? i.tonerCriticalPct ?? 10

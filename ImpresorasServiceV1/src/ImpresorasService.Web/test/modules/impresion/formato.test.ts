@@ -152,6 +152,13 @@ describe("filtro, previsión y bandejas (docs/72, mejoras 2, 6 y 7)", () => {
     expect(textoPrevision(1)).toBe("Llega al crítico en 1 día")
     expect(textoPrevision(0)).toBe("En el umbral crítico")
     expect(textoPrevision(null)).toBe(null)
+    // La Canon da sus propios días hasta agotarlo (docs/72).
+    expect(textoPrevision(15, "impresora")).toBe(
+      "Se agota en unos 15 días (según la impresora)"
+    )
+    expect(textoPrevision(366, "impresora")).toBe(
+      "Se agota en más de un año (según la impresora)"
+    )
   })
   it("cuenta las hojas de cada bandeja o lo que se sabe", () => {
     expect(

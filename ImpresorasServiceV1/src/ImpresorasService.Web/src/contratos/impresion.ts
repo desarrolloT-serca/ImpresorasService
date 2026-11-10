@@ -548,6 +548,9 @@ export const Impresora = z.object({
   ippUpSinceUtc: z.string().nullable().optional(),
   ippTrays: z.array(BandejaImpresora).nullable().optional(),
   tonerDaysLeft: z.number().int().nullable().optional(),
+  // «impresora»: lo que estima la Canon hasta agotarse (366 = más de un año);
+  // «calculo»: la recta de las lecturas, hasta el umbral crítico (docs/72).
+  tonerDaysSource: z.enum(["impresora", "calculo"]).nullable().optional(),
 })
 export type Impresora = z.infer<typeof Impresora>
 
@@ -636,3 +639,28 @@ export const Conexion = z.object({
   connectivityLabel: z.string(),
   connectivitySeverity: SeveridadConexion,
 })
+
+// GET /api/printers/page-counts?from=AAAA-MM-DD&to=AAAA-MM-DD: páginas por
+// impresora con la lectura diaria del contador acumulado (docs/73 del ERP,
+// opción E). Solo administración. Cada periodo va de la lectura de las 00:00 de
+// «from» a la de «to» (excluido): un día, o más si faltó alguna lectura. pages
+// null en un periodo: el contador bajó (impresora cambiada o reiniciada); en la
+// impresora: sin lecturas en esas fechas.
+export const PeriodoPaginas = z.object({
+  from: z.string(),
+  to: z.string(),
+  pages: z.number().int().nullable(),
+  fromReadAtUtc: z.string(),
+  toReadAtUtc: z.string(),
+})
+export type PeriodoPaginas = z.infer<typeof PeriodoPaginas>
+export const PaginasImpresora = z.object({
+  printerId: z.number().int(),
+  printerName: z.string(),
+  storeId: z.number().int(),
+  isActive: z.boolean(),
+  pages: z.number().int().nullable(),
+  source: z.string().nullable(),
+  periods: z.array(PeriodoPaginas),
+})
+export type PaginasImpresora = z.infer<typeof PaginasImpresora>

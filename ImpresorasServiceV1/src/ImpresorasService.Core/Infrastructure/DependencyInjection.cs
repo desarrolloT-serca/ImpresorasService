@@ -102,6 +102,9 @@ public static class DependencyInjection
 
         services.Configure<PdfRetentionOptions>(configuration.GetSection(PdfRetentionOptions.SectionName));
 
+        services.Configure<PageCounterOptions>(configuration.GetSection(PageCounterOptions.SectionName));
+        services.AddSingleton<ILectorContador, LectorContador>();
+
         services.Configure<WorkerLockOptions>(configuration.GetSection(WorkerLockOptions.SectionName));
         services.AddScoped<IWorkerLockCoordinator, WorkerLockCoordinator>();
 

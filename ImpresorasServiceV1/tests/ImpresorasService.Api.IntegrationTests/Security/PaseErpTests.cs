@@ -87,6 +87,9 @@ public sealed class PaseErpTests : IClassFixture<ErpApiWebApplicationFactory>
 
         Assert.Equal(reglas, (await GetAsync("/api/routingrules", Pase(claves))).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await GetAsync("/api/printers", Pase(claves))).StatusCode);
+        // Las páginas impresas, solo administración (docs/73).
+        Assert.Equal(reglas,
+            (await GetAsync("/api/printers/page-counts?from=2026-11-01&to=2026-11-02", Pase(claves))).StatusCode);
     }
 
     // Un pase interceptado no puede crear un admin permanente (auditoría M11).
