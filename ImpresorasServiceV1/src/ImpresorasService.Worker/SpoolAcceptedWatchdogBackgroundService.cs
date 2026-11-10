@@ -76,7 +76,9 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
     {
         var now = _timeProvider.GetUtcNow();
         var maxAgeSeconds = Math.Max(1, _options.Value.SpoolAcceptedMaxAgeSeconds);
-        var thresholdUtc = now - TimeSpan.FromSeconds(maxAgeSeconds);
+        // Se mira pronto (PrimeraMirada) para ver enseguida si se ha parado; lo que decide el plazo
+        // (sin respuesta, por el estado de la impresora) sigue esperando maxAgeSeconds: ApplyOutcome.
+        var thresholdUtc = now - TimeSpan.FromSeconds(Math.Min(maxAgeSeconds, PrimeraMirada.TotalSeconds));
 
         await using var scope = _scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
@@ -86,9 +88,16 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
         // Filtro de threshold y orden por antigüedad empujados a SQL (Fase 1.1): un Take en
         // memoria sin orden dejaba trabajos antiguos sin confirmar bajo backlog sostenido.
         // Proyectar solo campos escalares: PdfBlob se excluye deliberadamente para evitar OOM.
+        // También los que quedaron «Sin confirmar» por impresora parada u ocupada: se siguen vigilando un día
+        // por si salen al recuperarse (o los cancelan en el panel). Antes se dejaban de mirar y un trabajo que
+        // sí salió al reponer el papel se quedaba sin confirmar (ERP_SERCA docs/72, 10/11/2026).
+        var desdeVigilancia = now - VigilanciaSinConfirmar;
         var candidates = await db.PrintJobs
             .AsNoTracking()
-            .Where(j => (j.Status == PrintJobStatus.SpoolAccepted || j.Status == PrintJobStatus.PrinterBlocked)
+            .Where(j => ((j.Status == PrintJobStatus.SpoolAccepted || j.Status == PrintJobStatus.PrinterBlocked)
+                    || (j.Status == PrintJobStatus.PrintedUnknown
+                        && (j.LastErrorCode == StoppedTimeout || j.LastErrorCode == ProcessingTimeout)
+                        && j.UpdatedAtUtc >= desdeVigilancia))
                 && j.UpdatedAtUtc <= thresholdUtc)
             .OrderBy(j => j.UpdatedAtUtc)
             .Select(j => new WatchdogJob
@@ -121,8 +130,10 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
             var oldStatus = job.Status;
             // Lo que salió por IP se confirma por su número de trabajo; si la impresora ya no lo
             // recuerda, por su estado, como lo que salió por la cola de Windows.
-            var ippResult = await QueryJobAsync(job, printerHosts, ct)
-                ?? ResolveIppResult(job, printerHosts, ippResults);
+            var porTrabajo = await QueryJobAsync(job, printerHosts, ct);
+            var impresora = ResolveIppResult(job, printerHosts, ippResults);
+            var ippResult = ConMotivoDeLaImpresora(porTrabajo, impresora) ?? impresora;
+            job.PorTrabajo = porTrabajo is not null;
             if (!ApplyOutcome(job, ippResult, maxAgeSeconds, now))
             {
                 _logger.LogInformation(
@@ -247,19 +258,61 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
         return result;
     }
 
+    internal const string StoppedTimeout = "IPP_PRINTER_STOPPED_TIMEOUT";
+    internal const string ProcessingTimeout = "IPP_PRINTER_PROCESSING_TIMEOUT";
+
+    // ponytail: un día fijo; si hiciera falta más, que salga de PrintExecutionOptions.
+    internal static readonly TimeSpan VigilanciaSinConfirmar = TimeSpan.FromHours(24);
+
+    // ponytail: fija; si hiciera falta tocarla, a PrintExecutionOptions como SpoolAcceptedMaxAgeSeconds.
+    internal static readonly TimeSpan PrimeraMirada = TimeSpan.FromSeconds(15);
+
+    /// <summary>
+    /// Junta lo que dice el trabajo y lo que dice la impresora. El trabajo parado no dice por qué (job-state 6);
+    /// la impresora sí («sin papel»): se enseña el suyo. Y un trabajo «en espera» o «imprimiendo» con la
+    /// impresora parada está parado: los que esperan detrás del que se atascó (10/11/2026: de 5 trabajos a una
+    /// Brother sin papel, solo el primero pasaba a bloqueado; los otros 4 seguían «aceptados» hasta 30 min).
+    /// Si no hay respuesta por el trabajo, null (vale el estado de la impresora).
+    /// </summary>
+    internal static IppQueryResult? ConMotivoDeLaImpresora(IppQueryResult? porTrabajo, IppQueryResult? impresora) =>
+        porTrabajo is { Outcome: IppOutcome.PrinterStopped or IppOutcome.PrinterProcessing }
+            && impresora is { Outcome: IppOutcome.PrinterStopped }
+            ? porTrabajo with
+            {
+                Outcome = IppOutcome.PrinterStopped,
+                ErrorCode = impresora.ErrorCode ?? porTrabajo.ErrorCode ?? "IPP_PRINTER_STOPPED",
+                ErrorMessage = impresora.ErrorMessage ?? porTrabajo.ErrorMessage
+            }
+            : porTrabajo;
+
     // Tiempo máximo de espera con la impresora procesando antes de desistir.
     private const int WaitGiveUpMinutes = 30;
     // Con la impresora parada (sin papel, atasco), menos: son pedidos de clientes y urgen (D3, 27/10/2026).
     private const int BlockedGiveUpMinutes = 10;
 
     // Devuelve false si el trabajo debe ignorarse este ciclo (esperar recuperación de impresora).
-    private static bool ApplyOutcome(
+    internal static bool ApplyOutcome(
         WatchdogJob job,
         IppQueryResult? ippResult,
         int maxAgeSeconds,
         DateTimeOffset now)
     {
         var isBlocked = job.Status == PrintJobStatus.PrinterBlocked;
+
+        // Antes del plazo (primera mirada): solo lo que la impresora afirma de este trabajo o de sí misma
+        // (parada, abortado, terminado por su número). Sin respuesta, imprimiendo o «libre» sin el trabajo,
+        // a esperar el plazo de siempre.
+        if (job.Status == PrintJobStatus.SpoolAccepted
+            && now - job.UpdatedAtUtc < TimeSpan.FromSeconds(maxAgeSeconds)
+            && !(ippResult?.Outcome is IppOutcome.PrinterStopped or IppOutcome.JobAborted or IppOutcome.CompletedWithErrors
+                 || (ippResult?.Outcome == IppOutcome.PrinterIdle && job.PorTrabajo)))
+            return false;
+
+        // «Sin confirmar» por parada u ocupada: solo se resuelve si salió (o la impresora lo abortó). Mientras
+        // siga parado, ocupado o sin respuesta, se queda como está, sin volver a cambiar su estado ni su texto.
+        if (job.Status == PrintJobStatus.PrintedUnknown
+            && ippResult?.Outcome is not (IppOutcome.PrinterIdle or IppOutcome.JobAborted))
+            return false;
 
         switch (ippResult?.Outcome)
         {
@@ -347,11 +400,13 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
         }
     }
 
-    private static PrintJobEvent BuildEvent(WatchdogJob job, PrintJobStatus oldStatus, DateTimeOffset now)
+    internal static PrintJobEvent BuildEvent(WatchdogJob job, PrintJobStatus oldStatus, DateTimeOffset now)
     {
         var message = job.Status switch
         {
-            PrintJobStatus.PrintedConfirmed => "IPP confirmó impresión completada.",
+            PrintJobStatus.PrintedConfirmed => job.PorTrabajo
+                ? "La impresora confirmó que terminó el trabajo (por su número)."
+                : "Confirmado por el estado de la impresora: está libre y ya no tiene el trabajo.",
             PrintJobStatus.PrinterBlocked   => job.LastErrorMessage,
             PrintJobStatus.SpoolAccepted    => "Impresora recuperada, esperando confirmación.",
             _                               => job.LastErrorMessage
@@ -370,8 +425,10 @@ public sealed class SpoolAcceptedWatchdogBackgroundService : BackgroundService
         };
     }
 
-    private sealed class WatchdogJob
+    internal sealed class WatchdogJob
     {
+        // La respuesta vino por su número de trabajo (Get-Job-Attributes), no por el estado de la impresora.
+        public bool PorTrabajo { get; set; }
         public Guid JobId { get; init; }
         public int? PrinterId { get; init; }
         public PrintJobStatus Status { get; set; }

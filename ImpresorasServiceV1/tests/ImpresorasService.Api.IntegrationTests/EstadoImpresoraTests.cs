@@ -117,6 +117,51 @@ public sealed class EstadoImpresoraTests
         Assert.Equal(("critical", StoreHealthEvaluator.IppCriticalReason), (a.Health, a.HealthReason));
     }
 
+    // R3: la cola de la propia impresora. Get-Jobs devuelve un grupo job-attributes (0x02) por trabajo.
+    [Fact]
+    public void La_cola_de_la_impresora_se_lee_por_trabajo_sin_motivos_de_fase()
+    {
+        var ms = new MemoryStream();
+        ms.Write([0x01, 0x01, 0x00, 0x00, 0, 0, 0, 1, 0x01]); // operation-attributes
+        void A(byte tag, string n, byte[] v)
+        {
+            var nb = Encoding.UTF8.GetBytes(n);
+            ms.WriteByte(tag); ms.Write([(byte)(nb.Length >> 8), (byte)nb.Length]); ms.Write(nb);
+            ms.Write([(byte)(v.Length >> 8), (byte)v.Length]); ms.Write(v);
+        }
+        A(0x47, "attributes-charset", Texto("utf-8"));
+        ms.WriteByte(0x02);
+        A(0x21, "job-id", Entero(160));
+        A(0x36, "job-name", [0, 2, (byte)'e', (byte)'n', 0, 15, .. Encoding.UTF8.GetBytes("PRUEBA PRUEBA-1")]);
+        A(0x23, "job-state", Entero(6));
+        A(0x44, "job-state-reasons", Texto("job-incoming"));
+        A(0x44, "", Texto("job-stopped"));
+        A(0x36, "job-originating-user-name", [0, 2, (byte)'e', (byte)'n', 0, 17, .. Encoding.UTF8.GetBytes("ImpresorasService")]);
+        A(0x21, "time-at-creation", Entero(745000));
+        ms.WriteByte(0x02);
+        A(0x21, "job-id", Entero(161));
+        A(0x23, "job-state", Entero(3));
+        ms.WriteByte(0x03);
+
+        var trabajos = IppConfirmationService.LeerTrabajos(IppConfirmationService.ParseResponse(200, ms.ToArray()));
+
+        Assert.Equal(2, trabajos.Count);
+        Assert.Equal(new IppTrabajoImpresora(160, "PRUEBA PRUEBA-1", 6, "job-stopped", "ImpresorasService", 745000), trabajos[0]);
+        Assert.Equal(new IppTrabajoImpresora(161, null, 3, null, null, null), trabajos[1]);
+    }
+
+    [Fact]
+    public void Get_Jobs_es_la_operacion_0x000A_sin_which_jobs()
+    {
+        var peticion = IppConfirmationService.BuildGetJobsRequest("10.0.0.9", "/ipp/print");
+
+        Assert.Equal(new byte[] { 0x01, 0x01, 0x00, 0x0A }, peticion[..4]);
+        var texto = Encoding.UTF8.GetString(peticion);
+        Assert.Contains("ImpresorasService", texto);
+        Assert.Contains("job-originating-user-name", texto);
+        Assert.DoesNotContain("which-jobs", texto); // la Brother L2710DW rechaza «not-completed»
+    }
+
     private static IppEstadoImpresora Estado(int estado, string? motivos) =>
         new(estado, motivos, null, 0, [], null, null);
 

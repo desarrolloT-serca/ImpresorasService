@@ -468,6 +468,56 @@ public class PrintersController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// La cola de la propia impresora (Get-Jobs, ERP_SERCA docs/72, R3): lo que tiene sin terminar. Los que
+    /// mandó este servicio salen con su documento; de los demás, el nombre y el usuario solo los ve quien
+    /// administra (D-72.6: pueden ser de otros equipos).
+    /// </summary>
+    [HttpGet("{id:int}/jobs")]
+    public async Task<IActionResult> Jobs(int id, CancellationToken cancellationToken)
+    {
+        var printer = await _dbContext.Printers.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.PrinterId == id, cancellationToken);
+        if (printer is null)
+            return NotFound();
+        if (!User.VeTodasLasTiendas() && printer.StoreId != GetCurrentUserStoreId())
+            return Forbid();
+
+        var host = !string.IsNullOrWhiteSpace(printer.Host) ? ExtractHostFromMaybeUnc(printer.Host) : null;
+        if (string.IsNullOrEmpty(host))
+            return Ok(new ColaImpresoraDto(false, "La impresora no tiene IP: no se puede consultar su cola.", []));
+
+        var trabajos = await _ipp.GetJobsAsync(host, cancellationToken);
+        if (trabajos is null)
+            return Ok(new ColaImpresoraDto(false, "La impresora no responde por IPP.", []));
+
+        var numeros = trabajos.Select(t => t.JobId).ToList();
+        var desde = DateTimeOffset.UtcNow.AddDays(-3);
+        var nuestros = await _dbContext.PrintJobs.AsNoTracking()
+            .Where(j => j.PrinterId == id && j.IppJobId != null && numeros.Contains(j.IppJobId.Value) && j.CreatedAtUtc >= desde)
+            .Select(j => new { IppJobId = j.IppJobId!.Value, j.ExternalJobId, j.DocumentType, j.Status })
+            .ToListAsync(cancellationToken);
+        var admin = User.IsInRole(RoleCatalog.Admin);
+
+        return Ok(new ColaImpresoraDto(true, null, trabajos.Select(t =>
+        {
+            var nuestro = nuestros.FirstOrDefault(n => n.IppJobId == t.JobId);
+            return new TrabajoImpresoraDto(
+                t.JobId,
+                nuestro is not null || admin ? t.Nombre : null,
+                t.Estado,
+                t.Motivos,
+                nuestro is not null || admin ? t.Usuario : null,
+                printer.IppUpSinceUtc is { } encendida && t.CreadoSegundos is { } s ? encendida.AddSeconds(s) : null,
+                nuestro is null ? null : new TrabajoNuestroDto(nuestro.ExternalJobId, nuestro.DocumentType, (int)nuestro.Status));
+        }).ToList()));
+    }
+
+    private sealed record ColaImpresoraDto(bool Respondio, string? Mensaje, IReadOnlyList<TrabajoImpresoraDto> Trabajos);
+    private sealed record TrabajoImpresoraDto(int JobId, string? Nombre, int? Estado, string? Motivos, string? Usuario,
+        DateTimeOffset? CreadoUtc, TrabajoNuestroDto? Nuestro);
+    private sealed record TrabajoNuestroDto(string ExternalJobId, string DocumentType, int Status);
+
     private async Task PersistConnectivityIfRequestedAsync(
         Printer printer,
         ConnectivityProbeResult result,

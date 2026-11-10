@@ -1,7 +1,7 @@
 import { useState } from "react"
 import {
   CopyIcon,
-  DropletIcon,
+  BatteryMediumIcon,
   InboxIcon,
   ListOrderedIcon,
   ServerOffIcon,
@@ -472,7 +472,7 @@ function UmbralToner({
     <section className="flex flex-col gap-4 rounded-lg border bg-card p-4">
       <div className="flex items-center gap-3">
         <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-          <DropletIcon className="size-4" />
+          <BatteryMediumIcon className="size-4" />
         </span>
         <div className="min-w-0">
           <h3 className="font-semibold">Tóner</h3>

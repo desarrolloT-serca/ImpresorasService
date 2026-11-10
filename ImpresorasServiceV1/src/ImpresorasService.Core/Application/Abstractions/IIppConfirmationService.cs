@@ -142,6 +142,13 @@ public sealed record IppConsumible(string? Nombre, string? Color, string? Tipo, 
 /// </summary>
 public sealed record IppBandeja(string? Nombre, int? Capacidad, int? Nivel);
 
+/// <summary>
+/// Un trabajo de la cola de la propia impresora (Get-Jobs). Estado: job-state (3 pendiente, 4 retenido,
+/// 5 imprimiendo, 6 detenido, 7 cancelado, 8 abortado, 9 terminado). CreadoSegundos: time-at-creation,
+/// en segundos desde que se encendió la impresora.
+/// </summary>
+public sealed record IppTrabajoImpresora(int JobId, string? Nombre, int? Estado, string? Motivos, string? Usuario, int? CreadoSegundos);
+
 public interface IIppConfirmationService
 {
     /// <summary>
@@ -184,6 +191,14 @@ public interface IIppConfirmationService
     /// <c>null</c>: así los dobles de prueba que no lo necesitan no tienen que implementarlo.
     /// </summary>
     Task<bool?> IdentifyAsync(string printerHost, CancellationToken ct) => Task.FromResult<bool?>(null);
+
+    /// <summary>
+    /// Get-Jobs: lo que tiene la impresora en su propia cola sin terminar (ERP_SERCA docs/72, R3). <c>null</c> si
+    /// no responde. Muchas solo enseñan los trabajos de quien pregunta, y no guardan lo terminado. Por
+    /// defecto, <c>null</c>, como <see cref="IdentifyAsync"/>.
+    /// </summary>
+    Task<IReadOnlyList<IppTrabajoImpresora>?> GetJobsAsync(string printerHost, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<IppTrabajoImpresora>?>(null);
 
     /// <summary>
     /// El job-name con que se manda un trabajo a la impresora (como mucho 100 caracteres). El mismo al

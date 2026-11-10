@@ -350,6 +350,71 @@ internal sealed class IppConfirmationService : IIppConfirmationService, IDisposa
         }
     }
 
+    public async Task<IReadOnlyList<IppTrabajoImpresora>?> GetJobsAsync(string printerHost, CancellationToken ct)
+    {
+        var ip = ParseHost(printerHost);
+        if (ip is null)
+            return null;
+        try
+        {
+            foreach (var ruta in Rutas)
+            {
+                using var consulta = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                consulta.CancelAfter(_options.Value.IppTimeoutMs);
+                var r = await PostAsync(ip, ruta, BuildGetJobsRequest(ip, ruta), consulta.Token);
+                if (r.Http == 200 && r.Estado is < 0x0100)
+                    return LeerTrabajos(r);
+            }
+            return null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            _logger.LogDebug(ex, "IPP Get-Jobs sin respuesta de {Host}.", ip);
+            return null;
+        }
+    }
+
+    internal static List<IppTrabajoImpresora> LeerTrabajos(IppRespuesta r)
+    {
+        static string? Texto(Dictionary<string, List<object>> g, string n) =>
+            g.TryGetValue(n, out var v) ? v.OfType<string>().FirstOrDefault() : null;
+        static int? Entero(Dictionary<string, List<object>> g, string n) =>
+            g.TryGetValue(n, out var v) && v.OfType<int>().Any() ? v.OfType<int>().First() : null;
+        return r.Trabajos
+            .Where(g => Entero(g, "job-id") is not null)
+            .Select(g => new IppTrabajoImpresora(
+                Entero(g, "job-id")!.Value,
+                Texto(g, "job-name"),
+                Entero(g, "job-state"),
+                g.TryGetValue("job-state-reasons", out var m)
+                    ? string.Join(", ", m.OfType<string>().Where(x => !MotivosDeFase.Contains(x))) is { Length: > 0 } s ? s : null
+                    : null,
+                Texto(g, "job-originating-user-name"),
+                Entero(g, "time-at-creation")))
+            .ToList();
+    }
+
+    // Get-Jobs (0x000A): los trabajos sin terminar (which-jobs por defecto es not-completed; no se manda
+    // porque la Brother L2710DW anuncia «not_completed» y rechaza el bueno). Con el mismo usuario que el
+    // Print-Job, para que salgan al menos los nuestros (ERP_SERCA docs/72, R3).
+    internal static byte[] BuildGetJobsRequest(string ip, string ruta)
+    {
+        var ms = new MemoryStream();
+        ms.WriteByte(0x01); ms.WriteByte(0x01);   // version 1.1
+        ms.WriteByte(0x00); ms.WriteByte(0x0A);   // operation: Get-Jobs
+        ms.Write([0x00, 0x00, 0x00, 0x01]);        // request-id = 1
+        ms.WriteByte(0x01);                        // begin-attribute-group: operation-attributes
+        WriteAttr(ms, 0x47, "attributes-charset", "utf-8");
+        WriteAttr(ms, 0x48, "attributes-natural-language", "en-us");
+        WriteAttr(ms, 0x45, "printer-uri", $"ipp://{ip}:631{ruta}");
+        WriteAttr(ms, 0x42, "requesting-user-name", "ImpresorasService");
+        WriteAttr(ms, 0x44, "requested-attributes", "job-id");
+        foreach (var a in new[] { "job-name", "job-state", "job-state-reasons", "job-originating-user-name", "time-at-creation" })
+            WriteAttr(ms, 0x44, "", a);
+        ms.WriteByte(0x03); // end-of-attributes
+        return ms.ToArray();
+    }
+
     // Identify-Printer (0x003C, PWG 5100.13), sin identify-actions: lo que haga por defecto la impresora.
     internal static byte[] BuildIdentifyRequest(string ip, string ruta)
     {
@@ -416,9 +481,22 @@ internal sealed class IppConfirmationService : IIppConfirmationService, IDisposa
     // Como mucho 100 caracteres, como se manda en el Print-Job.
     internal static string NombreDeTrabajo(string jobName) => jobName.Length > 100 ? jobName[..100] : jobName;
 
+    // job-state-reasons que solo dicen en qué fase está el trabajo (RFC 8011 §5.3.8): no son errores y no se
+    // enseñan. Antes salía «Error de impresora: job-incoming. Error de impresora: job-printing» con un trabajo
+    // parado por falta de papel (ERP_SERCA docs/72, 10/11/2026).
+    private static readonly HashSet<string> MotivosDeFase = new(StringComparer.Ordinal)
+    {
+        "none", "job-completed-successfully", "job-incoming", "job-data-insufficient", "job-outgoing",
+        "job-queued", "job-queued-for-marker", "job-transforming", "job-interpreting", "job-printing",
+        "job-hold-until-specified", "job-restartable", "job-spooling", "job-streaming", "job-transmitting",
+        "processing-to-stop-point", "printer-stopped-partly", "printer-stopped"
+    };
+
     internal static IppQueryResult? EstadoDelTrabajo(IppRespuesta r)
     {
-        var razones = r.Textos("job-state-reasons").Where(x => x is not "none" and not "job-completed-successfully").ToList();
+        var todas = r.Textos("job-state-reasons").ToList();
+        // printer-stopped decide (abajo), pero no es un motivo que enseñar: el motivo es el de la impresora.
+        var razones = todas.Where(x => !MotivosDeFase.Contains(x)).ToList();
         var detalle = razones.Count > 0 ? TranslateReasons(string.Join(", ", razones)) : null;
         // Abortado porque no supo leer el documento (formato, compresión, documento ilegible).
         var ilegible = razones.Any(x => x.StartsWith("document-", StringComparison.Ordinal)
@@ -432,10 +510,10 @@ internal sealed class IppConfirmationService : IIppConfirmationService, IDisposa
             8 when ilegible => new IppQueryResult(IppOutcome.JobAborted, "IPP_DOCUMENT_ERROR",
                 "La impresora no pudo leer el documento" + (detalle is null ? "." : $": {detalle}")),
             // En cola detrás de una impresora parada: es «parada», no «procesando» (aviso y tope de D3).
-            3 or 4 or 5 when razones.Contains("printer-stopped") =>
+            3 or 4 or 5 when todas.Contains("printer-stopped") =>
                 new IppQueryResult(IppOutcome.PrinterStopped, "IPP_JOB_STOPPED", detalle),
             3 or 4 or 5 => new IppQueryResult(IppOutcome.PrinterProcessing),
-            6 => new IppQueryResult(IppOutcome.PrinterStopped, "IPP_JOB_STOPPED", detalle ?? TranslateReasons(null)),
+            6 => new IppQueryResult(IppOutcome.PrinterStopped, "IPP_JOB_STOPPED", detalle ?? "La impresora tiene el trabajo detenido."),
             7 => new IppQueryResult(IppOutcome.JobAborted, "IPP_JOB_CANCELED",
                 "El trabajo se canceló en la impresora" + (detalle is null ? "." : $": {detalle}")),
             8 => new IppQueryResult(IppOutcome.JobAborted, "IPP_JOB_ABORTED",
@@ -565,6 +643,9 @@ internal sealed class IppConfirmationService : IIppConfirmationService, IDisposa
 
     internal sealed record IppRespuesta(int Http, int? Estado, Dictionary<string, List<object>> Valores)
     {
+        /// <summary>Los atributos de cada trabajo (grupo job-attributes, 0x02), en orden: Get-Jobs.</summary>
+        public List<Dictionary<string, List<object>>> Trabajos { get; init; } = [];
+
         public IEnumerable<string> Textos(string nombre) =>
             Valores.TryGetValue(nombre, out var v) ? v.OfType<string>() : [];
         public IEnumerable<int> Enteros(string nombre) =>
@@ -584,6 +665,8 @@ internal sealed class IppConfirmationService : IIppConfirmationService, IDisposa
         var estado = (data[2] << 8) | data[3]; // status-code, tras la versión
         var i = 8; // skip 8-byte header (version 2 + status-code 2 + request-id 4)
         var lastAttrName = "";
+        var trabajos = new List<Dictionary<string, List<object>>>();
+        Dictionary<string, List<object>>? grupo = null;
 
         while (i < data.Length)
         {
@@ -593,6 +676,8 @@ internal sealed class IppConfirmationService : IIppConfirmationService, IDisposa
             if (b <= 0x0F)
             {
                 if (b == 0x03) break; // end-of-attributes
+                grupo = b == 0x02 ? [] : null;
+                if (grupo is not null) trabajos.Add(grupo);
                 i++;
                 lastAttrName = "";
                 continue;
@@ -633,12 +718,18 @@ internal sealed class IppConfirmationService : IIppConfirmationService, IDisposa
                 if (!valores.TryGetValue(name, out var lista))
                     valores[name] = lista = [];
                 lista.Add(valor);
+                if (grupo is not null)
+                {
+                    if (!grupo.TryGetValue(name, out var delGrupo))
+                        grupo[name] = delGrupo = [];
+                    delGrupo.Add(valor);
+                }
             }
 
             i += valueLen;
         }
 
-        return new IppRespuesta(http, estado, valores);
+        return new IppRespuesta(http, estado, valores) { Trabajos = trabajos };
     }
 
     // Valor de textWithLanguage: [largo idioma][idioma][largo texto][texto]. Mal formado, tal cual.

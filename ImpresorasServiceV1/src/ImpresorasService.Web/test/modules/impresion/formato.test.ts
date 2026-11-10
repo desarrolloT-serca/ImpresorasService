@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest"
 import { ESTADOS_TRABAJO as E, type Impresora } from "@serca/contratos"
 import {
+  apiSinEstado,
   autor,
+  avisoWeb,
   conNivel,
   conProblema,
   pasaFiltroEstado,
@@ -171,6 +173,33 @@ describe("filtro, previsión y bandejas (docs/72, mejoras 2, 6 y 7)", () => {
     expect(textoBandeja({ nombre: "X", capacidad: null, nivel: -2 })).toBe(
       "Sin dato"
     )
+  })
+})
+
+describe("tóner con los umbrales de Reglas y avisos", () => {
+  const con = (extra: Partial<Impresora>) => extra as Impresora
+  it("mandan los de Reglas y avisos sobre los que trae la impresora", () => {
+    const i = con({ tonerWarningPct: 20, tonerCriticalPct: 10 })
+    const reglas = { aviso: 40, critico: 25 }
+    expect(tonoToner(35, i, reglas)).toBe("aviso")
+    expect(tonoToner(25, i, reglas)).toBe("error")
+    expect(tonoToner(35, i)).toBe("ok") // sin reglas, los de la impresora
+  })
+  it("sabe cuándo la API del servicio no manda el estado", () => {
+    expect(apiSinEstado([con({}), con({})])).toBe(true)
+    expect(apiSinEstado([con({}), con({ ippSeverity: "neutral" })])).toBe(false)
+    expect(apiSinEstado([])).toBe(false)
+  })
+})
+
+describe("aviso al abrir la web de la impresora", () => {
+  it("nombra la tienda a cuya red hay que tener acceso", () => {
+    const a = avisoWeb(
+      { printerName: "MOSTRADOR01", storeId: 15 } as Impresora,
+      [{ storeId: 15, name: "Hellín", isActive: true } as never]
+    )
+    expect(a.titulo).toBe("Abriendo la web de MOSTRADOR01")
+    expect(a.detalle).toContain("red de la tienda 15 · Hellín")
   })
 })
 
