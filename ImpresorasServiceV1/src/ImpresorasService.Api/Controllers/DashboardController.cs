@@ -390,7 +390,8 @@ public class DashboardController : ControllerBase
                 ? actual.Horario
                 : new HorarioTienda(request.Horario.Dias ?? [], request.Horario.Desde ?? "", request.Horario.Hasta ?? ""),
             // Lo edita la pantalla de Telegram (PUT /api/telegram/config): aquí se conserva.
-            TelegramSoloEnHorario = actual.TelegramSoloEnHorario
+            TelegramSoloEnHorario = actual.TelegramSoloEnHorario,
+            Toner = request.Toner is null ? actual.Toner : new UmbralToner(request.Toner.Aviso, request.Toner.Critico)
         };
 
         var errors = await _ruleStore.SaveAsync(rules, cancellationToken);
@@ -411,7 +412,8 @@ public class DashboardController : ControllerBase
         conn = rules.Conn.Select(r => new { r.Min, r.Severity }),
         silent = rules.Silent.Select(r => new { r.Min, r.Severity }),
         reprints = rules.Reprints.Select(r => new { r.Min, r.Severity }),
-        horario = new { dias = rules.Horario.Dias, desde = rules.Horario.Desde, hasta = rules.Horario.Hasta }
+        horario = new { dias = rules.Horario.Dias, desde = rules.Horario.Desde, hasta = rules.Horario.Hasta },
+        toner = new { aviso = rules.Toner.Aviso, critico = rules.Toner.Critico }
     };
 
     [HttpPut("thresholds")]
@@ -932,6 +934,10 @@ public record ThresholdRuleSetRequest(
     List<ThresholdRuleRequest>? Conn,
     List<ThresholdRuleRequest>? Silent = null,
     List<ThresholdRuleRequest>? Reprints = null,
-    HorarioTiendaRequest? Horario = null);
+    HorarioTiendaRequest? Horario = null,
+    // Sin él (un cliente anterior, el PHP) se queda como está.
+    TonerRequest? Toner = null);
+
+public record TonerRequest(int Aviso, int Critico);
 
 public record HorarioTiendaRequest(List<int>? Dias, string? Desde, string? Hasta);

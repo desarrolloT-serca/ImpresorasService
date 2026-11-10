@@ -85,6 +85,9 @@ public static class ThresholdRuleEngine
         if (!HorarioTienda.TryHora(h.Desde, out var desde) || !HorarioTienda.TryHora(h.Hasta, out var hasta) || desde >= hasta)
             errors.Add("El horario de tienda va de una hora a otra mayor (HH:mm), en el mismo día.");
 
+        if (rules.Toner is not { Critico: >= 0, Aviso: <= 100 } t || t.Critico >= t.Aviso)
+            errors.Add("El tóner crítico tiene que ser menor que el de aviso, entre 0 y 100 %.");
+
         return errors.Distinct().ToList();
     }
 

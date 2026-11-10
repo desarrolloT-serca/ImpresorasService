@@ -1,6 +1,7 @@
 import { useState } from "react"
 import {
   CopyIcon,
+  DropletIcon,
   InboxIcon,
   ListOrderedIcon,
   ServerOffIcon,
@@ -27,7 +28,7 @@ import { cn } from "@/lib/utils"
 import { useGuardarUmbrales, useUmbrales } from "./api"
 import { CLASE_TONO, COLOR_PUNTO, SALUD } from "./formato"
 
-type Metrica = Exclude<keyof ReglasUmbral, "horario">
+type Metrica = Exclude<keyof ReglasUmbral, "horario" | "toner">
 // Como ajustes.blade.php del PHP, más dos opcionales (27/10/2026): salen
 // desactivadas y, al activar un nivel vacío, se rellena con su sugerencia.
 const METRICAS: {
@@ -120,7 +121,22 @@ const aEdicion = (r: ReglasUmbral): Edicion =>
     ])
   ) as Edicion
 
-const aReglas = (e: Edicion, horario: HorarioTienda): ReglasUmbral => ({
+type Toner = ReglasUmbral["toner"]
+type TonerTexto = Record<keyof Toner, string>
+const aTexto = (t: Toner): TonerTexto => ({
+  aviso: String(t.aviso),
+  critico: String(t.critico),
+})
+const aToner = (t: TonerTexto): Toner => ({
+  aviso: Number(t.aviso),
+  critico: Number(t.critico),
+})
+
+const aReglas = (
+  e: Edicion,
+  horario: HorarioTienda,
+  toner: Toner
+): ReglasUmbral => ({
   ...(Object.fromEntries(
     METRICAS.map(({ clave }) => [
       clave,
@@ -129,8 +145,9 @@ const aReglas = (e: Edicion, horario: HorarioTienda): ReglasUmbral => ({
         severity: s,
       })),
     ])
-  ) as Omit<ReglasUmbral, "horario">),
+  ) as Omit<ReglasUmbral, "horario" | "toner">),
   horario,
+  toner,
 })
 
 const entero = (v: string) => /^\d{1,9}$/.test(v.trim())
@@ -166,6 +183,16 @@ const errorHorario = (h: HorarioTienda) =>
       ? "La hora de cierre tiene que ser posterior a la de apertura"
       : undefined
 
+// Lo mismo que comprueba la API (ThresholdRuleEngine): enteros de 0 a 100 y
+// crítico por debajo de aviso.
+const PORCENTAJE = /^(100|\d{1,2})$/
+const errorToner = (t: TonerTexto) =>
+  !PORCENTAJE.test(t.aviso.trim()) || !PORCENTAJE.test(t.critico.trim())
+    ? "Pon un porcentaje entero, de 0 a 100"
+    : Number(t.critico) >= Number(t.aviso)
+      ? "Crítica tiene que ser menor que Aviso"
+      : undefined
+
 // Umbrales de salud (ajustes.blade.php del PHP): de qué cifra en adelante una
 // tienda pasa a info, aviso o crítica. Los usan el dashboard y las alertas de
 // Telegram. La API comprueba que crezcan con la severidad.
@@ -184,10 +211,11 @@ function Editor({ inicial }: { inicial: ReglasUmbral }) {
   const guardar = useGuardarUmbrales()
   const [edicion, setEdicion] = useState(() => aEdicion(inicial))
   const [horario, setHorario] = useState(inicial.horario)
+  const [toner, setToner] = useState(() => aTexto(inicial.toner))
   const [mensaje, setMensaje] = useState("")
   const cambiado =
-    JSON.stringify(aReglas(edicion, horario)) !==
-    JSON.stringify(aReglas(aEdicion(inicial), inicial.horario))
+    JSON.stringify(aReglas(edicion, horario, aToner(toner))) !==
+    JSON.stringify(aReglas(aEdicion(inicial), inicial.horario, inicial.toner))
   const fallos = Object.fromEntries(
     METRICAS.map(({ clave, opcional }) => [
       clave,
@@ -195,8 +223,10 @@ function Editor({ inicial }: { inicial: ReglasUmbral }) {
     ])
   ) as Record<Metrica, ReturnType<typeof errores>>
   const fallaHorario = errorHorario(horario)
+  const fallaToner = errorToner(toner)
   const hayFallos =
     !!fallaHorario ||
+    !!fallaToner ||
     METRICAS.some(
       ({ clave }) =>
         fallos[clave].general || Object.keys(fallos[clave].malos).length
@@ -210,10 +240,11 @@ function Editor({ inicial }: { inicial: ReglasUmbral }) {
   }
 
   function enviar() {
-    guardar.mutate(aReglas(edicion, horario), {
+    guardar.mutate(aReglas(edicion, horario, aToner(toner)), {
       onSuccess: (r) => {
         setEdicion(aEdicion(r))
         setHorario(r.horario)
+        setToner(aTexto(r.toner))
         toast.success("Umbrales guardados")
       },
       onError: (e) =>
@@ -255,6 +286,7 @@ function Editor({ inicial }: { inicial: ReglasUmbral }) {
           onClick={() => {
             setEdicion(aEdicion(inicial))
             setHorario(inicial.horario)
+            setToner(aTexto(inicial.toner))
             setMensaje("")
           }}
         >
@@ -402,8 +434,106 @@ function Editor({ inicial }: { inicial: ReglasUmbral }) {
             </section>
           )
         })}
+        <UmbralToner
+          toner={toner}
+          error={fallaToner}
+          deshabilitado={guardar.isPending}
+          onCambio={(t) => {
+            setToner(t)
+            setMensaje("")
+          }}
+        />
       </div>
     </Panel>
+  )
+}
+
+// Tóner de cada impresora (docs/72, 10/11/2026): al revés que las demás,
+// cuanto menos, peor. La barra de Impresoras se pinta con estos colores y
+// salen como incidencia de la impresora.
+function UmbralToner({
+  toner,
+  error,
+  deshabilitado,
+  onCambio,
+}: {
+  toner: TonerTexto
+  error?: string
+  deshabilitado: boolean
+  onCambio: (t: TonerTexto) => void
+}) {
+  const filas = [
+    { clave: "aviso", s: "warning" },
+    { clave: "critico", s: "critical" },
+  ] as const
+  const aviso = Number(toner.aviso)
+  const critico = Number(toner.critico)
+  return (
+    <section className="flex flex-col gap-4 rounded-lg border bg-card p-4">
+      <div className="flex items-center gap-3">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+          <DropletIcon className="size-4" />
+        </span>
+        <div className="min-w-0">
+          <h3 className="font-semibold">Tóner</h3>
+          <p className="text-xs text-muted-foreground">
+            Nivel de tóner de cada impresora: igual o por debajo, aviso o
+            crítica
+          </p>
+        </div>
+      </div>
+
+      {!error && (
+        <div aria-hidden className="flex h-2 overflow-hidden rounded-full">
+          <span
+            className={COLOR_PUNTO.error}
+            style={{ width: `${critico}%` }}
+          />
+          <span
+            className={COLOR_PUNTO.aviso}
+            style={{ width: `${aviso - critico}%` }}
+          />
+          <span className={cn("flex-1", COLOR_PUNTO.ok)} />
+        </div>
+      )}
+
+      <div className="divide-y rounded-md border">
+        {filas.map(({ clave, s }) => (
+          <div
+            key={clave}
+            className="grid grid-cols-[7rem_auto_5rem_minmax(0,1fr)] items-center gap-2 px-3 py-2"
+          >
+            <span className="flex items-center gap-2 text-sm font-medium">
+              <span
+                aria-hidden
+                className={cn(
+                  "size-2 rounded-full",
+                  COLOR_PUNTO[SALUD[s].tono]
+                )}
+              />
+              {SALUD[s].etiqueta}
+            </span>
+            <label
+              htmlFor={`umbral-toner-${clave}`}
+              className="text-sm text-muted-foreground"
+            >
+              desde
+            </label>
+            <Input
+              id={`umbral-toner-${clave}`}
+              inputMode="numeric"
+              className="tabular-nums"
+              value={toner[clave]}
+              disabled={deshabilitado}
+              aria-invalid={!!error}
+              onChange={(e) => onCambio({ ...toner, [clave]: e.target.value })}
+            />
+            <span className="text-sm text-muted-foreground">% o menos</span>
+          </div>
+        ))}
+      </div>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </section>
   )
 }
 

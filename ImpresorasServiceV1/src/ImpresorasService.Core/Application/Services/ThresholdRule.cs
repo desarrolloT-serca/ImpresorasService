@@ -2,6 +2,21 @@ namespace ImpresorasService.Application.Services;
 
 public sealed record ThresholdRule(int Min, string Severity);
 
+/// <summary>Tóner en % igual o por debajo del que la impresora pasa a aviso y a crítico; Critico &lt; Aviso.</summary>
+public sealed record UmbralToner(int Aviso, int Critico)
+{
+    // Por encima del umbral que dan las propias impresoras (7 % Canon, 9 % Brother: docs/72, R0),
+    // para que dé tiempo a pedir el tóner.
+    public static UmbralToner Default { get; } = new(20, 10);
+
+    /// <summary>Gravedad de un nivel en % (null si no es un porcentaje: -1, -2, -3).</summary>
+    public string? Gravedad(int? nivel) =>
+        nivel is not (>= 0 and <= 100) ? null
+        : nivel <= Critico ? "critical"
+        : nivel <= Aviso ? "warning"
+        : "healthy";
+}
+
 /// <summary>
 /// Reglas de severidad de 1 a 3 niveles por métrica (G5.3: puerto del motor de PHP
 /// dashboard-threshold-rules.json a .NET, fuente única de verdad).
@@ -42,6 +57,12 @@ public sealed record ThresholdRuleSet(
     /// abrir si sigue pasando. Aquí y no en printer_telegram_config para no tocar la BD.
     /// </summary>
     public bool TelegramSoloEnHorario { get; init; }
+
+    /// <summary>
+    /// Tóner (ERP_SERCA docs/72, 10/11/2026): a partir de qué % es aviso (amarillo) y crítico (rojo).
+    /// Va al revés que las demás (cuanto menos, peor), por eso no es una lista de <see cref="ThresholdRule"/>.
+    /// </summary>
+    public UmbralToner Toner { get; init; } = UmbralToner.Default;
 
     public IReadOnlyList<ThresholdRule> ForMetric(string metric) => metric switch
     {

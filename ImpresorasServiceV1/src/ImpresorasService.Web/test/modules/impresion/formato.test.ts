@@ -17,6 +17,7 @@ import {
   puedeReintentar,
   puerto,
   resumen,
+  tonoToner,
   webImpresora,
 } from "@/modules/impresion/formato"
 
@@ -96,6 +97,22 @@ describe("resumen de una tienda", () => {
     expect(resumen([ipp("neutral"), ipp(undefined)]).tono).toBe("ok")
     expect(conProblema(ipp("warning"))).toBe(true)
     expect(conProblema(ipp("neutral"))).toBe(false)
+  })
+})
+
+describe("color del tóner (umbrales de Umbrales)", () => {
+  const con = (extra: Partial<Impresora>) => extra as Impresora
+  it("verde, amarillo y rojo con los umbrales de la API", () => {
+    const i = con({ tonerWarningPct: 30, tonerCriticalPct: 15 })
+    expect(tonoToner(31, i)).toBe("ok")
+    expect(tonoToner(30, i)).toBe("aviso")
+    expect(tonoToner(16, i)).toBe("aviso")
+    expect(tonoToner(15, i)).toBe("error")
+  })
+  it("sin umbrales (API anterior), los de por defecto: 20 y 10 %", () => {
+    expect(tonoToner(21, con({}))).toBe("ok")
+    expect(tonoToner(14, con({}))).toBe("aviso")
+    expect(tonoToner(10, con({}))).toBe("error")
   })
 })
 

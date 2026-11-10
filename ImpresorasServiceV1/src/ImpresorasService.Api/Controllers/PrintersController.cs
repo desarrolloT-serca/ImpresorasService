@@ -5,6 +5,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using ImpresorasService.Api.Security;
 using ImpresorasService.Application.Abstractions;
+using ImpresorasService.Application.Services;
 using ImpresorasService.Domain.Connectivity;
 using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure.Persistence;
@@ -20,11 +21,16 @@ namespace ImpresorasService.Api.Controllers;
 public class PrintersController : ControllerBase
 {
     private readonly ImpresorasDbContext _dbContext;
+    private readonly IDashboardThresholdRuleStore _ruleStore;
 
-    public PrintersController(ImpresorasDbContext dbContext)
+    public PrintersController(ImpresorasDbContext dbContext, IDashboardThresholdRuleStore ruleStore)
     {
         _dbContext = dbContext;
+        _ruleStore = ruleStore;
     }
+
+    // Umbrales de tóner de la pantalla Umbrales (fichero de reglas, como el dashboard).
+    private async Task<UmbralToner> TonerAsync(CancellationToken ct) => (await _ruleStore.LoadAsync(ct)).Toner;
 
     /// <summary>
     /// Lista impresoras, opcionalmente filtradas por tienda.
@@ -50,7 +56,8 @@ public class PrintersController : ControllerBase
             .ThenBy(x => x.PrinterName)
             .ToListAsync(cancellationToken);
 
-        return Ok(results.Select(ToPrinterDto));
+        var toner = await TonerAsync(cancellationToken);
+        return Ok(results.Select(p => ToPrinterDto(p, toner)));
     }
 
     /// <summary>
@@ -68,7 +75,7 @@ public class PrintersController : ControllerBase
         if (!User.VeTodasLasTiendas() && printer.StoreId != GetCurrentUserStoreId())
             return Forbid();
 
-        return Ok(ToPrinterDto(printer));
+        return Ok(ToPrinterDto(printer, await TonerAsync(cancellationToken)));
     }
 
     /// <summary>
@@ -117,7 +124,7 @@ public class PrintersController : ControllerBase
             return Conflict(new { error = "Ya hay una impresora con esa cola de Windows en la tienda." });
         }
 
-        return CreatedAtAction(nameof(GetById), new { id = printer.PrinterId }, ToPrinterDto(printer));
+        return CreatedAtAction(nameof(GetById), new { id = printer.PrinterId }, ToPrinterDto(printer, await TonerAsync(cancellationToken)));
     }
 
     /// <summary>
@@ -183,7 +190,7 @@ public class PrintersController : ControllerBase
             return Conflict(new { error = "Ya hay otra impresora con esa cola de Windows en la tienda." });
         }
 
-        return Ok(ToPrinterDto(printer));
+        return Ok(ToPrinterDto(printer, await TonerAsync(cancellationToken)));
     }
 
     /// <summary>
@@ -498,10 +505,10 @@ public class PrintersController : ControllerBase
         return int.TryParse(claimValue, out var storeId) ? storeId : null;
     }
 
-    private static PrinterDto ToPrinterDto(Printer printer)
+    private static PrinterDto ToPrinterDto(Printer printer, UmbralToner toner)
     {
         var connectivity = PrinterConnectivityState.FromPrinter(printer);
-        var (ippSeverity, ippStateText) = IppEstadoImpresora.Describir(printer, DateTimeOffset.UtcNow);
+        var (ippSeverity, ippStateText) = IppEstadoImpresora.Describir(printer, DateTimeOffset.UtcNow, toner);
         return new PrinterDto(
             printer.PrinterId,
             printer.PrinterName,
@@ -534,7 +541,9 @@ public class PrintersController : ControllerBase
             printer.IppMoreInfoUrl,
             printer.IppCheckedAtUtc,
             ippSeverity,
-            ippStateText);
+            ippStateText,
+            toner.Aviso,
+            toner.Critico);
     }
 
     private static readonly JsonSerializerOptions JsonWeb = new(JsonSerializerDefaults.Web);
@@ -570,7 +579,10 @@ public class PrintersController : ControllerBase
         DateTimeOffset? IppCheckedAtUtc,
         // Gravedad y texto en castellano de la última lectura (IppEstadoImpresora.Describir).
         string IppSeverity,
-        string? IppStateText);
+        string? IppStateText,
+        // Umbrales de tóner con que se ha calculado: la barra se pinta con ellos.
+        int TonerWarningPct,
+        int TonerCriticalPct);
 
     private sealed record ConnectivityProbeResult(
         bool Reachable,
