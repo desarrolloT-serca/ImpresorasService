@@ -267,6 +267,15 @@ export const conNivel = (i: Impresora) =>
       c.nivel !== null && c.nivel >= 0 && c.nivel <= 100
   )
 
+// Color del tóner por los umbrales de Umbrales, que la API manda con cada
+// impresora (por defecto 20 % aviso y 10 % crítico, como UmbralToner.Default).
+export const tonoToner = (nivel: number, i: Impresora): Tono =>
+  nivel <= (i.tonerCriticalPct ?? 10)
+    ? "error"
+    : nivel <= (i.tonerWarningPct ?? 20)
+      ? "aviso"
+      : "ok"
+
 // Tope del eje de la gráfica, redondeado al alza a un múltiplo del paso, como
 // el PHP: 7 → 8, 47 → 50, 130 → 150, 430 → 500.
 export function escala(maximo: number) {

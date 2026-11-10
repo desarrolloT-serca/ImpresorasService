@@ -42,6 +42,7 @@ import {
   puerto,
   resumen,
   TONO_SEVERIDAD,
+  tonoToner,
   webImpresora,
   type Tono,
 } from "./formato"
@@ -457,7 +458,7 @@ function columnasImpresoras({
         return (
           <span className="flex flex-col gap-0.5">
             {consumibles.map((c, n) => {
-              const bajo = c.bajo !== null && c.bajo >= 0 && c.nivel <= c.bajo
+              const tono = tonoToner(c.nivel, i)
               return (
                 <span
                   key={n}
@@ -471,7 +472,7 @@ function columnasImpresoras({
                     <span
                       className={cn(
                         "block h-full rounded-full",
-                        bajo ? "bg-warning" : "bg-success"
+                        COLOR_PUNTO[tono]
                       )}
                       style={{ width: `${c.nivel}%` }}
                     />
@@ -479,7 +480,8 @@ function columnasImpresoras({
                   <span
                     className={cn(
                       "text-xs tabular-nums",
-                      bajo && "font-semibold text-warning"
+                      tono === "aviso" && "font-semibold text-warning",
+                      tono === "error" && "font-semibold text-destructive"
                     )}
                   >
                     {c.nivel} %

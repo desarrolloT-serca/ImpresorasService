@@ -149,11 +149,39 @@ public sealed class DashboardControllerTests : IntegrationTestBase
         }
     }
 
+    /// <summary>
+    /// Umbrales de tóner (ERP_SERCA docs/72, 10/11/2026): se guardan en el fichero de reglas, un cliente
+    /// anterior que no los manda no los toca, y crítico tiene que ser menor que aviso.
+    /// </summary>
+    [Fact]
+    public async Task ThresholdRules_Toner_SeGuardaYUnClienteAnteriorNoLoBorra()
+    {
+        var actuales = await (await Client.GetAsync("/api/dashboard/threshold-rules")).Content.ReadFromJsonAsync<ReglasDto>();
+        Assert.NotNull(actuales);
+        object Con(object? toner) => new { actuales!.Queue, actuales.Failed, actuales.MissingHost, actuales.Conn, toner };
+        try
+        {
+            (await Client.PutAsJsonAsync("/api/dashboard/threshold-rules", Con(new { aviso = 30, critico = 15 }))).EnsureSuccessStatusCode();
+            (await Client.PutAsJsonAsync("/api/dashboard/threshold-rules", Con(null))).EnsureSuccessStatusCode();
+
+            var leidas = await (await Client.GetAsync("/api/dashboard/threshold-rules")).Content.ReadFromJsonAsync<ReglasDto>();
+            Assert.Equal(new TonerDto(30, 15), leidas!.Toner);
+
+            var malo = await Client.PutAsJsonAsync("/api/dashboard/threshold-rules", Con(new { aviso = 10, critico = 10 }));
+            Assert.Equal(System.Net.HttpStatusCode.BadRequest, malo.StatusCode);
+        }
+        finally
+        {
+            (await Client.PutAsJsonAsync("/api/dashboard/threshold-rules", Con(new { aviso = 20, critico = 10 }))).EnsureSuccessStatusCode();
+        }
+    }
+
+    private sealed record TonerDto(int Aviso, int Critico);
     private sealed record ReglaDto(int Min, string Severity);
     private sealed record HorarioDto(int[] Dias, string Desde, string Hasta);
     private sealed record ReglasDto(
         ReglaDto[] Queue, ReglaDto[] Failed, ReglaDto[] MissingHost, ReglaDto[] Conn,
-        ReglaDto[] Silent, ReglaDto[] Reprints, HorarioDto Horario);
+        ReglaDto[] Silent, ReglaDto[] Reprints, HorarioDto Horario, TonerDto? Toner = null);
 
     /// <summary>
     /// N1: una impresora activa sin ningún trabajo también sale en el desglose de su tienda, a 0

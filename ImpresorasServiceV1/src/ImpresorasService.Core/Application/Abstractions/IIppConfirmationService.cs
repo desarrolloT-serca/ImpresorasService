@@ -1,4 +1,5 @@
 using System.Text.Json;
+using ImpresorasService.Application.Services;
 using ImpresorasService.Domain.Entities;
 
 namespace ImpresorasService.Application.Abstractions;
@@ -62,10 +63,11 @@ public sealed record IppEstadoImpresora(
     /// <summary>
     /// Gravedad (las de <see cref="Domain.Connectivity.PrinterConnectivityState"/>) y texto en castellano de la
     /// última lectura (ERP_SERCA docs/72, R2). Por el sufijo de cada motivo (RFC 8011 §5.4.12): -error
-    /// o sin sufijo, crítica; -warning, aviso; -report, nada. Tóner por debajo del umbral de la propia
-    /// impresora, aviso. Sin lectura o con más de <see cref="LecturaVieja"/>, neutral: no se sabe.
+    /// o sin sufijo, crítica; -warning, aviso; -report, nada. Tóner por los umbrales de la pantalla
+    /// Umbrales (<see cref="UmbralToner"/>, 10/11/2026): aviso y crítico. Sin lectura o con más de
+    /// <see cref="LecturaVieja"/>, neutral: no se sabe.
     /// </summary>
-    public static (string Gravedad, string? Texto) Describir(Printer p, DateTimeOffset ahora)
+    public static (string Gravedad, string? Texto) Describir(Printer p, DateTimeOffset ahora, UmbralToner toner)
     {
         const string critica = Domain.Connectivity.PrinterConnectivityState.SeverityCritical;
         const string aviso = Domain.Connectivity.PrinterConnectivityState.SeverityWarning;
@@ -86,11 +88,12 @@ public sealed record IppEstadoImpresora(
         var consumibles = p.IppMarkersJson is null
             ? []
             : JsonSerializer.Deserialize<List<IppConsumible>>(p.IppMarkersJson, Json) ?? [];
-        foreach (var c in consumibles.Where(c => c is { Nivel: >= 0, Bajo: >= 0 } && c.Nivel <= c.Bajo))
-        {
-            Sube(aviso);
-            textos.Add($"{c.Nombre ?? "Consumible"} al {c.Nivel} %");
-        }
+        foreach (var c in consumibles)
+            if (toner.Gravedad(c.Nivel) is ("warning" or "critical") and var g)
+            {
+                Sube(g);
+                textos.Add($"{c.Nombre ?? "Consumible"} al {c.Nivel} %");
+            }
         if (p.IppState == 5)
         {
             Sube(critica);

@@ -261,6 +261,12 @@ export const ReglasUmbral = z.object({
     desde: "09:00",
     hasta: "21:00",
   }),
+  // Tóner en % igual o por debajo del que una impresora pasa a aviso
+  // (amarillo) y a crítica (rojo); critico < aviso (ERP_SERCA docs/72,
+  // 10/11/2026). Con una API anterior no viene: los de por defecto.
+  toner: z
+    .object({ aviso: z.number().int(), critico: z.number().int() })
+    .default({ aviso: 20, critico: 10 }),
 })
 export type ReglasUmbral = z.infer<typeof ReglasUmbral>
 
@@ -521,6 +527,10 @@ export const Impresora = z.object({
   ippCheckedAtUtc: z.string().nullable().optional(),
   ippSeverity: SeveridadConexion.optional(),
   ippStateText: z.string().nullable().optional(),
+  // Umbrales de tóner con que la API ha calculado ippSeverity (los de
+  // ReglasUmbral.toner): la barra se pinta con ellos.
+  tonerWarningPct: z.number().int().optional(),
+  tonerCriticalPct: z.number().int().optional(),
 })
 export type Impresora = z.infer<typeof Impresora>
 

@@ -69,7 +69,7 @@ const SIN_IMPRESORAS: Impresora[] = []
 
 const umbral = (
   r: ReglasUmbral | undefined,
-  m: Exclude<keyof ReglasUmbral, "horario">,
+  m: Exclude<keyof ReglasUmbral, "horario" | "toner">,
   s: string
 ) => r?.[m].find((u) => u.severity === s)?.min
 

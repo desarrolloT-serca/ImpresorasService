@@ -68,7 +68,8 @@ public sealed class DashboardThresholdRuleStore : IDashboardThresholdRuleStore
             Silent = ThresholdRuleEngine.NormalizeRuleSet(rules.Silent).ToList(),
             Reprints = ThresholdRuleEngine.NormalizeRuleSet(rules.Reprints).ToList(),
             Horario = rules.Horario with { Dias = rules.Horario.Dias.Distinct().Order().ToList() },
-            TelegramSoloEnHorario = rules.TelegramSoloEnHorario
+            TelegramSoloEnHorario = rules.TelegramSoloEnHorario,
+            Toner = rules.Toner
         };
 
         var errors = ThresholdRuleEngine.Validate(normalized);
@@ -101,7 +102,9 @@ public sealed class DashboardThresholdRuleStore : IDashboardThresholdRuleStore
                 dto.Horario.Dias ?? HorarioTienda.Default.Dias.ToList(),
                 dto.Horario.Desde ?? HorarioTienda.Default.Desde,
                 dto.Horario.Hasta ?? HorarioTienda.Default.Hasta),
-        TelegramSoloEnHorario = dto.TelegramSoloEnHorario ?? false
+        TelegramSoloEnHorario = dto.TelegramSoloEnHorario ?? false,
+        // Un fichero anterior sin tóner: los de por defecto.
+        Toner = dto.Toner is null ? UmbralToner.Default : new UmbralToner(dto.Toner.Aviso, dto.Toner.Critico)
     };
 
     private static List<ThresholdRule> ToRules(List<RuleDto>? rules) =>
@@ -116,7 +119,8 @@ public sealed class DashboardThresholdRuleStore : IDashboardThresholdRuleStore
         Silent = rules.Silent.Select(r => new RuleDto { Min = r.Min, Severity = r.Severity }).ToList(),
         Reprints = rules.Reprints.Select(r => new RuleDto { Min = r.Min, Severity = r.Severity }).ToList(),
         Horario = new HorarioDto { Dias = rules.Horario.Dias.ToList(), Desde = rules.Horario.Desde, Hasta = rules.Horario.Hasta },
-        TelegramSoloEnHorario = rules.TelegramSoloEnHorario
+        TelegramSoloEnHorario = rules.TelegramSoloEnHorario,
+        Toner = new TonerDto { Aviso = rules.Toner.Aviso, Critico = rules.Toner.Critico }
     };
 
     private sealed class RuleSetDto
@@ -129,6 +133,13 @@ public sealed class DashboardThresholdRuleStore : IDashboardThresholdRuleStore
         public List<RuleDto>? Reprints { get; set; }
         public HorarioDto? Horario { get; set; }
         public bool? TelegramSoloEnHorario { get; set; }
+        public TonerDto? Toner { get; set; }
+    }
+
+    private sealed class TonerDto
+    {
+        public int Aviso { get; set; }
+        public int Critico { get; set; }
     }
 
     private sealed class HorarioDto
