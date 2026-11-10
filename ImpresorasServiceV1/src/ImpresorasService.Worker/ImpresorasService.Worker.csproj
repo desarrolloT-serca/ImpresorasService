@@ -16,4 +16,7 @@
   <ItemGroup>
     <ProjectReference Include="..\ImpresorasService.Core\ImpresorasService.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="ImpresorasService.Api.IntegrationTests" />
+  </ItemGroup>
 </Project>

@@ -74,35 +74,51 @@ const opciones = {
   umbralCola: (s: string) => (s === "critical" ? 30 : 10),
 }
 
-describe("incidencias de la propia impresora (docs/72, R2)", () => {
-  const ipp = (
-    printerId: number,
-    ippSeverity: Impresora["ippSeverity"],
-    ippStateText: string,
-    ippStateMessage: string | null = null
-  ) =>
-    ({
-      printerId,
-      printerName: `P${printerId}`,
-      connectivityStatus: "ok",
-      ippSeverity,
-      ippStateText,
-      ippStateMessage,
-    }) as Impresora
-  it("una fila por impresora activa con problema, las críticas primero", () => {
+// docs/72, R2 y mejoras 3 y 5, con lo que mandaron de verdad el 10/11/2026.
+describe("incidencias de la propia impresora", () => {
+  const leida = {
+    connectivityStatus: "ok",
+    ippCheckedAtUtc: "2026-11-10T11:20:00Z",
+    ippState: 3,
+    ippMarkers: [
+      { nombre: "BK", color: null, tipo: "toner", nivel: 60, bajo: 9 },
+    ],
+  }
+  const atalayas = {
+    ...leida,
+    printerId: 30,
+    printerName: "Informatica",
+    ippState: 5,
+    ippSeverity: "critical",
+    ippStateReasons: "media-empty-error, media-needed-error",
+    ippStateText:
+      "Sin papel en la bandeja. Se necesita cargar papel. BK al 20 %",
+    ippStateMessage: "Sin papel B1, Imprimiendo",
+    ippStateSinceUtc: "2026-11-10T11:13:31Z",
+    ippMarkers: [
+      { nombre: "BK", color: null, tipo: "toner", nivel: 20, bajo: 9 },
+    ],
+  } as Impresora
+  const tambor = {
+    ...leida,
+    printerId: 20,
+    printerName: "Almacen",
+    ippSeverity: "warning",
+    ippStateReasons: "opc-life-over-warning",
+    ippStateText:
+      "El cartucho fotoconductor ha llegado al final de su vida útil",
+    ippStateMessage: "Cambie tambor, Espera",
+  } as Impresora
+
+  it("una fila por impresora activa con problema, tipificada y con su «Desde»", () => {
     const r = resumen({ stores: [tienda(2), tienda(3)] })
     const lista = incidencias(
       r,
       [
-        ipp(
-          20,
-          "warning",
-          "El cartucho fotoconductor ha llegado al final de su vida útil",
-          "Cambie tambor, Espera"
-        ),
-        ipp(30, "critical", "Sin papel en la bandeja"),
-        ipp(99, "critical", "No está en el resumen: inactiva"),
-        ipp(31, "neutral", "Sin lectura reciente"),
+        tambor,
+        atalayas,
+        { ...atalayas, printerId: 99 } as Impresora, // no está en el resumen: inactiva
+        { ...leida, printerId: 31, ippSeverity: "neutral" } as Impresora,
       ],
       opciones
     )
@@ -111,20 +127,22 @@ describe("incidencias de la propia impresora (docs/72, R2)", () => {
       storeId: 3,
       severidad: "critical",
       tipo: "Impresora",
-      detalle: "P30: Sin papel en la bandeja",
-      desde: null,
+      // Sin papel una vez (media-empty y media-needed), y el tóner al 20 %.
+      detalle: "Informatica: Sin papel, Tóner bajo",
+      // «Imprimiendo» es su estado normal: no va.
+      resto: "Panel: Sin papel B1",
+      desde: "2026-11-10T11:13:31Z",
     })
     expect(lista[1]).toMatchObject({
       storeId: 2,
       severidad: "warning",
-      resto: "Cambie tambor, Espera",
+      detalle: "Almacen: Tambor",
+      resto: "Panel: Cambie tambor",
     })
     expect(lista[1].destinos[0].clave).toBe("tienda=2&conexion=problemas")
   })
-})
 
-describe("incidencias de la impresora con su «Desde» (docs/72, mejoras 3 y 5)", () => {
-  it("usan desde cuándo dura el estado y no repiten la alerta de tienda de la API", () => {
+  it("no repite la alerta de tienda que manda la API por el estado de la impresora", () => {
     const r = resumen({
       stores: [tienda(2)],
       alerts: [
@@ -135,27 +153,9 @@ describe("incidencias de la impresora con su «Desde» (docs/72, mejoras 3 y 5)"
         ),
       ],
     })
-    const lista = incidencias(
-      r,
-      [
-        {
-          printerId: 20,
-          printerName: "P20",
-          connectivityStatus: "ok",
-          ippSeverity: "warning",
-          ippStateText: "BK al 14 %",
-          ippStateMessage: null,
-          ippStateSinceUtc: "2026-11-09T08:00:00Z",
-        } as Impresora,
-      ],
-      opciones
-    )
+    const lista = incidencias(r, [tambor], opciones)
     expect(lista).toHaveLength(1)
-    expect(lista[0]).toMatchObject({
-      tipo: "Impresora",
-      detalle: "P20: BK al 14 %",
-      desde: "2026-11-09T08:00:00Z",
-    })
+    expect(lista[0].detalle).toBe("Almacen: Tambor")
   })
 })
 

@@ -5,7 +5,8 @@ import type {
   TiendaDashboard,
 } from "@serca/contratos"
 import type { IdPanel } from "@/workspace/modulo"
-import { plural } from "./formato"
+import { mensajePanel, tiposEstado } from "./estado-impresora"
+import { plural, type UmbralToner } from "./formato"
 
 export type Destino = {
   etiqueta: string
@@ -65,7 +66,13 @@ export function incidencias(
   {
     admin,
     umbralCola,
-  }: { admin: boolean; umbralCola: (s: Salud) => number | undefined }
+    toner,
+  }: {
+    admin: boolean
+    umbralCola: (s: Salud) => number | undefined
+    // Umbrales de tóner de Reglas y avisos, para tipificar el estado.
+    toner?: UmbralToner
+  }
 ): Incidencia[] {
   const tiendas = new Map(resumen.stores.map((t) => [t.storeId, t]))
   const impresora = (storeId: number, estado: string) => {
@@ -270,8 +277,12 @@ export function incidencias(
           storeName: t.storeName,
           severidad: i.ippSeverity,
           tipo: "Impresora",
-          detalle: `${i.printerName}: ${i.ippStateText ?? "con incidencias"}`,
-          resto: i.ippStateMessage ?? "",
+          // Tipificado y sin repetir (docs/72, 10/11/2026): «Sin papel, Tóner
+          // bajo». El panel, solo si dice algo más que su estado normal.
+          detalle: `${i.printerName}: ${tiposEstado(i, toner)
+            .map((t) => t.etiqueta)
+            .join(", ")}`,
+          resto: mensajePanel(i) ? `Panel: ${mensajePanel(i)}` : "",
           desde: i.ippStateSinceUtc ?? null,
           destinos: [impresoras(t, "Ver impresoras")],
         })

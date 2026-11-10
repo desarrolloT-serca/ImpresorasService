@@ -593,6 +593,33 @@ export const DatosImpresora = z
   })
 export type DatosImpresora = z.output<typeof DatosImpresora>
 
+// GET /api/printers/{id}/jobs (docs/72, R3): la cola de la propia impresora,
+// lo que tiene sin terminar. Estado: job-state (3 pendiente, 4 retenido, 5
+// imprimiendo, 6 detenido, 7 cancelado, 8 abortado, 9 terminado). Nombre y
+// usuario de los trabajos que no son nuestros, solo para quien administra.
+export const TrabajoImpresora = z.object({
+  jobId: z.number().int(),
+  nombre: z.string().nullable(),
+  estado: z.number().int().nullable(),
+  motivos: z.string().nullable(),
+  usuario: z.string().nullable(),
+  creadoUtc: z.string().nullable(),
+  nuestro: z
+    .object({
+      externalJobId: z.string(),
+      documentType: z.string(),
+      status: z.number().int(),
+    })
+    .nullable(),
+})
+export type TrabajoImpresora = z.infer<typeof TrabajoImpresora>
+export const ColaImpresora = z.object({
+  respondio: z.boolean(),
+  mensaje: z.string().nullable(),
+  trabajos: z.array(TrabajoImpresora),
+})
+export type ColaImpresora = z.infer<typeof ColaImpresora>
+
 // POST /api/printers/{id}/identify (docs/72, mejora 4): identified null si no
 // responde o no tiene IP.
 export const Identificacion = z.object({

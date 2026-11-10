@@ -1,6 +1,11 @@
 import { useMemo, useState } from "react"
 import type { ColumnDef } from "@tanstack/react-table"
-import { ExternalLinkIcon, PlusIcon } from "lucide-react"
+import {
+  PencilIcon,
+  PlusIcon,
+  RefreshCwIcon,
+  Trash2Icon,
+} from "lucide-react"
 import { toast } from "sonner"
 import {
   PERMISOS_IMPRESION as P,
@@ -11,6 +16,7 @@ import {
 import { DataTable } from "@/components/data-table"
 import { Panel } from "@/components/ficha"
 import { CampoFiltro } from "@/components/filtro-lista"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -30,27 +36,26 @@ import {
   useIdentificarImpresora,
   useImpresoras,
   useTiendas,
+  useUmbrales,
 } from "./api"
+import { BarraToner, ChipEstado } from "./ChipEstado"
+import { tiposEstado } from "./estado-impresora"
 import { FichaImpresora } from "./FichaImpresora"
 import { FormularioImpresora } from "./FormularioImpresora"
 import {
+  apiSinEstado,
   CLASE_TONO,
   COLOR_PUNTO,
-  conNivel,
   conProblema,
   FILTROS_ESTADO,
   fechaHora,
-  hace,
   nombreTienda,
   pasaFiltroEstado,
-  puerto,
   resumen,
-  textoPrevision,
   TONO_SEVERIDAD,
-  tonoToner,
-  webImpresora,
   type FiltroEstado,
   type Tono,
+  type UmbralToner,
 } from "./formato"
 import { SinActualizar } from "./formulario"
 
@@ -74,20 +79,6 @@ const Etiqueta = ({
   </Badge>
 )
 
-// Lo que dijo la impresora, para el title del estado: su mensaje, el modelo y
-// cuándo se leyó.
-const detalleIpp = (i: Impresora) =>
-  [
-    i.ippStateMessage,
-    i.ippMakeAndModel,
-    i.ippQueuedJobs ? `${i.ippQueuedJobs} en su cola` : null,
-    i.ippCheckedAtUtc
-      ? `Leído: ${fechaHora(i.ippCheckedAtUtc)} (${hace(i.ippCheckedAtUtc)})`
-      : null,
-  ]
-    .filter(Boolean)
-    .join("\n") || undefined
-
 const TODAS = "todas"
 const CONEXION_ITEMS = [
   { value: TODAS, label: "Todas" },
@@ -105,6 +96,8 @@ export default function Impresoras({ clave }: PropsPanel) {
   const gestionar = usePermiso(P.reimprimir)
   const impresoras = useImpresoras()
   const tiendas = useTiendas().data ?? []
+  // Los de Reglas y avisos: la barra de tóner se pinta igual que se configura.
+  const toner = useUmbrales().data?.toner
   const comprobar = useComprobarImpresora()
   const identificar = useIdentificarImpresora()
   const borrar = useBorrarImpresora()
@@ -132,7 +125,7 @@ export default function Impresoras({ clave }: PropsPanel) {
     tienda === TODAS ? lista : lista.filter((i) => String(i.storeId) === tienda)
   const visibles = (
     conexion === TODAS ? deTienda : deTienda.filter(conProblema)
-  ).filter((i) => pasaFiltroEstado(i, estado))
+  ).filter((i) => pasaFiltroEstado(i, estado, toner))
   const enFicha = lista.find((i) => i.printerId === ficha)
 
   // «Comprobar» lee también el estado IPP (docs/72, mejora 1): la lista se relee al acabar.
@@ -177,6 +170,7 @@ export default function Impresoras({ clave }: PropsPanel) {
       columnasImpresoras({
         tiendas,
         conTienda: verTodas && tienda === TODAS,
+        toner,
         admin,
         gestionar,
         comprobando: comprobar.isPending ? comprobar.variables : undefined,
@@ -199,6 +193,7 @@ export default function Impresoras({ clave }: PropsPanel) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       tiendas,
+      toner,
       verTodas,
       tienda,
       admin,
@@ -211,6 +206,16 @@ export default function Impresoras({ clave }: PropsPanel) {
   return (
     <Panel className="[&_table]:min-w-[76rem] [&_table]:table-fixed">
       <SinActualizar consultas={[impresoras]} />
+      {apiSinEstado(lista) && (
+        <Alert>
+          <AlertTitle>El servicio de impresión no está actualizado</AlertTitle>
+          <AlertDescription>
+            Su API es anterior al 10/11/2026: el estado, la ficha completa
+            (firmware, encendida, bandejas, previsión) e Identificar no
+            funcionarán hasta desplegar la última versión en su servidor.
+          </AlertDescription>
+        </Alert>
+      )}
       <DataTable
         key={reinicio}
         columns={columnas}
@@ -344,6 +349,7 @@ export default function Impresoras({ clave }: PropsPanel) {
         <FichaImpresora
           impresora={enFicha}
           tiendas={tiendas}
+          toner={toner}
           gestionar={gestionar}
           comprobando={
             comprobar.isPending && comprobar.variables === enFicha.printerId
@@ -361,6 +367,7 @@ export default function Impresoras({ clave }: PropsPanel) {
 function columnasImpresoras({
   tiendas,
   conTienda,
+  toner,
   admin,
   gestionar,
   comprobando,
@@ -371,6 +378,7 @@ function columnasImpresoras({
 }: {
   tiendas: readonly Tienda[]
   conTienda: boolean
+  toner: UmbralToner | undefined
   admin: boolean
   gestionar: boolean
   comprobando: number | undefined
@@ -401,33 +409,18 @@ function columnasImpresoras({
       // (decisión del usuario, 27/10/2026).
       size: 180,
       accessorKey: "printerName",
-      cell: ({ row: { original: i } }) => {
-        const web = webImpresora(i)
-        return (
-          <span className="flex items-center gap-1">
-            <button
-              type="button"
-              className="truncate text-left font-medium underline-offset-4 hover:underline"
-              title={`Ver la ficha${i.ippMakeAndModel ? ` · ${i.ippMakeAndModel}` : ""}`}
-              onClick={() => onFicha(i.printerId)}
-            >
-              {i.printerName}
-            </button>
-            {web && (
-              <a
-                href={web}
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Abrir la web de la impresora"
-                aria-label={`Abrir la web de ${i.printerName}`}
-                className="shrink-0 text-muted-foreground hover:text-foreground"
-              >
-                <ExternalLinkIcon className="size-3.5" />
-              </a>
-            )}
-          </span>
-        )
-      },
+      // El nombre abre la ficha: subrayado de puntos, discreto (decisión del
+      // usuario, 10/11/2026).
+      cell: ({ row: { original: i } }) => (
+        <button
+          type="button"
+          className="block max-w-full cursor-pointer truncate text-left font-medium underline decoration-muted-foreground/40 decoration-dotted underline-offset-4 hover:decoration-foreground"
+          title={`Ver la ficha${i.ippMakeAndModel ? ` · ${i.ippMakeAndModel}` : ""}`}
+          onClick={() => onFicha(i.printerId)}
+        >
+          {i.printerName}
+        </button>
+      ),
     },
     {
       id: "cola",
@@ -458,28 +451,44 @@ function columnasImpresoras({
         ),
     },
     {
-      id: "activa",
-      header: "Activa",
-      size: 80,
+      // Lo que dice la impresora por IPP, tipificado (docs/72, 10/11/2026): el
+      // tipo más grave con su icono y «+N»; el texto completo en el title.
+      id: "estado",
+      header: "Estado",
+      size: 150,
+      accessorFn: (i) =>
+        tiposEstado(i, toner)
+          .map((t) => t.etiqueta)
+          .join(" "),
       cell: ({ row: { original: i } }) => (
-        <Etiqueta tono={i.isActive ? "ok" : "error"}>
-          {i.isActive ? "Sí" : "No"}
-        </Etiqueta>
+        <ChipEstado impresora={i} umbral={toner} />
+      ),
+    },
+    {
+      id: "toner",
+      header: "Tóner",
+      size: 110,
+      cell: ({ row: { original: i } }) => (
+        <BarraToner impresora={i} umbral={toner} />
       ),
     },
     {
       id: "conexion",
       header: "Conexión",
-      size: 140,
+      size: 130,
       cell: ({ row: { original: i } }) => (
         <Etiqueta
           tono={TONO_SEVERIDAD[i.connectivitySeverity]}
           title={
-            i.connectivityDetail ??
-            i.lastConnectionError ??
-            (i.lastConnectionCheckAtUtc
-              ? `Último chequeo: ${fechaHora(i.lastConnectionCheckAtUtc)}`
-              : undefined)
+            [
+              i.connectivityDetail ?? i.lastConnectionError,
+              i.lastConnectionTransport &&
+                `Responde por ${i.lastConnectionTransport}`,
+              i.lastConnectionCheckAtUtc &&
+                `Último chequeo: ${fechaHora(i.lastConnectionCheckAtUtc)}`,
+            ]
+              .filter(Boolean)
+              .join("\n") || undefined
           }
         >
           {/* Como el PHP: a quien no administra no se le da el detalle. */}
@@ -490,86 +499,9 @@ function columnasImpresoras({
       ),
     },
     {
-      // Lo que dice la impresora por IPP (docs/72, R2): parada, atasco, tóner…
-      id: "estado",
-      header: "Estado",
-      size: 200,
-      accessorFn: (i) => i.ippStateText ?? "",
-      cell: ({ row: { original: i } }) =>
-        i.ippStateText ? (
-          <Etiqueta
-            tono={TONO_SEVERIDAD[i.ippSeverity ?? "neutral"]}
-            title={detalleIpp(i)}
-            className="max-w-full"
-          >
-            <span className="truncate">{i.ippStateText}</span>
-          </Etiqueta>
-        ) : (
-          <span className="text-muted-foreground">-</span>
-        ),
-    },
-    {
-      id: "toner",
-      header: "Tóner",
-      size: 110,
-      cell: ({ row: { original: i } }) => {
-        const consumibles = conNivel(i)
-        if (!consumibles.length)
-          return <span className="text-muted-foreground">-</span>
-        return (
-          <span className="flex flex-col gap-0.5">
-            {consumibles.map((c, n) => {
-              const tono = tonoToner(c.nivel, i)
-              return (
-                <span
-                  key={n}
-                  className="flex items-center gap-1.5"
-                  title={
-                    [c.nombre, textoPrevision(i.tonerDaysLeft)]
-                      .filter(Boolean)
-                      .join("\n") || undefined
-                  }
-                >
-                  <span
-                    aria-hidden
-                    className="h-1.5 w-12 overflow-hidden rounded-full bg-muted"
-                  >
-                    <span
-                      className={cn(
-                        "block h-full rounded-full",
-                        COLOR_PUNTO[tono]
-                      )}
-                      style={{ width: `${c.nivel}%` }}
-                    />
-                  </span>
-                  <span
-                    className={cn(
-                      "text-xs tabular-nums",
-                      tono === "aviso" && "font-semibold text-warning",
-                      tono === "error" && "font-semibold text-destructive"
-                    )}
-                  >
-                    {c.nivel} %
-                  </span>
-                </span>
-              )
-            })}
-          </span>
-        )
-      },
-    },
-    {
-      id: "puerto",
-      header: "Puerto",
-      size: 80,
-      cell: ({ row: { original: i } }) => (
-        <span className="font-mono">{puerto(i.lastConnectionTransport)}</span>
-      ),
-    },
-    {
       id: "ipp",
       header: "IPP",
-      size: 80,
+      size: 70,
       cell: ({ row: { original: i } }) =>
         i.ippSupported === null ? (
           <Etiqueta tono="aviso" title="Compatibilidad IPP sin comprobar">
@@ -585,35 +517,60 @@ function columnasImpresoras({
           </Etiqueta>
         ),
     },
+    {
+      id: "activa",
+      header: "Activa",
+      size: 70,
+      cell: ({ row: { original: i } }) => (
+        <Etiqueta tono={i.isActive ? "ok" : "error"}>
+          {i.isActive ? "Sí" : "No"}
+        </Etiqueta>
+      ),
+    },
   ]
   if (!gestionar) return columnas
+  // Iconos en vez de botones con texto (docs/72, 10/11/2026): el nombre va en
+  // el title y en aria-label.
   return [
     ...columnas,
     {
       id: "acciones",
       header: "",
-      size: admin ? 250 : 110,
+      size: admin ? 100 : 44,
       cell: ({ row: { original: i } }) => (
-        <div className="flex justify-end gap-1">
+        <div className="flex justify-end gap-0.5">
           <Button
-            size="xs"
-            variant="outline"
+            size="icon-xs"
+            variant="ghost"
             disabled={comprobando === i.printerId}
+            title="Comprobar conexión y estado"
+            aria-label={`Comprobar ${i.printerName}`}
             onClick={() => onComprobar(i.printerId)}
           >
-            {comprobando === i.printerId ? "Comprobando…" : "Comprobar"}
+            <RefreshCwIcon
+              className={cn(comprobando === i.printerId && "animate-spin")}
+            />
           </Button>
           {admin && (
             <>
-              <Button size="xs" variant="outline" onClick={() => onEditar(i)}>
-                Editar
+              <Button
+                size="icon-xs"
+                variant="ghost"
+                title="Editar"
+                aria-label={`Editar ${i.printerName}`}
+                onClick={() => onEditar(i)}
+              >
+                <PencilIcon />
               </Button>
               <Button
-                size="xs"
-                variant="destructive"
+                size="icon-xs"
+                variant="ghost"
+                className="text-destructive hover:text-destructive"
+                title="Eliminar"
+                aria-label={`Eliminar ${i.printerName}`}
                 onClick={() => onBorrar(i)}
               >
-                Eliminar
+                <Trash2Icon />
               </Button>
             </>
           )}

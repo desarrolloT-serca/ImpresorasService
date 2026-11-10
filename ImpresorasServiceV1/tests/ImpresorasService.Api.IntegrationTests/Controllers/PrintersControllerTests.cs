@@ -137,6 +137,19 @@ public sealed class PrintersControllerTests : IntegrationTestBase
         Assert.True(dto.GetProperty("ippUpSinceUtc").GetDateTimeOffset() < ahora.AddMinutes(-59));
     }
 
+    // R3: la cola de la impresora, sin IP, lo dice sin llamar a nadie.
+    [Fact]
+    public async Task Jobs_SinIp_LoDice()
+    {
+        var created = await CreatePrinterAsync(N("P-Cola"), $"\\\\srv\\q{Guid.NewGuid():N}"[..30], 1);
+
+        var r = await Client.GetFromJsonAsync<JsonElement>($"/api/printers/{created.PrinterId}/jobs");
+
+        Assert.False(r.GetProperty("respondio").GetBoolean());
+        Assert.Contains("no tiene IP", r.GetProperty("mensaje").GetString());
+        Assert.Equal(0, r.GetProperty("trabajos").GetArrayLength());
+    }
+
     // Sin IP no se puede identificar: lo dice sin llamar a nadie.
     [Fact]
     public async Task Identify_SinIp_LoDice()

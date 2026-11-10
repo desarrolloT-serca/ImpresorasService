@@ -13,6 +13,8 @@ const brother = {
   connectivityLabel: "OK",
   lastConnectionTransport: "tcp/515",
   ippSeverity: "warning",
+  ippState: 3,
+  ippStateReasons: "opc-life-over-warning",
   ippStateText: "El cartucho fotoconductor ha llegado al final de su vida útil",
   ippStateMessage: "Cambie tambor, Espera",
   ippStateSinceUtc: "2026-11-10T08:44:00Z",
@@ -47,27 +49,68 @@ describe("ficha de la impresora", () => {
       />
     )
 
-  it("enseña estado, mensaje, tóner con previsión, bandejas, firmware y su web", () => {
+  it("cabecera con estado y acciones, y tarjetas de tóner, papel, conexión y equipo", () => {
     ficha(true)
+    expect(screen.getByText("Tambor")).toBeTruthy()
     expect(screen.getByText(/fotoconductor/)).toBeTruthy()
-    expect(screen.getByText("Cambie tambor, Espera")).toBeTruthy()
+    // El panel, sin «Espera».
+    expect(screen.getByText("Panel: Cambie tambor")).toBeTruthy()
     expect(screen.getByText("14 %")).toBeTruthy()
-    expect(screen.getByText(/Llega al crítico en unos 20 días/)).toBeTruthy()
+    expect(screen.getByText("Llega al crítico en unos 20 días")).toBeTruthy()
+    expect(screen.getByText(/Aviso al 20 %, crítico al 10 %/)).toBeTruthy()
     expect(screen.getByText("Con papel")).toBeTruthy()
     expect(screen.getByText("R2007171728:BC14, 1.04")).toBeTruthy()
+    for (const t of ["Tóner", "Papel", "Conexión", "Equipo"])
+      expect(screen.getByRole("heading", { name: t })).toBeTruthy()
     expect(
-      screen.getByRole("link", { name: /Abrir la web/ }).getAttribute("href")
+      screen
+        .getByRole("link", { name: "Abrir la web de la impresora" })
+        .getAttribute("href")
     ).toBe("http://192.42.225.115/")
     // Sin IP no se puede identificar.
     expect(
-      (screen.getByRole("button", { name: "Identificar" }) as HTMLButtonElement)
-        .disabled
+      (
+        screen.getByRole("button", {
+          name: "Sin IP no se puede identificar",
+        }) as HTMLButtonElement
+      ).disabled
     ).toBe(true)
   })
 
-  it("sin poder gestionar no salen Identificar ni Comprobar", () => {
+  it("los umbrales del tóner son los de Reglas y avisos", () => {
+    render(
+      <FichaImpresora
+        impresora={brother}
+        tiendas={[]}
+        toner={{ aviso: 30, critico: 15 }}
+        gestionar={false}
+        comprobando={false}
+        identificando={false}
+        onComprobar={() => {}}
+        onIdentificar={() => {}}
+        onCerrar={() => {}}
+      />
+    )
+    expect(screen.getByText(/Aviso al 30 %, crítico al 15 %/)).toBeTruthy()
+    expect(screen.getByText("Tóner crítico")).toBeTruthy()
+  })
+
+  it("la cola de la impresora va en su pestaña, con lo que tiene en cola", () => {
     ficha(false)
-    expect(screen.queryByRole("button", { name: "Identificar" })).toBeNull()
-    expect(screen.queryByRole("button", { name: "Comprobar" })).toBeNull()
+    const pestana = screen.getByRole("tab", { name: /Cola de la impresora/ })
+    expect(pestana.getAttribute("aria-selected")).toBe("false")
+    expect(
+      screen.getByRole("tab", { name: "Estado" }).getAttribute("aria-selected")
+    ).toBe("true")
+  })
+
+  it("sin poder gestionar no salen Comprobar ni Identificar", () => {
+    ficha(false)
+    expect(
+      screen.queryByRole("button", { name: "Comprobar conexión y estado" })
+    ).toBeNull()
+    expect(
+      screen.queryByRole("button", { name: /Identificar|identificar/ })
+    ).toBeNull()
   })
 })

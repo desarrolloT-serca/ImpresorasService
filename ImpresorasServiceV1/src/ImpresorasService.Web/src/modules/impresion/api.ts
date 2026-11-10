@@ -10,6 +10,7 @@ import { z } from "zod"
 import {
   AvisoTelegram,
   ChatTelegram,
+  ColaImpresora,
   ConfigTelegram,
   Conexion,
   DatosChat,
@@ -484,6 +485,16 @@ export function useComprobarImpresora() {
       cache.invalidateQueries({ queryKey: ["impresion", "impresoras"] }),
   })
 }
+
+// La cola de la propia impresora, en directo (docs/72, R3): solo mientras se
+// mira, cada 10 s.
+export const useColaImpresora = (id: number) =>
+  useQuery({
+    queryKey: ["impresion", "colaImpresora", id],
+    queryFn: ({ signal }) =>
+      api(`/impresion/printers/${id}/jobs`, ColaImpresora, { signal }),
+    refetchInterval: 10_000,
+  })
 
 // Que la impresora pite o parpadee para encontrarla (docs/72, mejora 4).
 export const useIdentificarImpresora = () =>

@@ -4,6 +4,7 @@ import {
   type BandejaImpresora,
   type Impresora,
   type MotivoReimpresion,
+  type ReglasUmbral,
   type ReglaEnrutado,
   type Salud,
   type SeveridadConexion,
@@ -19,13 +20,17 @@ export const ESTADOS: Record<number, { etiqueta: string; tono: Tono }> = {
   [E.pendiente]: { etiqueta: "Pendiente", tono: "aviso" },
   [E.enrutado]: { etiqueta: "Enrutado", tono: "info" },
   [E.imprimiendo]: { etiqueta: "Imprimiendo", tono: "aviso" },
-  [E.aceptado]: { etiqueta: "Aceptado", tono: "ok" },
+  // La impresora lo tiene, pero aún no ha confirmado que salió (docs/72,
+  // 10/11/2026): no es «impreso», por eso no va en verde.
+  [E.aceptado]: { etiqueta: "En la impresora", tono: "info" },
   [E.impreso]: { etiqueta: "Impreso", tono: "ok" },
-  [E.sinConfirmar]: { etiqueta: "Sin confirmar", tono: "ok" },
+  // Puede haber salido o no: hay que mirarlo (revisión de KPI, F9).
+  [E.sinConfirmar]: { etiqueta: "Sin confirmar", tono: "aviso" },
   [E.reintentoProgramado]: { etiqueta: "Reintento programado", tono: "aviso" },
   [E.cancelado]: { etiqueta: "Cancelado", tono: "neutro" },
   [E.error]: { etiqueta: "Error", tono: "error" },
-  [E.bloqueado]: { etiqueta: "Bloqueado", tono: "aviso" },
+  // Parado en la impresora (sin papel, atasco…): el motivo va en la cola.
+  [E.bloqueado]: { etiqueta: "Parado en la impresora", tono: "aviso" },
 }
 
 export const TONO_SEVERIDAD: Record<SeveridadConexion, Tono> = {
@@ -272,6 +277,15 @@ export function webImpresora(i: Impresora) {
   }
 }
 
+// Aviso al abrir su web (docs/72, 10/11/2026). Desde el ERP (HTTPS) no se puede
+// comprobar antes si este equipo llega a la impresora (HTTP, en 192.42.x.x, que
+// no es red privada): el navegador lo bloquea por contenido mixto. Así que se
+// abre y se dice qué pasa si no carga.
+export const avisoWeb = (i: Impresora, tiendas: readonly Tienda[]) => ({
+  titulo: `Abriendo la web de ${i.printerName}`,
+  detalle: `Si la pestaña no carga, este equipo no tiene acceso a la red de la tienda ${nombreTienda(i.storeId, tiendas)}: ábrela desde un equipo de esa tienda.`,
+})
+
 // Los consumibles con nivel en %: -1, -2 y -3 no son un porcentaje.
 export const conNivel = (i: Impresora) =>
   (i.ippMarkers ?? []).filter(
@@ -279,14 +293,25 @@ export const conNivel = (i: Impresora) =>
       c.nivel !== null && c.nivel >= 0 && c.nivel <= 100
   )
 
-// Color del tóner por los umbrales de Umbrales, que la API manda con cada
-// impresora (por defecto 20 % aviso y 10 % crítico, como UmbralToner.Default).
-export const tonoToner = (nivel: number, i: Impresora): Tono =>
-  nivel <= (i.tonerCriticalPct ?? 10)
+// Color del tóner con los umbrales de Reglas y avisos (GET threshold-rules, lo
+// mismo que enseña esa pantalla). Sin ellos, los que manda la API con cada
+// impresora y, con una API anterior, 20 % y 10 % (UmbralToner.Default).
+export type UmbralToner = ReglasUmbral["toner"]
+export const tonoToner = (
+  nivel: number,
+  i: Impresora,
+  umbral?: UmbralToner
+): Tono =>
+  nivel <= (umbral?.critico ?? i.tonerCriticalPct ?? 10)
     ? "error"
-    : nivel <= (i.tonerWarningPct ?? 20)
+    : nivel <= (umbral?.aviso ?? i.tonerWarningPct ?? 20)
       ? "aviso"
       : "ok"
+
+// La API del servicio es anterior a R2 (no manda la gravedad): estado, ficha e
+// Identificar no funcionan hasta desplegarla (docs/72, 10/11/2026).
+export const apiSinEstado = (impresoras: readonly Impresora[]) =>
+  impresoras.length > 0 && impresoras.every((i) => i.ippSeverity === undefined)
 
 // Filtro «Estado» de Impresoras (docs/72, mejora 2): lo que dice la propia
 // impresora. «Tóner bajo» mira los umbrales de Umbrales; «Paradas o con error»,
@@ -299,12 +324,16 @@ export const FILTROS_ESTADO = [
 ] as const
 export type FiltroEstado = (typeof FILTROS_ESTADO)[number]["value"]
 
-export function pasaFiltroEstado(i: Impresora, filtro: FiltroEstado) {
+export function pasaFiltroEstado(
+  i: Impresora,
+  filtro: FiltroEstado,
+  umbral?: UmbralToner
+) {
   if (filtro === "avisos")
     return i.ippSeverity === "critical" || i.ippSeverity === "warning"
   if (filtro === "criticas") return i.ippSeverity === "critical"
   if (filtro === "toner")
-    return conNivel(i).some((c) => tonoToner(c.nivel, i) !== "ok")
+    return conNivel(i).some((c) => tonoToner(c.nivel, i, umbral) !== "ok")
   return true
 }
 

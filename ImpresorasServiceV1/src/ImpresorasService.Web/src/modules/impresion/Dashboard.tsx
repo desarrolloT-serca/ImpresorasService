@@ -46,7 +46,6 @@ import {
   hace,
   nombreTienda,
   SALUD,
-  TONO_SEVERIDAD,
   type Tono,
 } from "./formato"
 import { SinActualizar } from "./formulario"
@@ -290,6 +289,7 @@ export default function Dashboard() {
         ? incidencias(datos, impresoras, {
             admin,
             umbralCola: (s) => umbral(umbrales, "queue", s),
+            toner: umbrales?.toner,
           })
         : [],
     [datos, impresoras, admin, umbrales]
@@ -569,7 +569,7 @@ export default function Dashboard() {
         )}
       </Seccion>
 
-      {verTodas && tienda === undefined ? (
+      {verTodas && tienda === undefined && (
         <Seccion
           titulo="Salud por tienda, ahora"
           meta={`las que tienen problemas, primero · ${todasLasFilas ? ordenadas.length : Math.min(FILAS_SALUD, ordenadas.length)} de ${ordenadas.length}`}
@@ -592,14 +592,6 @@ export default function Dashboard() {
                 : `Ver las ${ordenadas.length} tiendas`}
             </Button>
           )}
-        </Seccion>
-      ) : (
-        <Seccion titulo="Impresoras de la tienda">
-          <ImpresorasDeTienda
-            tienda={datos.stores[0]}
-            impresoras={enAmbito}
-            admin={admin}
-          />
         </Seccion>
       )}
     </Panel>
@@ -821,57 +813,4 @@ function columnasDeSalud(
       ),
     },
   ]
-}
-
-// Vista de una tienda: sus impresoras con lo que tienen en cola y lo del periodo.
-function ImpresorasDeTienda({
-  tienda,
-  impresoras,
-  admin,
-}: {
-  tienda?: TiendaDashboard
-  impresoras: readonly Impresora[]
-  admin: boolean
-}) {
-  if (!tienda)
-    return (
-      <p className="text-sm text-muted-foreground">Sin datos de la tienda.</p>
-    )
-  if (!tienda.printers.length)
-    return (
-      <p className="text-sm text-muted-foreground">
-        La tienda no tiene impresoras activas.
-      </p>
-    )
-  return (
-    <ul className="divide-y rounded-md border">
-      {tienda.printers.map((p) => {
-        const i = impresoras.find((x) => x.printerId === p.printerId)
-        return (
-          <li
-            key={p.printerId}
-            className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 text-sm"
-          >
-            <span className="min-w-40 flex-1 font-medium">
-              {i?.printerName ?? `Impresora ${p.printerId}`}
-            </span>
-            {i && (
-              <Etiqueta tono={TONO_SEVERIDAD[i.connectivitySeverity]}>
-                {i.connectivityStatus === "error" && !admin
-                  ? "Sin conexión"
-                  : i.connectivityLabel}
-              </Etiqueta>
-            )}
-            <span className="text-muted-foreground tabular-nums">
-              {num(p.queueCurrent)} en cola
-            </span>
-            <span className="text-muted-foreground tabular-nums">
-              {num(p.receivedWindow)} recibidos · {num(p.failedWindow)} fallidos
-              en el periodo
-            </span>
-          </li>
-        )
-      })}
-    </ul>
-  )
 }

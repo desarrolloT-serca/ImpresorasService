@@ -22,6 +22,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ImpresorasService.Api\ImpresorasService.Api.csproj" />
+    <!-- Con alias: su Program chocaría con el de la Api (WebApplicationFactory<Program>). -->
+    <ProjectReference Include="..\..\src\ImpresorasService.Worker\ImpresorasService.Worker.csproj" Aliases="worker" />
   </ItemGroup>
 
 </Project>
