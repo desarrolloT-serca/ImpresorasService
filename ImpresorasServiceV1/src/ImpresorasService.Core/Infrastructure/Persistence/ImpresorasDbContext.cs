@@ -150,6 +150,7 @@ public class ImpresorasDbContext : DbContext
     public DbSet<SourcePrintJobRecord> SourcePrintJobs => Set<SourcePrintJobRecord>();
     public DbSet<Printer> Printers => Set<Printer>();
     public DbSet<TonerReading> TonerReadings => Set<TonerReading>();
+    public DbSet<PageCounterReading> PageCounterReadings => Set<PageCounterReading>();
     public DbSet<RoutingRule> RoutingRules => Set<RoutingRule>();
     public DbSet<User> Users => Set<User>();
     public DbSet<Store> Stores => Set<Store>();
@@ -321,6 +322,20 @@ public class ImpresorasDbContext : DbContext
             entity.Property(x => x.Level).HasColumnName("level");
             entity.Property(x => x.ReadAtUtc).HasColumnName("read_at_utc");
             entity.HasIndex(x => new { x.PrinterId, x.Marker, x.ReadAtUtc });
+        });
+
+        modelBuilder.Entity<PageCounterReading>(entity =>
+        {
+            entity.ToTable("printer_page_counter");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Id).HasColumnName("id").ValueGeneratedOnAdd();
+            entity.Property(x => x.PrinterId).HasColumnName("printer_id");
+            entity.Property(x => x.BusinessDay).HasColumnName("business_day");
+            entity.Property(x => x.TotalPages).HasColumnName("total_pages");
+            entity.Property(x => x.Source).HasColumnName("source").HasMaxLength(20).IsRequired();
+            entity.Property(x => x.ReadAtUtc).HasColumnName("read_at_utc");
+            entity.Property(x => x.TonerDaysLeft).HasColumnName("toner_days_left");
+            entity.HasIndex(x => new { x.PrinterId, x.BusinessDay }).IsUnique();
         });
 
         modelBuilder.Entity<RoutingRule>(entity =>

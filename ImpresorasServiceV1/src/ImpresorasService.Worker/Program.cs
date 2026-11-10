@@ -30,6 +30,7 @@ builder.Services.AddHostedService<SpoolAcceptedWatchdogBackgroundService>();
 builder.Services.AddHostedService<PrinterConnectivityMonitorService>();
 builder.Services.AddHostedService<StoreHealthAlertBackgroundService>();
 builder.Services.AddHostedService<PdfRetentionBackgroundService>();
+builder.Services.AddHostedService<PageCounterBackgroundService>();
 
 var host = builder.Build();
 
