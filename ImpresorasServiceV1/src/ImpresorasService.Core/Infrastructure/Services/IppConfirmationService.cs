@@ -29,7 +29,9 @@ internal sealed class IppConfirmationService : IIppConfirmationService, IDisposa
     [
         "printer-state", "printer-state-reasons", "printer-state-message", "printer-alert-description",
         "queued-job-count", "marker-names", "marker-colors", "marker-types", "marker-levels",
-        "marker-low-levels", "printer-make-and-model", "printer-more-info"
+        "marker-low-levels", "printer-make-and-model", "printer-more-info",
+        // Para la ficha (docs/72, mejora 6).
+        "printer-firmware-string-version", "printer-up-time", "printer-input-tray"
     ];
 
     internal static IppEstadoImpresora LeerEstado(IppRespuesta r)
@@ -53,6 +55,21 @@ internal sealed class IppConfirmationService : IIppConfirmationService, IDisposa
                 i < niveles.Count ? niveles[i] : null, i < bajos.Count ? bajos[i] : null))
             .ToList();
 
+        // printer-input-tray: «type=…;maxcapacity=550;level=1100;name=Drawer 1;». La «auto» (type=other)
+        // no es una bandeja de verdad.
+        var bandejas = r.Textos("printer-input-tray")
+            .Select(t => t.Split(';', StringSplitOptions.RemoveEmptyEntries)
+                .Select(kv => kv.Split('=', 2))
+                .Where(kv => kv.Length == 2)
+                .GroupBy(kv => kv[0].Trim())
+                .ToDictionary(g => g.Key, g => g.First()[1].Trim()))
+            .Where(d => d.GetValueOrDefault("type") != "other")
+            .Select(d => new IppBandeja(
+                Recorta(d.GetValueOrDefault("name"), 60),
+                int.TryParse(d.GetValueOrDefault("maxcapacity"), out var cap) ? cap : null,
+                int.TryParse(d.GetValueOrDefault("level"), out var niv) ? niv : null))
+            .ToList();
+
         return new IppEstadoImpresora(
             r.Entero("printer-state"),
             Recorta(Une(r.Textos("printer-state-reasons").Where(x => x != "none")), 400),
@@ -60,7 +77,13 @@ internal sealed class IppConfirmationService : IIppConfirmationService, IDisposa
             r.Entero("queued-job-count"),
             consumibles,
             Recorta(r.Textos("printer-make-and-model").FirstOrDefault(), 200),
-            Recorta(r.Textos("printer-more-info").FirstOrDefault(), 400));
+            Recorta(r.Textos("printer-more-info").FirstOrDefault(), 400))
+        {
+            // La Brother L2710DW da dos: el del sistema y el de la placa de red.
+            Firmware = Recorta(Une(r.Textos("printer-firmware-string-version")), 200),
+            EncendidaSegundos = r.Entero("printer-up-time") is >= 0 and var s ? s : null,
+            Bandejas = bandejas
+        };
     }
 
     private readonly HttpClient _http;
@@ -299,6 +322,48 @@ internal sealed class IppConfirmationService : IIppConfirmationService, IDisposa
             _logger.LogDebug(ex, "IPP: sin estado del trabajo {JobId} en {Host}.", jobId, ip);
             return null;
         }
+    }
+
+    public async Task<bool?> IdentifyAsync(string printerHost, CancellationToken ct)
+    {
+        var ip = ParseHost(printerHost);
+        if (ip is null)
+            return null;
+        try
+        {
+            var respondio = false;
+            foreach (var ruta in Rutas)
+            {
+                using var consulta = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                consulta.CancelAfter(_options.Value.IppTimeoutMs);
+                var r = await PostAsync(ip, ruta, BuildIdentifyRequest(ip, ruta), consulta.Token);
+                respondio |= r.Http == 200;
+                if (r.Http == 200 && r.Estado is < 0x0100)
+                    return true;
+            }
+            return respondio ? false : null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            _logger.LogDebug(ex, "IPP Identify-Printer sin respuesta de {Host}.", ip);
+            return null;
+        }
+    }
+
+    // Identify-Printer (0x003C, PWG 5100.13), sin identify-actions: lo que haga por defecto la impresora.
+    internal static byte[] BuildIdentifyRequest(string ip, string ruta)
+    {
+        var ms = new MemoryStream();
+        ms.WriteByte(0x01); ms.WriteByte(0x01);   // version 1.1
+        ms.WriteByte(0x00); ms.WriteByte(0x3C);   // operation: Identify-Printer
+        ms.Write([0x00, 0x00, 0x00, 0x01]);        // request-id = 1
+        ms.WriteByte(0x01);                        // begin-attribute-group: operation-attributes
+        WriteAttr(ms, 0x47, "attributes-charset", "utf-8");
+        WriteAttr(ms, 0x48, "attributes-natural-language", "en-us");
+        WriteAttr(ms, 0x45, "printer-uri", $"ipp://{ip}:631{ruta}");
+        WriteAttr(ms, 0x42, "requesting-user-name", "ImpresorasService");
+        ms.WriteByte(0x03); // end-of-attributes
+        return ms.ToArray();
     }
 
     public async Task<CancelacionEnImpresora> CancelJobAsync(string printerHost, int jobId, string jobName, CancellationToken ct)

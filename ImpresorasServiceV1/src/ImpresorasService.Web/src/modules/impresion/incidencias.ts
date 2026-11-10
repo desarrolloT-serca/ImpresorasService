@@ -76,7 +76,12 @@ export function incidencias(
       (i) => activas.has(i.printerId) && i.connectivityStatus === estado
     )
   }
-  const lista: Incidencia[] = resumen.alerts.map((a) => {
+  // La alerta de tienda por el estado de la impresora (la que manda Telegram:
+  // docs/72, mejora 5) se cambia por una fila por impresora, más abajo.
+  const alertas = resumen.alerts.filter(
+    (a) => !a.healthReason.includes("(estado de la impresora)")
+  )
+  const lista: Incidencia[] = alertas.map((a) => {
     const motivo = a.healthReason.toLowerCase()
     const t = tiendas.get(a.storeId)
     const base = {
@@ -251,8 +256,8 @@ export function incidencias(
       })
   // Lo que dice la propia impresora por IPP (docs/72, R2): parada, atasco,
   // puerta abierta, tóner bajo. Solo las activas del resumen; con lectura vieja
-  // o sin conexión la API da «neutral» y no sale. No hay «Desde»: se guarda
-  // solo la última lectura (D-72.3).
+  // o sin conexión la API da «neutral» y no sale. «Desde»: desde cuándo dura
+  // ese estado (docs/72, mejora 3).
   for (const t of resumen.stores) {
     const activas = new Set(t.printers.map((p) => p.printerId))
     for (const i of todasLasImpresoras)
@@ -267,7 +272,7 @@ export function incidencias(
           tipo: "Impresora",
           detalle: `${i.printerName}: ${i.ippStateText ?? "con incidencias"}`,
           resto: i.ippStateMessage ?? "",
-          desde: null,
+          desde: i.ippStateSinceUtc ?? null,
           destinos: [impresoras(t, "Ver impresoras")],
         })
   }

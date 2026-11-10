@@ -123,6 +123,42 @@ describe("incidencias de la propia impresora (docs/72, R2)", () => {
   })
 })
 
+describe("incidencias de la impresora con su «Desde» (docs/72, mejoras 3 y 5)", () => {
+  it("usan desde cuándo dura el estado y no repiten la alerta de tienda de la API", () => {
+    const r = resumen({
+      stores: [tienda(2)],
+      alerts: [
+        alerta(
+          2,
+          "warning",
+          "Impresora(s) con avisos (estado de la impresora)"
+        ),
+      ],
+    })
+    const lista = incidencias(
+      r,
+      [
+        {
+          printerId: 20,
+          printerName: "P20",
+          connectivityStatus: "ok",
+          ippSeverity: "warning",
+          ippStateText: "BK al 14 %",
+          ippStateMessage: null,
+          ippStateSinceUtc: "2026-11-09T08:00:00Z",
+        } as Impresora,
+      ],
+      opciones
+    )
+    expect(lista).toHaveLength(1)
+    expect(lista[0]).toMatchObject({
+      tipo: "Impresora",
+      detalle: "P20: BK al 14 %",
+      desde: "2026-11-09T08:00:00Z",
+    })
+  })
+})
+
 describe("incidencias (como operacion.blade.php)", () => {
   it("clasifica por el motivo de la API y nombra la impresora que falla", () => {
     const r = resumen({

@@ -1,6 +1,7 @@
 import {
   ESTADOS_TRABAJO as E,
   MAX_NOTA_REIMPRESION,
+  type BandejaImpresora,
   type Impresora,
   type MotivoReimpresion,
   type ReglaEnrutado,
@@ -253,12 +254,23 @@ export function resumen(impresoras: readonly Impresora[]): {
   return { tono: "ok", texto: "OK" }
 }
 
-// Su web de estado (printer-more-info), solo si es http(s): la dirección la
-// manda la impresora y va en un enlace.
-export const webImpresora = (i: Impresora) =>
-  i.ippMoreInfoUrl && /^https?:\/\/[^\s]+$/i.test(i.ippMoreInfoUrl)
-    ? i.ippMoreInfoUrl
-    : null
+// Su web, a partir de printer-more-info, solo si es http(s): la dirección la
+// manda la impresora y va en un enlace. Se abre la raíz (mismo esquema, IP y
+// puerto) y no la ruta que da: es la de ajustes de AirPrint, que pide entrar
+// como administrador (Brother: loginerror.html; Canon: /rps/airprint). La raíz
+// es el portal de la Canon (:8000) y la página de estado de la Brother
+// (comprobado el 10/11/2026).
+export function webImpresora(i: Impresora) {
+  if (!i.ippMoreInfoUrl) return null
+  try {
+    const u = new URL(i.ippMoreInfoUrl)
+    return u.protocol === "http:" || u.protocol === "https:"
+      ? `${u.origin}/`
+      : null
+  } catch {
+    return null
+  }
+}
 
 // Los consumibles con nivel en %: -1, -2 y -3 no son un porcentaje.
 export const conNivel = (i: Impresora) =>
@@ -275,6 +287,47 @@ export const tonoToner = (nivel: number, i: Impresora): Tono =>
     : nivel <= (i.tonerWarningPct ?? 20)
       ? "aviso"
       : "ok"
+
+// Filtro «Estado» de Impresoras (docs/72, mejora 2): lo que dice la propia
+// impresora. «Tóner bajo» mira los umbrales de Umbrales; «Paradas o con error»,
+// la gravedad crítica (parada, atasco, puerta, tóner crítico).
+export const FILTROS_ESTADO = [
+  { value: "todas", label: "Todas" },
+  { value: "avisos", label: "Con avisos o errores" },
+  { value: "criticas", label: "Paradas o con error" },
+  { value: "toner", label: "Tóner bajo" },
+] as const
+export type FiltroEstado = (typeof FILTROS_ESTADO)[number]["value"]
+
+export function pasaFiltroEstado(i: Impresora, filtro: FiltroEstado) {
+  if (filtro === "avisos")
+    return i.ippSeverity === "critical" || i.ippSeverity === "warning"
+  if (filtro === "criticas") return i.ippSeverity === "critical"
+  if (filtro === "toner")
+    return conNivel(i).some((c) => tonoToner(c.nivel, i) !== "ok")
+  return true
+}
+
+// Cuándo llega el tóner al umbral crítico, por la previsión de la API (docs/72,
+// mejora 7). Sin historial suficiente, nada.
+export const textoPrevision = (dias: number | null | undefined) =>
+  dias === null || dias === undefined
+    ? null
+    : dias === 0
+      ? "En el umbral crítico"
+      : dias === 1
+        ? "Llega al crítico en 1 día"
+        : `Llega al crítico en unos ${dias} días`
+
+// Bandeja (printer-input-tray): -3 «hay algo», -2 o sin dato, desconocido.
+export function textoBandeja(b: BandejaImpresora) {
+  if (b.nivel === 0) return "Vacía"
+  if (b.nivel === -3) return "Con papel"
+  if (b.nivel === null || b.nivel < 0) return "Sin dato"
+  return b.capacidad && b.capacidad > 0
+    ? `${b.nivel} de ${b.capacidad} hojas`
+    : `${b.nivel} hojas`
+}
 
 // Tope del eje de la gráfica, redondeado al alza a un múltiplo del paso, como
 // el PHP: 7 → 8, 47 → 50, 130 → 150, 430 → 500.

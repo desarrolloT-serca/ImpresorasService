@@ -4,6 +4,7 @@ import {
   autor,
   conNivel,
   conProblema,
+  pasaFiltroEstado,
   documentoErp,
   enOrden,
   nivelRegla,
@@ -17,6 +18,8 @@ import {
   puedeReintentar,
   puerto,
   resumen,
+  textoBandeja,
+  textoPrevision,
   tonoToner,
   webImpresora,
 } from "@/modules/impresion/formato"
@@ -116,15 +119,71 @@ describe("color del tóner (umbrales de Umbrales)", () => {
   })
 })
 
+describe("filtro, previsión y bandejas (docs/72, mejoras 2, 6 y 7)", () => {
+  const con = (extra: Partial<Impresora>) => extra as Impresora
+  const marcador = (nivel: number) => ({
+    nombre: "BK",
+    color: null,
+    tipo: "toner",
+    nivel,
+    bajo: 7,
+  })
+  it("filtra por lo que dice la propia impresora", () => {
+    const parada = con({ ippSeverity: "critical", ippMarkers: [marcador(80)] })
+    const tambor = con({ ippSeverity: "warning", ippMarkers: [marcador(60)] })
+    const toner = con({ ippSeverity: "warning", ippMarkers: [marcador(14)] })
+    const bien = con({ ippSeverity: "healthy", ippMarkers: [marcador(90)] })
+    const todas = [parada, tambor, toner, bien]
+    expect(todas.filter((i) => pasaFiltroEstado(i, "avisos"))).toEqual([
+      parada,
+      tambor,
+      toner,
+    ])
+    expect(todas.filter((i) => pasaFiltroEstado(i, "criticas"))).toEqual([
+      parada,
+    ])
+    expect(todas.filter((i) => pasaFiltroEstado(i, "toner"))).toEqual([toner])
+    expect(todas.filter((i) => pasaFiltroEstado(i, "todas"))).toHaveLength(4)
+  })
+  it("dice cuándo llega el tóner al crítico, si se sabe", () => {
+    expect(textoPrevision(20)).toBe("Llega al crítico en unos 20 días")
+    expect(textoPrevision(1)).toBe("Llega al crítico en 1 día")
+    expect(textoPrevision(0)).toBe("En el umbral crítico")
+    expect(textoPrevision(null)).toBe(null)
+  })
+  it("cuenta las hojas de cada bandeja o lo que se sabe", () => {
+    expect(
+      textoBandeja({ nombre: "Drawer 1", capacidad: 550, nivel: 1100 })
+    ).toBe("1100 de 550 hojas")
+    expect(textoBandeja({ nombre: "TRAY1", capacidad: 250, nivel: -3 })).toBe(
+      "Con papel"
+    )
+    expect(textoBandeja({ nombre: "Bypass", capacidad: 100, nivel: 0 })).toBe(
+      "Vacía"
+    )
+    expect(textoBandeja({ nombre: "X", capacidad: null, nivel: -2 })).toBe(
+      "Sin dato"
+    )
+  })
+})
+
 describe("web y consumibles de la impresora", () => {
   const con = (extra: Partial<Impresora>) =>
     ({ ...impresora("healthy"), ...extra }) as Impresora
-  it("solo enlaza su web si es http(s)", () => {
+  it("enlaza la raíz de su web, solo si es http(s)", () => {
+    // Canon: portal (Remote UI) en el mismo puerto.
     expect(
       webImpresora(
         con({ ippMoreInfoUrl: "http://192.42.170.6:8000/rps/airprint" })
       )
-    ).toBe("http://192.42.170.6:8000/rps/airprint")
+    ).toBe("http://192.42.170.6:8000/")
+    // Brother: la raíz lleva a la página de estado, sin login.
+    expect(
+      webImpresora(
+        con({ ippMoreInfoUrl: "http://192.42.170.28/net/net/airprint.html" })
+      )
+    ).toBe("http://192.42.170.28/")
+    expect(webImpresora(con({ ippMoreInfoUrl: "no es una url" }))).toBe(null)
     expect(webImpresora(con({ ippMoreInfoUrl: "javascript:alert(1)" }))).toBe(
       null
     )

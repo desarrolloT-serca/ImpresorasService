@@ -130,6 +130,12 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
             {
                 p.StoreId, p.IsActive, p.LastConnectionOk,
                 p.LastConnectionCheckAtUtc, p.LastConnectionError, p.ConnectionFailuresStreak,
+                // Estado de la propia impresora (docs/72, mejora 5): lo que necesita Describir.
+                Ipp = new Printer
+                {
+                    IppState = p.IppState, IppStateReasons = p.IppStateReasons,
+                    IppMarkersJson = p.IppMarkersJson, IppCheckedAtUtc = p.IppCheckedAtUtc
+                }
             })
             .ToListAsync(ct))
             .GroupBy(p => p.StoreId)
@@ -186,9 +192,17 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
             var connWarn = 0;
             var connCrit = 0;
             var connMaxStreak = 0;
+            var ippCrit = 0;
+            var ippWarn = 0;
 
             foreach (var p in printers)
             {
+                switch (IppEstadoImpresora.Describir(p.Ipp, now, rules.Toner).Gravedad)
+                {
+                    case "critical": ippCrit++; break;
+                    case "warning": ippWarn++; break;
+                }
+
                 var descriptor = PrinterConnectivityState.FromSnapshot(
                     p.IsActive, p.LastConnectionOk, p.LastConnectionCheckAtUtc,
                     p.LastConnectionError, p.ConnectionFailuresStreak);
@@ -215,7 +229,7 @@ public sealed class StoreHealthAlertBackgroundService : BackgroundService
 
             var (health, reason) = StoreHealthEvaluator.Compute(
                 connected, queued, failed, missingHost, connMaxStreak, connCrit, connWarn, rules,
-                silentMinutes, reprintsToday);
+                silentMinutes, reprintsToday, ippCrit, ippWarn);
 
             if (!alertStates.TryGetValue(store.StoreId, out var alertState))
             {

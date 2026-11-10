@@ -149,6 +149,7 @@ public class ImpresorasDbContext : DbContext
     public DbSet<PrintJobEvent> PrintJobEvents => Set<PrintJobEvent>();
     public DbSet<SourcePrintJobRecord> SourcePrintJobs => Set<SourcePrintJobRecord>();
     public DbSet<Printer> Printers => Set<Printer>();
+    public DbSet<TonerReading> TonerReadings => Set<TonerReading>();
     public DbSet<RoutingRule> RoutingRules => Set<RoutingRule>();
     public DbSet<User> Users => Set<User>();
     public DbSet<Store> Stores => Set<Store>();
@@ -302,8 +303,24 @@ public class ImpresorasDbContext : DbContext
             entity.Property(x => x.IppMakeAndModel).HasColumnName("ipp_make_and_model").HasMaxLength(200);
             entity.Property(x => x.IppMoreInfoUrl).HasColumnName("ipp_more_info_url").HasMaxLength(400);
             entity.Property(x => x.IppCheckedAtUtc).HasColumnName("ipp_checked_at_utc");
+            entity.Property(x => x.IppStateSinceUtc).HasColumnName("ipp_state_since_utc");
+            entity.Property(x => x.IppFirmware).HasColumnName("ipp_firmware").HasMaxLength(200);
+            entity.Property(x => x.IppUpSinceUtc).HasColumnName("ipp_up_since_utc");
+            entity.Property(x => x.IppTraysJson).HasColumnName("ipp_trays_json");
 
             entity.HasIndex(x => new { x.StoreId, x.SpoolQueue }).IsUnique();
+        });
+
+        modelBuilder.Entity<TonerReading>(entity =>
+        {
+            entity.ToTable("printer_toner_reading");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Id).HasColumnName("id").ValueGeneratedOnAdd();
+            entity.Property(x => x.PrinterId).HasColumnName("printer_id");
+            entity.Property(x => x.Marker).HasColumnName("marker");
+            entity.Property(x => x.Level).HasColumnName("level");
+            entity.Property(x => x.ReadAtUtc).HasColumnName("read_at_utc");
+            entity.HasIndex(x => new { x.PrinterId, x.Marker, x.ReadAtUtc });
         });
 
         modelBuilder.Entity<RoutingRule>(entity =>
