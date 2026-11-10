@@ -74,6 +74,55 @@ const opciones = {
   umbralCola: (s: string) => (s === "critical" ? 30 : 10),
 }
 
+describe("incidencias de la propia impresora (docs/72, R2)", () => {
+  const ipp = (
+    printerId: number,
+    ippSeverity: Impresora["ippSeverity"],
+    ippStateText: string,
+    ippStateMessage: string | null = null
+  ) =>
+    ({
+      printerId,
+      printerName: `P${printerId}`,
+      connectivityStatus: "ok",
+      ippSeverity,
+      ippStateText,
+      ippStateMessage,
+    }) as Impresora
+  it("una fila por impresora activa con problema, las críticas primero", () => {
+    const r = resumen({ stores: [tienda(2), tienda(3)] })
+    const lista = incidencias(
+      r,
+      [
+        ipp(
+          20,
+          "warning",
+          "El cartucho fotoconductor ha llegado al final de su vida útil",
+          "Cambie tambor, Espera"
+        ),
+        ipp(30, "critical", "Sin papel en la bandeja"),
+        ipp(99, "critical", "No está en el resumen: inactiva"),
+        ipp(31, "neutral", "Sin lectura reciente"),
+      ],
+      opciones
+    )
+    expect(lista).toHaveLength(2)
+    expect(lista[0]).toMatchObject({
+      storeId: 3,
+      severidad: "critical",
+      tipo: "Impresora",
+      detalle: "P30: Sin papel en la bandeja",
+      desde: null,
+    })
+    expect(lista[1]).toMatchObject({
+      storeId: 2,
+      severidad: "warning",
+      resto: "Cambie tambor, Espera",
+    })
+    expect(lista[1].destinos[0].clave).toBe("tienda=2&conexion=problemas")
+  })
+})
+
 describe("incidencias (como operacion.blade.php)", () => {
   it("clasifica por el motivo de la API y nombra la impresora que falla", () => {
     const r = resumen({

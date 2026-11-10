@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest"
 import { ESTADOS_TRABAJO as E, type Impresora } from "@serca/contratos"
 import {
   autor,
+  conNivel,
+  conProblema,
   documentoErp,
   enOrden,
   nivelRegla,
@@ -15,6 +17,7 @@ import {
   puedeReintentar,
   puerto,
   resumen,
+  webImpresora,
 } from "@/modules/impresion/formato"
 
 const impresora = (connectivitySeverity: Impresora["connectivitySeverity"]) =>
@@ -70,6 +73,59 @@ describe("resumen de una tienda", () => {
       "ok"
     )
     expect(resumen([]).texto).toBe("Sin impresoras")
+  })
+
+  // docs/72, R2: lo que dice la propia impresora cuenta igual.
+  it("cuenta el estado IPP: parada es error y tóner bajo, aviso", () => {
+    const ipp = (ippSeverity: Impresora["ippSeverity"]) => ({
+      ...impresora("healthy"),
+      ippSeverity,
+    })
+    expect(resumen([ipp("healthy"), ipp("critical")])).toEqual({
+      tono: "error",
+      texto: "1 con error",
+    })
+    expect(resumen([ipp("healthy"), ipp("warning")])).toEqual({
+      tono: "aviso",
+      texto: "1 con aviso",
+    })
+    // Lo de conexión manda en el texto: sin host o sin comprobar.
+    expect(resumen([impresora("warning"), ipp("warning")]).texto).toBe(
+      "1 pendiente"
+    )
+    expect(resumen([ipp("neutral"), ipp(undefined)]).tono).toBe("ok")
+    expect(conProblema(ipp("warning"))).toBe(true)
+    expect(conProblema(ipp("neutral"))).toBe(false)
+  })
+})
+
+describe("web y consumibles de la impresora", () => {
+  const con = (extra: Partial<Impresora>) =>
+    ({ ...impresora("healthy"), ...extra }) as Impresora
+  it("solo enlaza su web si es http(s)", () => {
+    expect(
+      webImpresora(
+        con({ ippMoreInfoUrl: "http://192.42.170.6:8000/rps/airprint" })
+      )
+    ).toBe("http://192.42.170.6:8000/rps/airprint")
+    expect(webImpresora(con({ ippMoreInfoUrl: "javascript:alert(1)" }))).toBe(
+      null
+    )
+    expect(webImpresora(con({ ippMoreInfoUrl: null }))).toBe(null)
+  })
+  it("deja fuera los niveles que no son un porcentaje", () => {
+    const marcador = (nivel: number | null) => ({
+      nombre: "BK",
+      color: null,
+      tipo: "toner",
+      nivel,
+      bajo: 7,
+    })
+    expect(
+      conNivel(
+        con({ ippMarkers: [marcador(83), marcador(-3), marcador(null)] })
+      ).map((c) => c.nivel)
+    ).toEqual([83])
   })
 })
 

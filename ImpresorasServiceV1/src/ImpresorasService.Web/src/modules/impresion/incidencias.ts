@@ -249,6 +249,28 @@ export function incidencias(
             : []),
         ],
       })
+  // Lo que dice la propia impresora por IPP (docs/72, R2): parada, atasco,
+  // puerta abierta, tóner bajo. Solo las activas del resumen; con lectura vieja
+  // o sin conexión la API da «neutral» y no sale. No hay «Desde»: se guarda
+  // solo la última lectura (D-72.3).
+  for (const t of resumen.stores) {
+    const activas = new Set(t.printers.map((p) => p.printerId))
+    for (const i of todasLasImpresoras)
+      if (
+        activas.has(i.printerId) &&
+        (i.ippSeverity === "critical" || i.ippSeverity === "warning")
+      )
+        lista.push({
+          storeId: t.storeId,
+          storeName: t.storeName,
+          severidad: i.ippSeverity,
+          tipo: "Impresora",
+          detalle: `${i.printerName}: ${i.ippStateText ?? "con incidencias"}`,
+          resto: i.ippStateMessage ?? "",
+          desde: null,
+          destinos: [impresoras(t, "Ver impresoras")],
+        })
+  }
   // sort es estable: dentro de cada severidad se mantiene el orden de la API.
   return lista.sort(
     (a, b) => RANGO_SALUD[a.severidad] - RANGO_SALUD[b.severidad]

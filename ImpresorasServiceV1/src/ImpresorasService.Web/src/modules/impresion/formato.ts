@@ -220,8 +220,13 @@ export const nombreTienda = (id: number, tiendas: readonly Tienda[]) => {
   return t ? `${id} · ${t.name}` : String(id)
 }
 
+// Problema de conexión o de la propia impresora (parada, atasco, tóner bajo:
+// docs/72, R2). La gravedad IPP la da la API; sin lectura, «neutral».
 export const conProblema = (i: Impresora) =>
-  i.connectivitySeverity === "critical" || i.connectivitySeverity === "warning"
+  i.connectivitySeverity === "critical" ||
+  i.connectivitySeverity === "warning" ||
+  i.ippSeverity === "critical" ||
+  i.ippSeverity === "warning"
 
 // Estado de un grupo de impresoras, como is-printer-status del PHP: manda el
 // peor caso.
@@ -230,18 +235,37 @@ export function resumen(impresoras: readonly Impresora[]): {
   texto: string
 } {
   const errores = impresoras.filter(
-    (i) => i.connectivitySeverity === "critical"
+    (i) => i.connectivitySeverity === "critical" || i.ippSeverity === "critical"
   ).length
   const avisos = impresoras.filter(
     (i) => i.connectivitySeverity === "warning"
+  ).length
+  const avisosIpp = impresoras.filter(
+    (i) => i.connectivitySeverity !== "warning" && i.ippSeverity === "warning"
   ).length
   if (!impresoras.length) return { tono: "neutro", texto: "Sin impresoras" }
   if (errores) return { tono: "error", texto: `${errores} con error` }
   // Aviso: sin host o sin comprobar.
   if (avisos)
     return { tono: "aviso", texto: plural(avisos, "pendiente", "pendientes") }
+  // Aviso de la impresora: tóner bajo, tambor, papel casi agotado.
+  if (avisosIpp) return { tono: "aviso", texto: `${avisosIpp} con aviso` }
   return { tono: "ok", texto: "OK" }
 }
+
+// Su web de estado (printer-more-info), solo si es http(s): la dirección la
+// manda la impresora y va en un enlace.
+export const webImpresora = (i: Impresora) =>
+  i.ippMoreInfoUrl && /^https?:\/\/[^\s]+$/i.test(i.ippMoreInfoUrl)
+    ? i.ippMoreInfoUrl
+    : null
+
+// Los consumibles con nivel en %: -1, -2 y -3 no son un porcentaje.
+export const conNivel = (i: Impresora) =>
+  (i.ippMarkers ?? []).filter(
+    (c): c is typeof c & { nivel: number } =>
+      c.nivel !== null && c.nivel >= 0 && c.nivel <= 100
+  )
 
 // Tope del eje de la gráfica, redondeado al alza a un múltiplo del paso, como
 // el PHP: 7 → 8, 47 → 50, 130 → 150, 430 → 500.

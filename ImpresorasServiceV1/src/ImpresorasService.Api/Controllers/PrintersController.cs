@@ -501,6 +501,7 @@ public class PrintersController : ControllerBase
     private static PrinterDto ToPrinterDto(Printer printer)
     {
         var connectivity = PrinterConnectivityState.FromPrinter(printer);
+        var (ippSeverity, ippStateText) = IppEstadoImpresora.Describir(printer, DateTimeOffset.UtcNow);
         return new PrinterDto(
             printer.PrinterId,
             printer.PrinterName,
@@ -531,7 +532,9 @@ public class PrintersController : ControllerBase
                 : JsonSerializer.Deserialize<List<IppConsumible>>(printer.IppMarkersJson, JsonWeb),
             printer.IppMakeAndModel,
             printer.IppMoreInfoUrl,
-            printer.IppCheckedAtUtc);
+            printer.IppCheckedAtUtc,
+            ippSeverity,
+            ippStateText);
     }
 
     private static readonly JsonSerializerOptions JsonWeb = new(JsonSerializerDefaults.Web);
@@ -564,7 +567,10 @@ public class PrintersController : ControllerBase
         IReadOnlyList<IppConsumible>? IppMarkers,
         string? IppMakeAndModel,
         string? IppMoreInfoUrl,
-        DateTimeOffset? IppCheckedAtUtc);
+        DateTimeOffset? IppCheckedAtUtc,
+        // Gravedad y texto en castellano de la última lectura (IppEstadoImpresora.Describir).
+        string IppSeverity,
+        string? IppStateText);
 
     private sealed record ConnectivityProbeResult(
         bool Reachable,

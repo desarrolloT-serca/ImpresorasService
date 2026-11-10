@@ -370,6 +370,40 @@ public sealed class ImpresionPorIpTests
         Assert.Null(p.IppCheckedAtUtc);
     }
 
+    // R2: gravedad por el sufijo del motivo y tóner bajo por el umbral de la impresora.
+    [Theory]
+    [InlineData(3, null, 83, "healthy", "Lista")]
+    [InlineData(4, null, 83, "healthy", "Imprimiendo")]
+    [InlineData(3, null, 14, "healthy", "Lista")]                       // 14 % con umbral 7: aún no
+    [InlineData(3, null, 6, "warning", "BK al 6 %")]
+    [InlineData(3, "opc-life-over-warning", 60, "warning", "El cartucho fotoconductor ha llegado al final de su vida útil")]
+    [InlineData(5, "media-empty-error", 83, "critical", "Sin papel en la bandeja")]
+    [InlineData(3, "media-jam", 83, "critical", "Atasco de papel")]     // sin sufijo: error (RFC 8011)
+    [InlineData(3, "toner-low-report", 83, "healthy", "Lista")]        // -report: nada
+    [InlineData(5, null, 83, "critical", "La impresora está detenida")]
+    [InlineData(3, "media-low-warning, door-open-error", 6, "critical", "Papel casi agotado. La puerta de la impresora está abierta. BK al 6 %")]
+    public void Describir_el_estado(int estado, string? motivos, int toner, string gravedad, string texto)
+    {
+        var p = new Printer();
+        var ahora = DateTimeOffset.UtcNow;
+        IppEstadoImpresora.AplicarA(p, new IppEstadoImpresora(estado, motivos, null, 0,
+            [new IppConsumible("BK", null, "toner", toner, 7)], null, null), ahora.AddSeconds(-20));
+
+        Assert.Equal((gravedad, texto), IppEstadoImpresora.Describir(p, ahora));
+    }
+
+    [Fact]
+    public void Describir_sin_lectura_o_con_lectura_vieja_no_afirma_nada()
+    {
+        var p = new Printer();
+        var ahora = DateTimeOffset.UtcNow;
+        Assert.Equal(("neutral", null), IppEstadoImpresora.Describir(p, ahora));
+
+        IppEstadoImpresora.AplicarA(p, new IppEstadoImpresora(5, "media-jam-error", null, 0, [], null, null),
+            ahora - IppEstadoImpresora.LecturaVieja - TimeSpan.FromSeconds(1));
+        Assert.Equal(("neutral", "Sin lectura reciente"), IppEstadoImpresora.Describir(p, ahora));
+    }
+
     private static byte[] Entero(int v) => [(byte)(v >> 24), (byte)(v >> 16), (byte)(v >> 8), (byte)v];
 
     private static byte[] ConIdioma(string idioma, string texto)

@@ -474,6 +474,17 @@ export const SeveridadConexion = z.enum([
 ])
 export type SeveridadConexion = z.infer<typeof SeveridadConexion>
 
+// Un consumible (marker-* de IPP): nivel y umbral bajo en %, o -1, -2 y -3
+// (sin dato, desconocido, «queda algo»).
+export const ConsumibleImpresora = z.object({
+  nombre: z.string().nullable(),
+  color: z.string().nullable(),
+  tipo: z.string().nullable(),
+  nivel: z.number().int().nullable(),
+  bajo: z.number().int().nullable(),
+})
+export type ConsumibleImpresora = z.infer<typeof ConsumibleImpresora>
+
 export const Impresora = z.object({
   printerId: z.number().int(),
   printerName: z.string(),
@@ -496,6 +507,20 @@ export const Impresora = z.object({
   connectivitySeverity: SeveridadConexion,
   connectivityDetail: z.string().nullable(),
   ippSupported: z.boolean().nullable(),
+  // Última lectura IPP del Worker, cada 30 s (ERP_SERCA docs/72, R1 y R2).
+  // Opcionales: API anterior al 10/11/2026. ippSeverity e ippStateText los
+  // calcula la API (IppEstadoImpresora.Describir): neutral si no hay lectura
+  // o es vieja.
+  ippState: z.number().int().nullable().optional(),
+  ippStateReasons: z.string().nullable().optional(),
+  ippStateMessage: z.string().nullable().optional(),
+  ippQueuedJobs: z.number().int().nullable().optional(),
+  ippMarkers: z.array(ConsumibleImpresora).nullable().optional(),
+  ippMakeAndModel: z.string().nullable().optional(),
+  ippMoreInfoUrl: z.string().nullable().optional(),
+  ippCheckedAtUtc: z.string().nullable().optional(),
+  ippSeverity: SeveridadConexion.optional(),
+  ippStateText: z.string().nullable().optional(),
 })
 export type Impresora = z.infer<typeof Impresora>
 
