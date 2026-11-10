@@ -1,3 +1,6 @@
+using System.Text.Json;
+using ImpresorasService.Domain.Entities;
+
 namespace ImpresorasService.Application.Abstractions;
 
 public enum IppOutcome
@@ -10,7 +13,51 @@ public enum IppOutcome
     CompletedWithErrors // la impresora lo dio por terminado, pero con errores
 }
 
-public record IppQueryResult(IppOutcome Outcome, string? ErrorCode = null, string? ErrorMessage = null);
+public record IppQueryResult(IppOutcome Outcome, string? ErrorCode = null, string? ErrorMessage = null)
+{
+    /// <summary>Lo que dijo la impresora, si respondió por IPP (solo <see cref="IIppConfirmationService.QueryPrinterStateAsync"/>).</summary>
+    public IppEstadoImpresora? Estado { get; init; }
+}
+
+/// <summary>
+/// Estado de la impresora por Get-Printer-Attributes (RFC 8011 y PWG 5100.13). Cada dato es null si la
+/// impresora no lo da (ERP_SERCA docs/72, R0: la Canon no da mensaje; las Brother, el aviso del panel).
+/// </summary>
+public sealed record IppEstadoImpresora(
+    int? State,
+    string? Reasons,
+    string? Message,
+    int? QueuedJobs,
+    IReadOnlyList<IppConsumible> Consumibles,
+    string? MakeAndModel,
+    string? MoreInfoUrl)
+{
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+
+    /// <summary>Las propiedades de <see cref="Printer"/> que escribe <see cref="AplicarA"/> (para marcarlas modificadas).</summary>
+    public static readonly string[] Propiedades =
+    [
+        nameof(Printer.IppState), nameof(Printer.IppStateReasons), nameof(Printer.IppStateMessage),
+        nameof(Printer.IppQueuedJobs), nameof(Printer.IppMarkersJson), nameof(Printer.IppMakeAndModel),
+        nameof(Printer.IppMoreInfoUrl), nameof(Printer.IppCheckedAtUtc)
+    ];
+
+    /// <summary>Guarda esta lectura en la impresora; <c>null</c> la borra (host nuevo: es otra impresora).</summary>
+    public static void AplicarA(Printer printer, IppEstadoImpresora? estado, DateTimeOffset? leidoUtc)
+    {
+        printer.IppState = estado?.State;
+        printer.IppStateReasons = estado?.Reasons;
+        printer.IppStateMessage = estado?.Message;
+        printer.IppQueuedJobs = estado?.QueuedJobs;
+        printer.IppMarkersJson = estado?.Consumibles is { Count: > 0 } c ? JsonSerializer.Serialize(c, Json) : null;
+        printer.IppMakeAndModel = estado?.MakeAndModel;
+        printer.IppMoreInfoUrl = estado?.MoreInfoUrl;
+        printer.IppCheckedAtUtc = estado is null ? null : leidoUtc;
+    }
+}
+
+/// <summary>Un consumible (marker-*): nivel y umbral bajo en %, o -1/-2/-3 (sin dato, desconocido, queda algo).</summary>
+public sealed record IppConsumible(string? Nombre, string? Color, string? Tipo, int? Nivel, int? Bajo);
 
 public interface IIppConfirmationService
 {

@@ -298,6 +298,87 @@ public sealed class ImpresionPorIpTests
         Assert.Equal(42, r.Entero("job-id"));
     }
 
+    // ERP_SERCA docs/72, R0 (10/11/2026): lo que contestan la Canon imageFORCE 1643 (80 % del parque) y
+    // la Brother MFC-L2710DW a Get-Printer-Attributes, recortado a lo que se guarda.
+    [Fact]
+    public void Estado_de_la_Canon_sin_mensaje_y_con_toner_bajo()
+    {
+        var r = IppConfirmationService.ParseResponse(200, Respuesta(0x0000,
+            (0x23, "printer-state", Entero(3)),
+            (0x44, "printer-state-reasons", Encoding.UTF8.GetBytes("none")),
+            (0x41, "printer-state-message", Encoding.UTF8.GetBytes("none")),
+            (0x21, "queued-job-count", Entero(0)),
+            (0x42, "marker-names", Encoding.UTF8.GetBytes("Canon Toner T06 Black Toner")),
+            (0x42, "marker-colors", Encoding.UTF8.GetBytes("#000000")),
+            (0x44, "marker-types", Encoding.UTF8.GetBytes("toner")),
+            (0x21, "marker-levels", Entero(14)),
+            (0x21, "marker-low-levels", Entero(7)),
+            (0x41, "printer-make-and-model", Encoding.UTF8.GetBytes("Canon imageFORCE 1643")),
+            (0x45, "printer-more-info", Encoding.UTF8.GetBytes("http://192.42.170.6:8000/rps/airprint"))));
+
+        var e = IppConfirmationService.LeerEstado(r);
+
+        Assert.Equal(3, e.State);
+        Assert.Null(e.Reasons);
+        Assert.Null(e.Message); // «none» no es un mensaje
+        Assert.Equal(0, e.QueuedJobs);
+        Assert.Equal([new IppConsumible("Canon Toner T06 Black Toner", "#000000", "toner", 14, 7)], e.Consumibles);
+        Assert.Equal("Canon imageFORCE 1643", e.MakeAndModel);
+        Assert.Equal("http://192.42.170.6:8000/rps/airprint", e.MoreInfoUrl);
+    }
+
+    [Fact]
+    public void Estado_de_la_Brother_con_textos_con_idioma_y_aviso_del_panel()
+    {
+        var r = IppConfirmationService.ParseResponse(200, Respuesta(0x0000,
+            (0x23, "printer-state", Entero(3)),
+            (0x44, "printer-state-reasons", Encoding.UTF8.GetBytes("opc-life-over-warning")),
+            (0x35, "printer-alert-description", ConIdioma("es", "Cambie tambor")),
+            (0x35, "", ConIdioma("es", "Espera")),
+            (0x36, "marker-names", ConIdioma("en", "BK")),
+            (0x21, "marker-levels", Entero(60)),
+            (0x21, "marker-low-levels", Entero(9)),
+            (0x35, "printer-make-and-model", ConIdioma("en", "Brother MFC-L2710DW series"))));
+
+        var e = IppConfirmationService.LeerEstado(r);
+
+        Assert.Equal("opc-life-over-warning", e.Reasons);
+        Assert.Equal("Cambie tambor, Espera", e.Message);
+        Assert.Equal("Brother MFC-L2710DW series", e.MakeAndModel);
+        Assert.Equal([new IppConsumible("BK", null, null, 60, 9)], e.Consumibles);
+    }
+
+    [Fact]
+    public void Guardar_el_estado_y_borrarlo()
+    {
+        var p = new Printer();
+        var leido = DateTimeOffset.UtcNow;
+        var e = new IppEstadoImpresora(5, "media-empty-error", null, 2,
+            [new IppConsumible("BK", null, "toner", 14, 7)], "Canon imageFORCE 1643", null);
+
+        IppEstadoImpresora.AplicarA(p, e, leido);
+        Assert.Equal(5, p.IppState);
+        Assert.Equal("media-empty-error", p.IppStateReasons);
+        Assert.Equal(2, p.IppQueuedJobs);
+        Assert.Equal("""[{"nombre":"BK","color":null,"tipo":"toner","nivel":14,"bajo":7}]""", p.IppMarkersJson);
+        Assert.Equal(leido, p.IppCheckedAtUtc);
+
+        IppEstadoImpresora.AplicarA(p, null, leido);
+        Assert.Null(p.IppState);
+        Assert.Null(p.IppMarkersJson);
+        Assert.Null(p.IppMakeAndModel);
+        Assert.Null(p.IppCheckedAtUtc);
+    }
+
+    private static byte[] Entero(int v) => [(byte)(v >> 24), (byte)(v >> 16), (byte)(v >> 8), (byte)v];
+
+    private static byte[] ConIdioma(string idioma, string texto)
+    {
+        var i = Encoding.UTF8.GetBytes(idioma);
+        var t = Encoding.UTF8.GetBytes(texto);
+        return [(byte)(i.Length >> 8), (byte)i.Length, .. i, (byte)(t.Length >> 8), (byte)t.Length, .. t];
+    }
+
     private static byte[] Respuesta(ushort estado, params (byte Tag, string Nombre, byte[] Valor)[] atributos)
     {
         var ms = new MemoryStream();

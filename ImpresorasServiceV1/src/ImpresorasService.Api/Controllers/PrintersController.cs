@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Security.Claims;
 using System.Text.Json;
 using ImpresorasService.Api.Security;
+using ImpresorasService.Application.Abstractions;
 using ImpresorasService.Domain.Connectivity;
 using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure.Persistence;
@@ -155,9 +156,13 @@ public class PrintersController : ControllerBase
                 r => r.PrinterId == id && r.StoreId != null && r.StoreId != request.StoreId, cancellationToken))
             return Conflict(new { error = "Tiene reglas de enrutado de su tienda: cámbialas o bórralas antes de pasarla a otra." });
 
-        // Con host nuevo, el Worker vuelve a descubrir el soporte IPP en el siguiente ciclo.
+        // Con host nuevo, el Worker vuelve a descubrir el soporte IPP en el siguiente ciclo, y el
+        // estado leído era de otra impresora.
         if (!string.Equals(printer.Host, input.Host, StringComparison.OrdinalIgnoreCase))
+        {
             printer.IppSupported = null;
+            IppEstadoImpresora.AplicarA(printer, null, null);
+        }
 
         printer.PrinterName = input.PrinterName;
         printer.SpoolQueue = input.SpoolQueue;
@@ -516,8 +521,20 @@ public class PrintersController : ControllerBase
             connectivity.ConnectivityLabel,
             connectivity.ConnectivitySeverity,
             connectivity.ConnectivityDetail,
-            printer.IppSupported);
+            printer.IppSupported,
+            printer.IppState,
+            printer.IppStateReasons,
+            printer.IppStateMessage,
+            printer.IppQueuedJobs,
+            printer.IppMarkersJson is null
+                ? null
+                : JsonSerializer.Deserialize<List<IppConsumible>>(printer.IppMarkersJson, JsonWeb),
+            printer.IppMakeAndModel,
+            printer.IppMoreInfoUrl,
+            printer.IppCheckedAtUtc);
     }
+
+    private static readonly JsonSerializerOptions JsonWeb = new(JsonSerializerDefaults.Web);
 
     private sealed record PrinterDto(
         int PrinterId,
@@ -539,7 +556,15 @@ public class PrintersController : ControllerBase
         string ConnectivityLabel,
         string ConnectivitySeverity,
         string? ConnectivityDetail,
-        bool? IppSupported);
+        bool? IppSupported,
+        int? IppState,
+        string? IppStateReasons,
+        string? IppStateMessage,
+        int? IppQueuedJobs,
+        IReadOnlyList<IppConsumible>? IppMarkers,
+        string? IppMakeAndModel,
+        string? IppMoreInfoUrl,
+        DateTimeOffset? IppCheckedAtUtc);
 
     private sealed record ConnectivityProbeResult(
         bool Reachable,

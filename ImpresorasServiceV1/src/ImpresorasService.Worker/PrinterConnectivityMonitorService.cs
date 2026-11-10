@@ -168,12 +168,14 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
         var result = await TryConnectAnyPortAsync(host!, ct);
 
         bool? ippSupported = candidate.IppSupported;
+        IppEstadoImpresora? ipp = null;
         if (result.Ok && _options.Ports.Contains(631))
         {
             // Sondear IPP siempre que 631 esté en la lista, independientemente
             // del puerto que ganó la carrera (515/9100 pueden responder antes).
             var ippResult = await _ippService.QueryPrinterStateAsync(host!, ct);
             ippSupported = ippResult.Outcome != IppOutcome.Unavailable;
+            ipp = ippResult.Estado;
             _logger.LogInformation("IPP probe {Host}: {Result}", host,
                 ippSupported.Value ? "compatible" : "no compatible");
         }
@@ -189,7 +191,7 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
             result.Error,
             DateTimeOffset.UtcNow);
 
-        return ToUpdate(printer, ippSupported);
+        return ToUpdate(printer, ippSupported) with { Ipp = ipp };
     }
 
     private static void ApplyConnectivityUpdate(
@@ -216,6 +218,14 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
         {
             entity.IppSupported = update.IppSupported;
             db.Entry(entity).Property(x => x.IppSupported).IsModified = true;
+        }
+
+        // Sin respuesta IPP se queda la última lectura: su fecha dice de cuándo es.
+        if (update.Ipp is not null)
+        {
+            IppEstadoImpresora.AplicarA(entity, update.Ipp, update.CheckedAtUtc);
+            foreach (var propiedad in IppEstadoImpresora.Propiedades)
+                db.Entry(entity).Property(propiedad).IsModified = true;
         }
     }
 
@@ -309,7 +319,10 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
         string? Transport,
         string? Error,
         DateTimeOffset? FailingSinceUtc,
-        bool? IppSupported);
+        bool? IppSupported)
+    {
+        public IppEstadoImpresora? Ipp { get; init; }
+    }
 
     private sealed class PrinterConnectivityOptions
     {
