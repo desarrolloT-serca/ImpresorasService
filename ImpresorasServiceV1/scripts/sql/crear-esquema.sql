@@ -56,7 +56,10 @@ CREATE TABLE printer_printer (
     ipp_firmware varchar(200),
     ipp_up_since_utc timestamptz,
     ipp_trays_json text,
-    PRIMARY KEY (printer_id)
+    -- Impresora de reserva, de la misma tienda (ERP_SERCA docs/75): la API lo comprueba.
+    backup_printer_id integer REFERENCES printer_printer (printer_id) ON DELETE SET NULL,
+    PRIMARY KEY (printer_id),
+    CONSTRAINT ck_printer_printer_backup_no_self CHECK (backup_printer_id <> printer_id)
 );
 CREATE UNIQUE INDEX ix_printer_printer_store_id_spool_queue ON printer_printer (store_id, spool_queue);
 
@@ -138,6 +141,8 @@ CREATE TABLE printer_print_job (
     created_at_utc timestamptz NOT NULL,
     updated_at_utc timestamptz NOT NULL,
     last_requeued_at_utc timestamptz,
+    -- De qué impresora se desvió a la reserva (ERP_SERCA docs/75); el detalle, en el evento DIVERTED.
+    diverted_from_printer_id integer,
     PRIMARY KEY (job_id)
 );
 CREATE UNIQUE INDEX ix_printer_print_job_source_external ON printer_print_job (source_system, external_job_id);

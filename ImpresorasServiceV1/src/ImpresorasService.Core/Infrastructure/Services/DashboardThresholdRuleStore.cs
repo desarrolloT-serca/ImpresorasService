@@ -69,7 +69,8 @@ public sealed class DashboardThresholdRuleStore : IDashboardThresholdRuleStore
             Reprints = ThresholdRuleEngine.NormalizeRuleSet(rules.Reprints).ToList(),
             Horario = rules.Horario with { Dias = rules.Horario.Dias.Distinct().Order().ToList() },
             TelegramSoloEnHorario = rules.TelegramSoloEnHorario,
-            Toner = rules.Toner
+            Toner = rules.Toner,
+            Desvio = rules.Desvio with { Modo = rules.Desvio.Modo.Trim().ToLowerInvariant() }
         };
 
         var errors = ThresholdRuleEngine.Validate(normalized);
@@ -104,7 +105,11 @@ public sealed class DashboardThresholdRuleStore : IDashboardThresholdRuleStore
                 dto.Horario.Hasta ?? HorarioTienda.Default.Hasta),
         TelegramSoloEnHorario = dto.TelegramSoloEnHorario ?? false,
         // Un fichero anterior sin tóner: los de por defecto.
-        Toner = dto.Toner is null ? UmbralToner.Default : new UmbralToner(dto.Toner.Aviso, dto.Toner.Critico)
+        Toner = dto.Toner is null ? UmbralToner.Default : new UmbralToner(dto.Toner.Aviso, dto.Toner.Critico),
+        // Un fichero anterior sin desvío: el de por defecto (manual).
+        Desvio = dto.Desvio is null
+            ? ReglaDesvio.Default
+            : new ReglaDesvio(dto.Desvio.Modo ?? ReglaDesvio.Default.Modo, dto.Desvio.EsperaMinutos ?? ReglaDesvio.Default.EsperaMinutos)
     };
 
     private static List<ThresholdRule> ToRules(List<RuleDto>? rules) =>
@@ -120,7 +125,8 @@ public sealed class DashboardThresholdRuleStore : IDashboardThresholdRuleStore
         Reprints = rules.Reprints.Select(r => new RuleDto { Min = r.Min, Severity = r.Severity }).ToList(),
         Horario = new HorarioDto { Dias = rules.Horario.Dias.ToList(), Desde = rules.Horario.Desde, Hasta = rules.Horario.Hasta },
         TelegramSoloEnHorario = rules.TelegramSoloEnHorario,
-        Toner = new TonerDto { Aviso = rules.Toner.Aviso, Critico = rules.Toner.Critico }
+        Toner = new TonerDto { Aviso = rules.Toner.Aviso, Critico = rules.Toner.Critico },
+        Desvio = new DesvioDto { Modo = rules.Desvio.Modo, EsperaMinutos = rules.Desvio.EsperaMinutos }
     };
 
     private sealed class RuleSetDto
@@ -134,6 +140,13 @@ public sealed class DashboardThresholdRuleStore : IDashboardThresholdRuleStore
         public HorarioDto? Horario { get; set; }
         public bool? TelegramSoloEnHorario { get; set; }
         public TonerDto? Toner { get; set; }
+        public DesvioDto? Desvio { get; set; }
+    }
+
+    private sealed class DesvioDto
+    {
+        public string? Modo { get; set; }
+        public int? EsperaMinutos { get; set; }
     }
 
     private sealed class TonerDto

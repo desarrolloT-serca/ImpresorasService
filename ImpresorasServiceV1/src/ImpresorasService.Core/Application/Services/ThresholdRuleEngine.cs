@@ -87,6 +87,10 @@ public static class ThresholdRuleEngine
 
         if (rules.Toner is not { Critico: >= 0, Aviso: <= 100 } t || t.Critico >= t.Aviso)
             errors.Add("El tóner crítico tiene que ser menor que el de aviso, entre 0 y 100 %.");
+        if (!ReglaDesvio.Modos.Contains(rules.Desvio.Modo))
+            errors.Add($"El modo del desvío es uno de: {string.Join(", ", ReglaDesvio.Modos)}.");
+        if (rules.Desvio.EsperaMinutos is < 1 or > 9)
+            errors.Add("La espera antes de desviar es de 1 a 9 minutos (a los 10, el trabajo pasa a «sin confirmar»).");
 
         return errors.Distinct().ToList();
     }

@@ -62,6 +62,8 @@ public static class DependencyInjection
         services.AddScoped<IJobSourceAdapter, ErpJobSourceAdapter>();
         services.AddScoped<IRoutingResolver, RoutingResolver>();
         services.AddScoped<IRoutingService, RoutingService>();
+        // Desvío a la impresora de reserva (ERP_SERCA docs/75): API y, desde F3, Worker.
+        services.AddScoped<DesvioService>();
 
         // El spooler simulado devuelve éxito siempre: un job simulado avanza a SpoolAccepted y de
         // ahí a PrintedConfirmed sin que salga una hoja. Nunca debe activarse por inferencia

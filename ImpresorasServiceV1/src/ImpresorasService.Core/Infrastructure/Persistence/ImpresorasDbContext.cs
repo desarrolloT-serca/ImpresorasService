@@ -185,6 +185,7 @@ public class ImpresorasDbContext : DbContext
             entity.Property(x => x.CreatedAtUtc).HasColumnName("created_at_utc");
             entity.Property(x => x.UpdatedAtUtc).HasColumnName("updated_at_utc");
             entity.Property(x => x.LastRequeuedAtUtc).HasColumnName("last_requeued_at_utc");
+            entity.Property(x => x.DivertedFromPrinterId).HasColumnName("diverted_from_printer_id");
             // Sin token de concurrencia a propósito: la exclusión entre procesos la da el estado en el
             // WHERE del UPDATE (PrintExecutionService.TryTransitionAsync).
             entity.Property(x => x.SourceSystem).HasMaxLength(50).IsRequired();
@@ -306,6 +307,12 @@ public class ImpresorasDbContext : DbContext
             entity.Property(x => x.IppFirmware).HasColumnName("ipp_firmware").HasMaxLength(200);
             entity.Property(x => x.IppUpSinceUtc).HasColumnName("ipp_up_since_utc");
             entity.Property(x => x.IppTraysJson).HasColumnName("ipp_trays_json");
+            entity.Property(x => x.BackupPrinterId).HasColumnName("backup_printer_id");
+            // Como en la base (migración 2026-11-11-desvio-reserva.sql): borrar la reserva la deja sin.
+            entity.HasOne<Printer>().WithMany().HasForeignKey(x => x.BackupPrinterId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.ToTable(t => t.HasCheckConstraint(
+                "ck_printer_printer_backup_no_self", "backup_printer_id <> printer_id"));
 
             entity.HasIndex(x => new { x.StoreId, x.SpoolQueue }).IsUnique();
         });

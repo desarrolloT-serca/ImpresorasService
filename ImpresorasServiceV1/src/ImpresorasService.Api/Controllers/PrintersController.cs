@@ -246,6 +246,12 @@ public class PrintersController : ControllerBase
             IppEstadoImpresora.AplicarA(printer, null, null);
         }
 
+        // La reserva es de la misma tienda (docs/75, F1): al cambiar de tienda se quita la suya, y la de
+        // las que la tenían a ella, tras guardar.
+        var cambiaDeTienda = request.StoreId != printer.StoreId;
+        if (cambiaDeTienda)
+            printer.BackupPrinterId = null;
+
         printer.PrinterName = input.PrinterName;
         printer.SpoolQueue = input.SpoolQueue;
         printer.Host = input.Host;
@@ -265,6 +271,45 @@ public class PrintersController : ControllerBase
             return Conflict(new { error = "Ya hay otra impresora con esa cola de Windows en la tienda." });
         }
 
+        if (cambiaDeTienda)
+            await _dbContext.Printers
+                .Where(p => p.BackupPrinterId == id)
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.BackupPrinterId, (int?)null), cancellationToken);
+
+        return Ok((await DtoAsync([printer.PrinterId], cancellationToken))(printer));
+    }
+
+    /// <summary>
+    /// Pone o quita (null) la impresora de reserva (ERP_SERCA docs/75, F1): activa, de la misma tienda y
+    /// distinta de ella. Va aparte de PUT para que quien edita sin conocerla (la web de IS) no la borre.
+    /// </summary>
+    [HttpPut("{id:int}/backup")]
+    [Authorize(Policy = "AdminOnly")]
+    public async Task<IActionResult> SetBackup(int id, [FromBody] SetBackupPrinterRequest request, CancellationToken cancellationToken)
+    {
+        var printer = await _dbContext.Printers.FirstOrDefaultAsync(x => x.PrinterId == id, cancellationToken);
+        if (printer is null)
+            return NotFound();
+
+        if (request.BackupPrinterId is int reservaId)
+        {
+            if (reservaId == id)
+                return BadRequest(new { error = "La reserva no puede ser la misma impresora." });
+            var reserva = await _dbContext.Printers.AsNoTracking()
+                .Where(p => p.PrinterId == reservaId)
+                .Select(p => new { p.PrinterName, p.StoreId, p.IsActive })
+                .FirstOrDefaultAsync(cancellationToken);
+            if (reserva is null)
+                return BadRequest(new { error = "La impresora de reserva no existe." });
+            if (reserva.StoreId != printer.StoreId)
+                return BadRequest(new { error = $"«{reserva.PrinterName}» es de la tienda {reserva.StoreId}: la reserva tiene que ser de la tienda {printer.StoreId}." });
+            if (!reserva.IsActive)
+                return BadRequest(new { error = $"«{reserva.PrinterName}» está desactivada: no puede ser reserva." });
+        }
+
+        printer.BackupPrinterId = request.BackupPrinterId;
+        printer.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok((await DtoAsync([printer.PrinterId], cancellationToken))(printer));
     }
 
@@ -725,7 +770,8 @@ public class PrintersController : ControllerBase
                 ? null
                 : JsonSerializer.Deserialize<List<IppBandeja>>(printer.IppTraysJson, JsonWeb),
             tonerDaysLeft,
-            tonerDaysSource);
+            tonerDaysSource,
+            printer.BackupPrinterId);
     }
 
     private static readonly JsonSerializerOptions JsonWeb = new(JsonSerializerDefaults.Web);
@@ -773,7 +819,9 @@ public class PrintersController : ControllerBase
         int? TonerDaysLeft,
         // De dónde salen: «impresora» (lo que estima la Canon, hasta agotarse; 366 = más de un año).
         // Sin estimación, null.
-        string? TonerDaysSource);
+        string? TonerDaysSource,
+        // Impresora de reserva (ERP_SERCA docs/75); null, sin.
+        int? BackupPrinterId);
 
     private sealed record ConnectivityProbeResult(
         bool Reachable,
@@ -855,6 +903,9 @@ public record CreatePrinterRequest(
     int StoreId,
     bool IsActive = true,
     string? CapabilitiesJson = null);
+
+/// <summary>Reserva de una impresora (docs/75, F1); null la quita.</summary>
+public record SetBackupPrinterRequest(int? BackupPrinterId);
 
 public record UpdatePrinterRequest(
     string PrinterName,
