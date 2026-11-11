@@ -14,36 +14,35 @@ using Xunit;
 
 namespace ImpresorasService.Api.IntegrationTests.Security;
 
-public sealed class ErpApiWebApplicationFactory : JwtApiWebApplicationFactory
+/// <summary>Sin Erp:Secret: la API no debe arrancar, porque no habría forma de entrar.</summary>
+public sealed class SinSecretoErpFactory : JwtApiWebApplicationFactory
 {
-    public const string Secreto = "secreto-del-erp-para-las-pruebas-32+";
-
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         base.ConfigureWebHost(builder);
-        builder.UseSetting("Erp:Secret", Secreto);
+        builder.UseSetting("Erp:Secret", "");
     }
 }
 
 /// <summary>
 /// Pase del ERP (PaseErp): la pasarela del ERP firma el operador y sus claves de impresión; la API
-/// los traduce a rol y tienda sin usuario propio.
+/// los traduce a rol y tienda. Es la única forma de entrar: no hay usuarios propios.
 /// </summary>
-public sealed class PaseErpTests : IClassFixture<ErpApiWebApplicationFactory>
+public sealed class PaseErpTests : IClassFixture<JwtApiWebApplicationFactory>
 {
     private const string Leer = "impresion.leer";
     private const string Reimprimir = "impresion.reimprimir";
     private const string Administrar = "impresion.administrar";
     private const string Todas = "impresion.tiendas.todas";
 
-    private readonly ErpApiWebApplicationFactory _factory;
+    private readonly JwtApiWebApplicationFactory _factory;
 
-    public PaseErpTests(ErpApiWebApplicationFactory factory) => _factory = factory;
+    public PaseErpTests(JwtApiWebApplicationFactory factory) => _factory = factory;
 
     private static string Pase(
         string[] claves,
         int almacen = 1,
-        string secreto = ErpApiWebApplicationFactory.Secreto,
+        string secreto = ApiWebApplicationFactory.SecretoErp,
         string emisor = PaseErp.Emisor,
         string audiencia = PaseErp.Audiencia,
         DateTime? caduca = null)
@@ -92,11 +91,27 @@ public sealed class PaseErpTests : IClassFixture<ErpApiWebApplicationFactory>
             (await GetAsync("/api/printers/page-counts?from=2026-11-01&to=2026-11-02", Pase(claves))).StatusCode);
     }
 
-    // Un pase interceptado no puede crear un admin permanente (auditoría M11).
+    // Sin usuarios propios ni login (11/11/2026): ni con pase de administrador hay dónde crearse uno.
+    [Theory]
+    [InlineData("/api/users")]
+    [InlineData("/api/auth/me")]
+    public async Task NoHayUsuariosPropios(string ruta)
+        => Assert.Equal(HttpStatusCode.NotFound,
+            (await GetAsync(ruta, Pase([Leer, Administrar, Todas]))).StatusCode);
+
+    // Las tiendas son los almacenes del ERP: aquí solo se leen.
     [Fact]
-    public async Task ConPaseDeAdministradorNoSeGestionanUsuarios()
-        => Assert.Equal(HttpStatusCode.Forbidden,
-            (await GetAsync("/api/users", Pase([Leer, Administrar, Todas]))).StatusCode);
+    public async Task LasTiendasNoSeTocanDesdeAqui()
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", Pase([Leer, Administrar, Todas]));
+
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/stores")).StatusCode);
+        Assert.Equal(HttpStatusCode.MethodNotAllowed,
+            (await client.PostAsJsonAsync("/api/stores", new { storeId = 99, name = "X", isActive = true })).StatusCode);
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, (await client.DeleteAsync("/api/stores/1")).StatusCode);
+    }
 
     [Fact]
     public async Task SinTodasLasTiendasSoloVeLaDeSuAlmacen()
@@ -128,13 +143,11 @@ public sealed class PaseErpTests : IClassFixture<ErpApiWebApplicationFactory>
         => Assert.Equal(HttpStatusCode.Unauthorized, (await GetAsync("/api/printers", pase)).StatusCode);
 
     [Fact]
-    public async Task SinErpSecretNoSeAceptanPases()
+    public void SinErpSecretNoArranca()
     {
-        using var factory = new JwtApiWebApplicationFactory();
-        var client = factory.CreateClient();
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Pase([Leer, Administrar]));
-
-        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/printers")).StatusCode);
+        using var factory = new SinSecretoErpFactory();
+        var error = Assert.Throws<InvalidOperationException>(() => factory.CreateClient());
+        Assert.Contains("Erp:Secret", error.Message);
     }
 
     private async Task SembrarImpresorasAsync()

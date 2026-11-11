@@ -149,10 +149,8 @@ public class ImpresorasDbContext : DbContext
     public DbSet<PrintJobEvent> PrintJobEvents => Set<PrintJobEvent>();
     public DbSet<SourcePrintJobRecord> SourcePrintJobs => Set<SourcePrintJobRecord>();
     public DbSet<Printer> Printers => Set<Printer>();
-    public DbSet<TonerReading> TonerReadings => Set<TonerReading>();
     public DbSet<PageCounterReading> PageCounterReadings => Set<PageCounterReading>();
     public DbSet<RoutingRule> RoutingRules => Set<RoutingRule>();
-    public DbSet<User> Users => Set<User>();
     public DbSet<Store> Stores => Set<Store>();
     public DbSet<DashboardThreshold> DashboardThresholds => Set<DashboardThreshold>();
     public DbSet<TelegramConfig> TelegramConfigs => Set<TelegramConfig>();
@@ -312,18 +310,6 @@ public class ImpresorasDbContext : DbContext
             entity.HasIndex(x => new { x.StoreId, x.SpoolQueue }).IsUnique();
         });
 
-        modelBuilder.Entity<TonerReading>(entity =>
-        {
-            entity.ToTable("printer_toner_reading");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Id).HasColumnName("id").ValueGeneratedOnAdd();
-            entity.Property(x => x.PrinterId).HasColumnName("printer_id");
-            entity.Property(x => x.Marker).HasColumnName("marker");
-            entity.Property(x => x.Level).HasColumnName("level");
-            entity.Property(x => x.ReadAtUtc).HasColumnName("read_at_utc");
-            entity.HasIndex(x => new { x.PrinterId, x.Marker, x.ReadAtUtc });
-        });
-
         modelBuilder.Entity<PageCounterReading>(entity =>
         {
             entity.ToTable("printer_page_counter");
@@ -368,27 +354,8 @@ public class ImpresorasDbContext : DbContext
             entity.HasIndex(x => new { x.IsActive, x.Priority, x.StoreId, x.DocumentType, x.Channel });
         });
 
-        modelBuilder.Entity<User>(entity =>
-        {
-            entity.ToTable("printer_user");
-            entity.HasKey(x => x.UserId);
-            entity.Property(x => x.UserId).HasColumnName("user_id");
-            entity.Property(x => x.Login).HasColumnName("login");
-            entity.Property(x => x.PasswordHash).HasColumnName("password_hash");
-            entity.Property(x => x.Role).HasColumnName("role");
-            entity.Property(x => x.StoreId).HasColumnName("store_id");
-            entity.Property(x => x.DisplayName).HasColumnName("display_name");
-            entity.Property(x => x.IsActive).HasColumnName("is_active").HasDefaultValue(true);
-            entity.Property(x => x.TokenVersion).HasColumnName("token_version").HasDefaultValue(0);
-            entity.Property(x => x.UserId).ValueGeneratedOnAdd();
-            entity.Property(x => x.Login).HasMaxLength(80).IsRequired();
-            entity.Property(x => x.PasswordHash).HasMaxLength(256).IsRequired();
-            entity.Property(x => x.Role).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.DisplayName).HasMaxLength(120);
-
-            entity.HasIndex(x => x.Login).IsUnique();
-        });
-
+        // En PostgreSQL printer_store es una vista sobre gesserca.fdalmacen (crear-esquema.sql). ToTable y no
+        // ToView a propósito: así EnsureCreated la crea como tabla en las pruebas (SQLite) y se puede sembrar.
         modelBuilder.Entity<Store>(entity =>
         {
             entity.ToTable("printer_store");
@@ -396,12 +363,8 @@ public class ImpresorasDbContext : DbContext
             entity.Property(x => x.StoreId).HasColumnName("store_id");
             entity.Property(x => x.Name).HasColumnName("name");
             entity.Property(x => x.IsActive).HasColumnName("is_active");
-            entity.Property(x => x.CreatedAtUtc).HasColumnName("created_at_utc");
-            entity.Property(x => x.UpdatedAtUtc).HasColumnName("updated_at_utc");
             entity.Property(x => x.StoreId).ValueGeneratedNever();
             entity.Property(x => x.Name).HasMaxLength(120).IsRequired();
-            entity.Property(x => x.IsActive).HasDefaultValue(true);
-            entity.HasIndex(x => x.Name);
         });
 
         modelBuilder.Entity<DashboardThreshold>(entity =>

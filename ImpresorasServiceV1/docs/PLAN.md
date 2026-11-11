@@ -18,7 +18,7 @@ historial de git (hasta el commit `602018f`).
 | `contrato-kpi-dashboard.md` | Contrato de los KPI del dashboard |
 | `gate-i1-ipp-por-trabajo.md` | Medición del parque: por qué no se puede confirmar la impresión por trabajo |
 | `auditoria-2026-10-26.md` | Auditoría del 26/10/2026: hallazgos, decisiones abiertas (D1-D7) y hoja de ruta. Lo que se decida pasa a este plan |
-| `ejecutable.md`, `DESPLIEGUE-PHP.md`, `DESPLIEGUE-WEB.md`, `SMOKE-TESTS-PHP.md`, `GUIA-ESTILO-DBX-UI.md`, `FRONTEND-WEB-PHP-GIT.md` | Guías operativas |
+| `ejecutable.md` | Guía operativa (servicios de Windows). Las guías del PHP y de la web propia se borraron el 11/11/2026 (etiqueta `archivo/frontales-propios`) |
 | `RESUMEN-PROYECTO.md` | Orientación rápida en el código |
 
 ---
@@ -35,9 +35,9 @@ Hecho el 23/10/2026: esquema creado (`scripts/crear-esquema.ps1`), 29 tiendas (a
 | B0.1 | **El ERP escribe en `printer_source_print_job`.** Mínimo: `external_job_id`, `store_id`, `document_type` y `pdf_url` (o `pdf_blob`); contrato en el comentario de la tabla en `crear-esquema.sql`. Un `external_job_id` repetido se descarta como duplicado: cada reimpresión necesita uno nuevo. **Documento (26/10/2026):** `document_type` con el código del ERP antiguo (A albarán y C contado, los de `fdalba_c.tipo`; P presupuesto) y `external_job_id` = número del documento, con `-n` en cada reimpresión (123456, 123456-2); la cola lo usa en «Documento» y el enlace amarillo se activa cuando el ERP tenga pantalla de documento. **PDF por URL (usuario, 26/10/2026), hecho:** el ERP deja la URL de `facturas.repuestos-serca.es/generate.php?id=…` (`inline=0` descarga, `inline=1` muestra: al servicio le da igual) y la ingesta (`ErpJobSourceAdapter`) la descarga una vez: solo https, hosts de `Source:PdfUrlHosts`, sin redirecciones, 30 s, 50 MB, tiene que empezar por `%PDF`. Red, timeout, 408/429 y 5xx: sin ack, se reintenta al vencer el lease. El resto: `ErrorFinal` con `PDF_DOWNLOAD_FAILED`. El `id` de la URL basta para bajarse la factura: no sale en logs ni en errores. Probado contra el servidor real. Falta aplicar `migraciones/2026-10-26-pdf-url.sql` en la BD | ⏳ Sin esto no entra ningún trabajo |
 | B0.2 | Impresoras, reglas de enrutado y Telegram. Las impresoras se dan de alta como impresoras de Windows **en el servidor del Worker** (su nombre es `spool_queue`); los PC de las tiendas no instalan nada | ⏳ Los configura el usuario. Telegram: `install-windows-services.ps1 -SkipPublish -ConfigureTelegram`. SumatraPDF 3.6.1 portable (firma comprobada) en `C:\ImpresorasService\SumatraPDF` desde el 26/10/2026 (`-SumatraExe`); sin él cada trabajo acaba en `SPOOLER_DOWN` |
 | B0.3 | Esquema definitivo. Hoy **`admon`, provisional**: `pb8_xp57` no puede crear esquemas. Para mover: el DBA crea el destino (`CREATE SCHEMA impresoras AUTHORIZATION pb8_xp57`), `ALTER TABLE admon.<tabla> SET SCHEMA impresoras;` en las 12 `printer_*` (arrastra índices y secuencias) y cambiar `Search Path` en la cadena (`.env` y servicios) | ⏳ Decisión |
-| B0.4 | Usuarios con contraseña = login (decisión temporal). Varias no cumplen el mínimo de 6 de la Api: se insertaron por SQL con el mismo BCrypt. Al embeber la app en el ERP, el login automático debería usar un secreto del ERP, no estas contraseñas | ⏳ Temporal |
+| ~~B0.4~~ | ~~Usuarios con contraseña = login (decisión temporal)~~ | ✅ 11/11/2026: sin usuarios propios. Solo se entra con el pase del ERP; `printer_user` pasa a `printer_user_old` con `migraciones/2026-11-11-tiendas-y-usuarios-del-erp.sql` (rama `feat/datos-del-erp`, después de desplegar) |
 | B0.5 | Permisos: las `printer_*` solo las lee `pb8_xp57` (dueño) y los superusuarios; `admon` no tiene permisos por defecto. Si el ERP conecta con otro usuario: `GRANT SELECT, INSERT ON admon.printer_source_print_job TO <usuario>` | ⏳ Según el usuario del ERP |
-| B0.6 | **Servidor del frontend con PHP 8.5.12 o superior** (corrige PHP2Shell, CVE-2026-109618/109619, explotado desde el 21/10/2026). El proyecto exige `^8.5` desde el 23/10/2026; la 8.2 deja de recibir parches el 31/12/2026 | ⏳ Al montar el servidor. En este equipo, PHP 8.5.12 y Laravel 12.70.1 (el último de la 12), sin avisos de `composer audit` (26/10/2026). Laravel 12 solo recibe parches de seguridad hasta febrero de 2027: si el PHP sigue después, subir a la 13 |
+| ~~B0.6~~ | ~~Servidor del frontend con PHP 8.5.12 o superior~~ | ✅ No aplica: el frontal PHP se retiró el 11/11/2026 (B7.3a). Si queda php-fpm en algún servidor, apagarlo |
 
 ### ~~B6 · Simplificar lo heredado de HANA~~ ✅ COMPLETO 2026-10-23
 
@@ -88,10 +88,26 @@ para poder abrirlo en un iframe o copiarlo dentro del ERP el día que se decida
 | B7.3 | Dashboard y administración; se retira el PHP (y con él B0.6) | 🟡 Pantallas hechas el 23/10/2026: dashboard, alta/edición/baja de impresoras, reglas, umbrales, Telegram y pruebas, todas en el grupo «Impresión» del menú (las cuatro últimas, juntas en «Reglas y avisos» desde el 26/10/2026); Tiendas y Usuarios, aparte y solo para la transición (`src/app/transicion`). Falta retirar el PHP (B7.3a), después de desplegar B7.2 |
 | B7.4 | Paso al ERP: integración, con un pase de entrada firmado por el ERP | 🟡 En curso desde el 26/10/2026, rama `cayetanoImpresion` de ERP_SERCA (`4a22fc9`; aquí `d0ab406`): el módulo web copiado tal cual en su grupo «Impresión»; permisos por departamento (tabla de abajo); pasarela `/api/impresion` en su API, que firma un pase (JWT HS256, 2 min) con operador, departamento, almacén y claves. Lado .NET: `Security/PaseErp.cs` lo acepta si hay `Erp:Secret` (la clave va por emisor; los tokens propios siguen igual) y lo traduce a rol y tienda; `VeTodasLasTiendas` separa ver todas de ser administrador. Probado de punta a punta contra esta API. El módulo se cambia aquí y se vuelve a copiar al ERP. Desplegado el 26/10/2026: la API acepta pases (`Erp__Secret` lo genera `install-windows-services.ps1`) y el ERP de desarrollo de este equipo apunta a ella (`IMPRESION_API_URL`/`IMPRESION_SECRETO` en su `.env`). Falta: las mismas dos variables en el servidor del ERP; confirmación al imprimir fuera del almacén propio; y, al apagar el PHP y la web independiente, quitar `printer_user`, `POST /api/auth/login` y las pantallas Tiendas y Usuarios |
 
-**B7.3a · Retirar el PHP.** Los dos sistemas conviven (decisión del usuario): el PHP y el ERP usan
-la misma API, la misma base y el mismo Worker, a la vez o indistintamente; lo que se hace en uno se ve
-en el otro. El PHP se retira solo cuando el usuario lo decida, con el ERP comprobado en producción y
-las tiendas avisadas: borrarlo de `main` impediría volver a desplegarlo.
+**B7.5 · Solo el ERP (decisión del usuario, 11/11/2026; ERP_SERCA docs/72).** Hecho en la rama
+`feat/datos-del-erp`, sin commit:
+- Fuera el PHP, el contenedor de la web React (login, Tiendas, Usuarios, menú, escritorio) y sus
+  guías; quedan en la etiqueta `archivo/frontales-propios` (`main` en `6f1ca33`). `ImpresorasService.Web`
+  queda como origen del módulo del ERP (tipos, lint y pruebas; el CI cambia el job de PHP por este).
+- API: solo el pase del ERP. Fuera `AuthController` (login, me, logout, token), `UsersController`,
+  `UserRevocationValidator`, `Jwt:Secret`, los usuarios de fábrica, `/bootstrap/first-admin`, BCrypt y
+  el límite de peticiones del login. `Erp:Secret` es obligatorio: sin él la Api no arranca.
+- Tiendas: `printer_store` es una vista sobre `gesserca.fdalmacen` (activa = sin fecha de baja); la API
+  solo las lee (fuera alta, edición y baja).
+- Quitado también el historial del tóner (`printer_toner_reading`): no aportaba; en las Canon manda su
+  propia estimación (B11.6).
+- Base: `migraciones/2026-11-11-tiendas-y-usuarios-del-erp.sql` y `2026-11-11-quitar-historial-toner.sql`,
+  **después** de desplegar esta versión (ERP_SERCA `sql/03`, pasos 21 y 22).
+- Pendiente: Cors (punto 3 de abajo); quitar php-fpm y el `server` de nginx del PHP si llegaron a
+  montarse; poner `IMPRESION_API_URL`/`IMPRESION_SECRETO` en el servidor del ERP antes de desplegar
+  (si no, nadie entra).
+
+**B7.3a · Retirar el PHP** (plan anterior, hecho en B7.5 salvo el punto 4). Los dos sistemas convivían
+(decisión del usuario): el PHP y el ERP usaban la misma API, la misma base y el mismo Worker.
 
 1. Borrar `src/ImpresorasService.Web.PHP/` (134 ficheros versionados).
 2. Borrar `DESPLIEGUE-PHP.md`, `SMOKE-TESTS-PHP.md`, `FRONTEND-WEB-PHP-GIT.md`, `GUIA-ESTILO-DBX-UI.md` y
@@ -167,7 +183,7 @@ parque (R0): 7 Canon imageFORCE 1643 (el 80 % previsto), 2 Brother MFC-L2710DW y
 | B11.1 | R1: el monitor guarda lo que ya leía por IPP (estado, motivos, mensaje, trabajos en cola, consumibles, modelo y su web) en 8 columnas `ipp_*` de `printer_printer`; la API las devuelve y las borra al cambiar el host. Lector IPP: `textWithLanguage`/`nameWithLanguage` sin los bytes del idioma (Brother) | 🟡 Rama `feat/estado-impresoras`, pruebas en verde. ✅ 10/11/2026: migración aplicada en `admon`, en `main` (PR #16) y desplegado; a las 08:44 UTC, 19 de 21 impresoras con lectura |
 | B11.2 | R2: verlo en Impresoras, incidencias y dashboard (gravedad por el sufijo del motivo). La API añade `ippSeverity` e `ippStateText` (`IppEstadoImpresora.Describir`); la web, columnas Estado y Tóner, enlace a la web de la impresora e incidencia «Impresora» | 🟡 Rama `feat/estado-impresoras-r2`, pruebas en verde, sin commit. El mismo cambio en `ERP_SERCA` (rama `impresion-estado`) |
 | B11.4 | Umbral de tóner en tres colores: aviso y crítico en la pantalla Umbrales (fichero de reglas, `ThresholdRuleSet.Toner`, 20/10 % por defecto; sin tocar la BD). Crítico sube la impresora a crítica; la API devuelve los umbrales con cada impresora para la barra | 🟡 Rama `feat/umbral-toner`, pruebas en verde, sin commit |
-| B11.5 | Paquete del 10/11/2026 (ERP_SERCA docs/72): enlace a la raíz de la web de la impresora; «Comprobar» lee el estado IPP; filtro «Estado»; «Desde» de sus incidencias (`ipp_state_since_utc`); Identify-Printer (`POST /api/printers/{id}/identify`, StoreManagerOrAdmin); estado de la impresora en la salud de la tienda y Telegram (`StoreHealthEvaluator`, `IppCriticalReason`/`IppWarningReason`); ficha (`ipp_firmware`, `ipp_up_since_utc`, `ipp_trays_json`); previsión del tóner (`printer_toner_reading`, `TonerReadings`, `tonerDaysLeft`) | 🟡 Rama `fix/enlace-web-impresora`, 400/400, sin commit. Migración `2026-11-10-ficha-y-toner.sql` aplicada en `admon` el 10/11/2026 |
+| B11.5 | Paquete del 10/11/2026 (ERP_SERCA docs/72): enlace a la raíz de la web de la impresora; «Comprobar» lee el estado IPP; filtro «Estado»; «Desde» de sus incidencias (`ipp_state_since_utc`); Identify-Printer (`POST /api/printers/{id}/identify`, StoreManagerOrAdmin); estado de la impresora en la salud de la tienda y Telegram (`StoreHealthEvaluator`, `IppCriticalReason`/`IppWarningReason`); ficha (`ipp_firmware`, `ipp_up_since_utc`, `ipp_trays_json`); previsión del tóner (`printer_toner_reading`, `TonerReadings`, `tonerDaysLeft`; **quitada el 11/11/2026**, B7.5: solo queda la estimación de la Canon) | 🟡 Rama `fix/enlace-web-impresora`, 400/400, sin commit. Migración `2026-11-10-ficha-y-toner.sql` aplicada en `admon` el 10/11/2026 |
 | B11.6 | Páginas impresas por impresora y rango (ERP_SERCA docs/73, §5 opción E). El Worker (`PageCounterBackgroundService`) guarda a las 00:00 de la zona de negocio el contador acumulado de cada impresora activa con IP en `printer_page_counter`; la que no responde se reintenta al momento y cada `PageCounter:RetryMinutes` (5) hasta que responda o empiece otro día. Lector (`LectorContador`): Canon, el 113 de su web (`/sysmonitor` para la sesión y `/rps/dcounter.cgi`); el resto, SNMP v2c `public`, `prtMarkerLifeCount` (BER propio, `Snmp`). `GET /api/printers/page-counts?from&to` (AdminOnly): periodos entre lecturas y avisos si falta alguna. Web: botón «Páginas impresas» en Impresoras (admin), tabla por impresora o por día y exportación CSV para Excel (`core/exportar.ts`, copia del ERP) Además: los días de tóner que estima la Canon (`toner_days_left`, página «Consumibles») sustituyen a la recta en `tonerDaysLeft` (`tonerDaysSource`: «impresora» o «calculo»; ERP_SERCA docs/72), y la cola quita la columna Tienda con una tienda elegida o si solo se ve la propia | 🟡 Rama `feat/contador-paginas`, 414/414 .NET y 74 web, sin commit. Migración aplicada en `admon` el 10/11/2026 y 9 lecturas de ese día; probado en el navegador con la API y la web de la rama. Mismo cambio en `ERP_SERCA` (rama `impresion-paginas`) |
 | B11.3 | R3: estado en vivo y cola de la impresora (Get-Jobs) | ⏳ |
 
@@ -196,7 +212,6 @@ por IP y varias tiendas por operador (B7) y la deuda de B5.
 |---|---|
 | Esquema definitivo (B0.3) | Usuario / DBA |
 | El servidor es PostgreSQL **19beta4** (beta) y autentica con MD5 (obsoleto) | Infraestructura |
-| Contraseñas = login (B0.4) | Usuario, cuando se embeba en el ERP |
 | ¿Se revocó con BotFather el token de Telegram que quedó escrito en un documento? El documento ya no está, pero el token sigue en el historial de git | Operaciones |
 | Notificaciones del ERP por usuario u operador, además de Telegram (anunciado el 27/10/2026, sin empezar). Para avisar a quien mandó el documento, el contrato de entrada tendrá que decir quién lo pidió (`auditoria-2026-10-26.md`, D8) | Usuario y ERP |
 

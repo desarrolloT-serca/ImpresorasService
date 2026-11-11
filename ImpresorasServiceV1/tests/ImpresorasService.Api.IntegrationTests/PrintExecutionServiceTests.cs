@@ -26,8 +26,6 @@ public sealed class PrintExecutionServiceTests
             StoreId = 1,
             Name = "Store 1",
             IsActive = true,
-            CreatedAtUtc = now,
-            UpdatedAtUtc = now
         });
         db.Printers.Add(new Printer
         {

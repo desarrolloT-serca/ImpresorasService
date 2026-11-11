@@ -37,22 +37,7 @@ impresoras-*.db-wal
 *.log
 *.tmp
 
-# Laravel / PHP (frontend oficial)
-src/ImpresorasService.Web.PHP/vendor/
-src/ImpresorasService.Web.PHP/node_modules/
-src/ImpresorasService.Web.PHP/.env
-src/ImpresorasService.Web.PHP/.env.*
-!src/ImpresorasService.Web.PHP/.env.example
-# Contenido ignorado, carpeta no: Laravel exige que existan (composer install falla sin bootstrap/cache).
-src/ImpresorasService.Web.PHP/storage/logs/*
-!src/ImpresorasService.Web.PHP/storage/logs/.gitignore
-src/ImpresorasService.Web.PHP/bootstrap/cache/*
-!src/ImpresorasService.Web.PHP/bootstrap/cache/.gitignore
-src/ImpresorasService.Web.PHP/public/build/
-src/ImpresorasService.Web.PHP/public/hot/
-src/ImpresorasService.Web.PHP/.phpunit.result.cache
-
-# Frontend React con las piezas del ERP
+# Origen del módulo de impresión del ERP (React)
 src/ImpresorasService.Web/node_modules/
 src/ImpresorasService.Web/dist/
 

@@ -56,7 +56,9 @@ describe("ficha de la impresora", () => {
     // El panel, sin «Espera».
     expect(screen.getByText("Panel: Cambie tambor")).toBeTruthy()
     expect(screen.getByText("14 %")).toBeTruthy()
-    expect(screen.getByText("Llega al crítico en unos 20 días")).toBeTruthy()
+    expect(
+      screen.getByText("Se agota en unos 20 días (según la impresora)")
+    ).toBeTruthy()
     expect(screen.getByText(/Aviso al 20 %, crítico al 10 %/)).toBeTruthy()
     expect(screen.getByText("Con papel")).toBeTruthy()
     expect(screen.getByText("R2007171728:BC14, 1.04")).toBeTruthy()

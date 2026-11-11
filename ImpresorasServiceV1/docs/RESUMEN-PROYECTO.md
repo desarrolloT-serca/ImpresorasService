@@ -10,7 +10,8 @@ Este documento explica el proyecto de forma corta y practica para poder orientar
 - decidir a que impresora enviarlos (enrutado),
 - y ejecutarlos con reintentos/control de estado.
 
-La solucion esta separada por capas en `ImpresorasService.Core` y por procesos (API, Worker, UI Laravel).
+La solucion esta separada por capas en `ImpresorasService.Core` y por procesos (API y Worker). Las pantallas
+estan en el ERP web, que entra con su pase; sin frontal ni usuarios propios desde el 11/11/2026.
 
 ## 2) Mapa mental en 30 segundos
 
@@ -21,8 +22,8 @@ La solucion esta separada por capas en `ImpresorasService.Core` y por procesos (
 
 ## 3) Estructura principal
 
-- `src/ImpresorasService.Web.PHP`: UI oficial Laravel.
-- `src/ImpresorasService.Api`: API REST (auth, cola, impresoras, reglas, health, diagnostics).
+- `src/ImpresorasService.Api`: API REST (cola, impresoras, reglas, tiendas de solo lectura, health, diagnostics).
+- `src/ImpresorasService.Web`: origen del modulo de impresion que se copia al ERP (no se despliega).
 - `src/ImpresorasService.Worker`: ingesta + ejecucion + watchdog + monitorizacion.
 - `src/ImpresorasService.Core`: dominio + aplicacion + infraestructura.
 - `tests/ImpresorasService.Api.IntegrationTests`: pruebas (SQLite en memoria solo aqui).
@@ -32,7 +33,7 @@ La solucion esta separada por capas en `ImpresorasService.Core` y por procesos (
 - `ConnectionStrings:PrintQueue` (servidor, usuario y esquema: única configuración de BD)
 - `Source:*` (etiqueta del sistema origen, lease)
 - `Ingestion:*`, `PrintExecution:*`
-- `Jwt:Secret`
+- `Erp:Secret` (el pase del ERP: unica forma de entrar)
 - `Database:ApplyMigrations` = `false` (el DDL se aplica con `scripts/crear-esquema.ps1`)
 
 
@@ -59,7 +60,3 @@ La solucion esta separada por capas en `ImpresorasService.Core` y por procesos (
 - `scripts/crear-esquema.ps1` — crea el esquema PostgreSQL desde `ConnectionStrings:PrintQueue`
 - `scripts/probar-impresion.ps1`
 - `scripts/verificar-estado.ps1`
-
-## 8) Frontend PHP
-
-Ver `docs/FRONTEND-WEB-PHP-GIT.md` para el estado del gitlink/submodulo.

@@ -4,8 +4,8 @@ Guía de uso de `scripts/install-windows-services.ps1`: publica `ImpresorasServi
 `ImpresorasService.Worker` como ejecutables self-contained y los instala/actualiza como
 servicios Windows (`ImpresorasServiceApi`, `ImpresorasServiceWorker`).
 
-No cubre el frontend Laravel (`ImpresorasService.Web.PHP`) ni PostgreSQL/impresoras en sí — ver
-`docs/DESPLIEGUE-PHP.md` para el frontend.
+No cubre PostgreSQL ni las impresoras en sí. No hay frontal que instalar: las pantallas están en el ERP
+web, que entra con su pase (`Erp__Secret`).
 
 ---
 
@@ -53,7 +53,7 @@ de comandos ni en ningún archivo de texto). Con eso:
 No pide nada — reutiliza las credenciales ya guardadas, para los servicios, republica y los
 vuelve a arrancar.
 
-### Si el frontend PHP corre en otra máquina (necesita CORS)
+### Si algún navegador llama a la Api desde otra máquina (necesita CORS; el ERP no, va de servidor a servidor)
 
 ```powershell
 .\scripts\install-windows-services.ps1 -FrontendOrigin "http://192.168.1.50:8000"
@@ -96,7 +96,8 @@ Pide la password de esa cuenta con `Get-Credential` y la mete en el grupo local 
 | `-DbUser` | string | (vacío, pide) | Usuario PostgreSQL |
 | `-FrontendOrigin` | string | (vacío) | Origen a añadir a `Cors:AllowedOrigins` de la Api publicada |
 | `-ServiceAccount` | string | (vacío = LocalSystem) | Cuenta bajo la que corren los servicios, ej. `.\svc_impresoras` |
-| `-Reconfigure` | switch | off | Fuerza volver a pedir/regenerar la conexión a la BD + Jwt secret aunque ya existan |
+| `-Reconfigure` | switch | off | Fuerza volver a pedir la conexión a la BD aunque ya exista |
+| `-RotateErpSecret` | switch | off | Genera un `Erp__Secret` nuevo (cambiarlo también en el `IMPRESION_SECRETO` del ERP) |
 | `-SkipPublish` | switch | off | No recompila/republica, solo (re)instala/arranca servicios con los binarios ya presentes |
 | `-ConfigureTelegram` | switch | off | Pide/actualiza el Bot Token de Telegram |
 | `-SumatraExe` | string | (vacío) | SumatraPDF portable que se copia a `<InstallDir>\SumatraPDF` (exige firma válida) |
@@ -123,7 +124,7 @@ En **`HKLM:\SYSTEM\CurrentControlSet\Services\<NombreServicio>\Environment`** (u
 escribe en el registro pero el *Service Control Manager* de Windows cachea su propio entorno al
 arrancar el sistema — un servicio creado y arrancado en la misma sesión **no ve** una variable de
 máquina nueva hasta reiniciar el equipo. Se confirmó este fallo en pruebas reales: el servicio
-fallaba con `Jwt:Secret es obligatorio...` aunque la variable de máquina ya estaba puesta.
+fallaba con «… es obligatorio» aunque la variable de máquina ya estaba puesta.
 
 **Por qué registro por servicio:** el SCM relee esa clave cada vez que arranca *ese* servicio
 concreto, sin reinicios, y además aísla el secreto — no queda visible en el entorno global de la
@@ -134,10 +135,9 @@ Variables que gestiona el script:
 | Variable | Servicios | Contenido |
 |---|---|---|
 | `ConnectionStrings__PrintQueue` | Api + Worker | Cadena Npgsql; única fuente de servidor, BD, usuario y esquema (`Search Path`) |
-| `Jwt__Secret` | Api | Generado aleatoriamente (48 bytes, base64) si no existe |
 | `ASPNETCORE_URLS` | Api | Fijo a `http://+:5105` — sin esto, Kestrel cae al puerto 5000 por defecto, que en muchos equipos ya está ocupado (en las pruebas, por un servicio de VPN preexistente) |
 | `Telegram__BotToken` | Api + Worker | Vacío si no se usó `-ConfigureTelegram` |
-| `Erp__Secret` | Api | Generado una vez (48 bytes, base64). Es el `IMPRESION_SECRETO` de la pasarela del ERP nuevo (`docs/PLAN.md` B7.4): cambiarlo obliga a cambiarlo también allí |
+| `Erp__Secret` | Api | Generado una vez (48 bytes, base64). Es el `IMPRESION_SECRETO` de la pasarela del ERP nuevo (`docs/PLAN.md` B7.4) y la única forma de entrar: sin él la Api no arranca. Cambiarlo obliga a cambiarlo también allí |
 | `PrintExecution__PdfPrinterExecutablePath` | Worker | Ruta de SumatraPDF, si está en `<InstallDir>\SumatraPDF` |
 
 Para verlas manualmente (necesita admin):
@@ -186,7 +186,7 @@ sc.exe delete ImpresorasServiceWorker
 # Solo si además configuraste variables de entorno de MAQUINA en pruebas antiguas del script
 # (versiones nuevas ya no las usan; las credenciales por servicio desaparecen solas con el servicio)
 [Environment]::SetEnvironmentVariable("ConnectionStrings__PrintQueue", $null, "Machine")
-[Environment]::SetEnvironmentVariable("Jwt__Secret", $null, "Machine")
+[Environment]::SetEnvironmentVariable("Jwt__Secret", $null, "Machine")   # de versiones con usuarios propios
 
 Remove-Item -Recurse -Force "C:\ImpresorasService"
 ```

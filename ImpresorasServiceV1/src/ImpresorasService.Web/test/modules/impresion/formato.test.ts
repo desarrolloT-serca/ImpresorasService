@@ -147,16 +147,14 @@ describe("filtro, previsión y bandejas (docs/72, mejoras 2, 6 y 7)", () => {
     expect(todas.filter((i) => pasaFiltroEstado(i, "toner"))).toEqual([toner])
     expect(todas.filter((i) => pasaFiltroEstado(i, "todas"))).toHaveLength(4)
   })
-  it("dice cuándo llega el tóner al crítico, si se sabe", () => {
-    expect(textoPrevision(20)).toBe("Llega al crítico en unos 20 días")
-    expect(textoPrevision(1)).toBe("Llega al crítico en 1 día")
-    expect(textoPrevision(0)).toBe("En el umbral crítico")
+  it("dice cuándo se agota el tóner según la Canon, si lo da", () => {
     expect(textoPrevision(null)).toBe(null)
-    // La Canon da sus propios días hasta agotarlo (docs/72).
-    expect(textoPrevision(15, "impresora")).toBe(
+    expect(textoPrevision(1)).toBe("Se agota en 1 día (según la impresora)")
+    expect(textoPrevision(0)).toBe("Agotado o a punto (según la impresora)")
+    expect(textoPrevision(15)).toBe(
       "Se agota en unos 15 días (según la impresora)"
     )
-    expect(textoPrevision(366, "impresora")).toBe(
+    expect(textoPrevision(366)).toBe(
       "Se agota en más de un año (según la impresora)"
     )
   })

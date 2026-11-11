@@ -1,7 +1,5 @@
 using System.Globalization;
 using System.Text;
-using System.Threading.RateLimiting;
-using ImpresorasService.Api.Controllers;
 using ImpresorasService.Api.HealthChecks;
 using ImpresorasService.Api.Security;
 using ImpresorasService.Application;
@@ -9,7 +7,6 @@ using ImpresorasService.Infrastructure;
 using ImpresorasService.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
@@ -25,7 +22,7 @@ var appCulture = CultureInfo.GetCultureInfo(appCultureName);
 CultureInfo.DefaultThreadCurrentCulture = appCulture;
 CultureInfo.DefaultThreadCurrentUICulture = appCulture;
 
-static bool IsUnsafeJwtSecret(string? value)
+static bool IsUnsafeSecret(string? value)
 {
     if (string.IsNullOrWhiteSpace(value))
         return true;
@@ -49,41 +46,6 @@ static Task EscribirBdNoDisponible(HttpResponse response)
     {
         error = "La base de datos no responde. Se reconecta sola: vuelve a probar en unos segundos."
     });
-}
-
-static async Task SeedDefaultUsersAsync(ImpresorasDbContext db)
-{
-    var adminExists = await db.Users
-        .Where(u => u.Login == "admin")
-        .AnyAsync();
-    if (!adminExists)
-    {
-        var hash = BCrypt.Net.BCrypt.HashPassword("admin123", BCrypt.Net.BCrypt.GenerateSalt(10));
-        db.Users.Add(new ImpresorasService.Domain.Entities.User
-        {
-            Login = "admin",
-            PasswordHash = hash,
-            Role = RoleCatalog.Admin,
-            StoreId = null,
-            DisplayName = "Administrador"
-        });
-    }
-    var supervisorExists = await db.Users
-        .Where(u => u.Login == "supervisor")
-        .AnyAsync();
-    if (!supervisorExists)
-    {
-        var hash = BCrypt.Net.BCrypt.HashPassword("sup123", BCrypt.Net.BCrypt.GenerateSalt(10));
-        db.Users.Add(new ImpresorasService.Domain.Entities.User
-        {
-            Login = "supervisor",
-            PasswordHash = hash,
-            Role = RoleCatalog.StoreManager,
-            StoreId = 1,
-            DisplayName = "Jefe de tienda 1"
-        });
-    }
-    await db.SaveChangesAsync();
 }
 
 // Add services to the container.
@@ -116,21 +78,12 @@ builder.Services.AddCors(options =>
     });
 });
 
-var jwtSecret = builder.Configuration["Jwt:Secret"];
-if (IsUnsafeJwtSecret(jwtSecret))
-    throw new InvalidOperationException("Jwt:Secret es obligatorio, debe estar definido por entorno y no puede usar valores inseguros/default.");
-var jwtSecretValue = jwtSecret!.Trim();
-var jwtKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecretValue));
-
-// Pase del ERP nuevo (PaseErp). Opcional: sin Erp:Secret la API no acepta pases.
+// Solo se entra con el pase del ERP nuevo (PaseErp): quién es y qué puede hacer lo decide el ERP con sus
+// operadores y permisos. Sin usuarios propios desde el 11/11/2026 (ERP_SERCA docs/72).
 var erpSecret = builder.Configuration["Erp:Secret"];
-SymmetricSecurityKey? erpKey = null;
-if (!string.IsNullOrWhiteSpace(erpSecret))
-{
-    if (IsUnsafeJwtSecret(erpSecret) || erpSecret.Trim() == jwtSecretValue)
-        throw new InvalidOperationException("Erp:Secret debe tener al menos 32 caracteres y ser distinto de Jwt:Secret.");
-    erpKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(erpSecret.Trim()));
-}
+if (IsUnsafeSecret(erpSecret))
+    throw new InvalidOperationException("Erp:Secret es obligatorio, debe estar definido por entorno, tener al menos 32 caracteres y no usar valores inseguros/default.");
+var erpKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(erpSecret!.Trim()));
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -138,57 +91,23 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
-            // La clave va por emisor: un pase del ERP solo vale firmado con Erp:Secret y un token
-            // propio solo con Jwt:Secret.
-            IssuerSigningKeyResolver = (_, token, _, _) => token.Issuer == PaseErp.Emisor
-                ? erpKey is null ? [] : [erpKey]
-                : [jwtKey],
+            IssuerSigningKey = erpKey,
             ValidateIssuer = true,
-            ValidIssuers = [builder.Configuration["Jwt:Issuer"] ?? "ImpresorasService", PaseErp.Emisor],
+            ValidIssuer = PaseErp.Emisor,
             ValidateAudience = true,
-            ValidAudiences = [builder.Configuration["Jwt:Audience"] ?? "ImpresorasService", PaseErp.Audiencia],
+            ValidAudience = PaseErp.Audiencia,
             ValidateLifetime = true,
             // El pase lo firma otro servidor (el del ERP): sin margen, unos segundos de diferencia de
             // hora lo rechazarían como caducado o «aún no válido».
             ClockSkew = TimeSpan.FromSeconds(30)
         };
 
-        // Firma y caducidad correctas no bastan: el usuario pudo ser borrado, desactivado o haber
-        // cambiado su contraseña después de emitirse este token (Fase 5).
-        options.Events = new JwtBearerEvents
-        {
-            // El frontend React no ve el token: llega en la cookie de sesión. Con cabecera
-            // Authorization (el PHP) manda la cabecera.
-            OnMessageReceived = context =>
-            {
-                if (!context.Request.Headers.ContainsKey("Authorization"))
-                    context.Token = context.Request.Cookies[AuthController.SessionCookie];
-                return Task.CompletedTask;
-            },
-            OnTokenValidated = context => context.SecurityToken.Issuer == PaseErp.Emisor
-                ? PaseErp.ValidarAsync(context)
-                : UserRevocationValidator.ValidateAsync(context),
-            // Si no se pudo comprobar el usuario porque la base no respondía, 503 y no 401: la sesión
-            // sigue siendo buena y volver a entrar no arreglaría nada.
-            OnChallenge = async context =>
-            {
-                if (context.AuthenticateFailure is { } fallo && FallosBd.EsFalloDeConexion(fallo))
-                {
-                    context.HandleResponse();
-                    await EscribirBdNoDisponible(context.Response);
-                }
-            }
-        };
+        options.Events = new JwtBearerEvents { OnTokenValidated = PaseErp.ValidarAsync };
     });
 
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminOnly", policy => policy.RequireRole(RoleCatalog.Admin));
-    // Gestionar usuarios exige un usuario propio (printer_user): el pase del ERP no lleva
-    // NameIdentifier y, si lo interceptaran, no serviría para crearse un admin permanente (auditoría M11).
-    options.AddPolicy("AdminAccountOnly", policy => policy
-        .RequireRole(RoleCatalog.Admin)
-        .RequireClaim(System.Security.Claims.ClaimTypes.NameIdentifier));
     options.AddPolicy("StoreManagerOrAdmin", policy => policy.RequireRole(RoleCatalog.Admin, RoleCatalog.StoreManager));
     options.AddPolicy("EmployeeOrAbove", policy => policy.RequireRole(RoleCatalog.Admin, RoleCatalog.StoreManager, RoleCatalog.Employee));
 });
@@ -203,32 +122,6 @@ builder.Services.AddHealthChecks()
     .AddDbContextCheck<ImpresorasDbContext>("database", tags: ["ready"])
     // Sin tag "ready" a propósito: un Worker parado no debe sacar a la Api del balanceador.
     .AddCheck<WorkerActivityHealthCheck>(WorkerActivityHealthCheck.Name);
-
-if (!builder.Environment.IsEnvironment("Testing"))
-{
-    builder.Services.AddRateLimiter(options =>
-    {
-        options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-        options.OnRejected = async (context, cancellationToken) =>
-        {
-            context.HttpContext.Response.ContentType = "application/json";
-            await context.HttpContext.Response.WriteAsJsonAsync(
-                new { error = "Demasiados intentos. Espera un momento e inténtalo de nuevo." },
-                cancellationToken);
-        };
-        // ponytail: partición por RemoteIpAddress — detrás de Nginx actúa como límite global.
-        // Si se necesita por-IP-real, configurar ForwardedHeaders + leer X-Forwarded-For.
-        options.AddPolicy<string>("auth", httpContext =>
-            RateLimitPartition.GetFixedWindowLimiter(
-                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                factory: _ => new FixedWindowRateLimiterOptions
-                {
-                    Window = TimeSpan.FromMinutes(1),
-                    PermitLimit = 10,
-                    QueueLimit = 0,
-                }));
-    });
-}
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
@@ -265,20 +158,7 @@ await using (var scope = app.Services.CreateAsyncScope())
     if (app.Environment.IsEnvironment("Testing"))
         await dbContext.Database.EnsureCreatedAsync();
     // Fuera de las pruebas, arrancar no toca la base: con ella caída la Api arranca, responde 503 y
-    // se recupera sola. Aquí se normalizaban los roles antiguos (Supervisor), una migración ya
-    // hecha; RoleCatalog.Normalize los sigue entendiendo al leerlos.
-
-    var seedDefaultUsers = app.Configuration.GetValue<bool>("Bootstrap:SeedDefaultUsers");
-    if (seedDefaultUsers)
-    {
-        if (!app.Environment.IsDevelopment() && !app.Environment.IsEnvironment("Testing"))
-        {
-            throw new InvalidOperationException(
-                "Bootstrap:SeedDefaultUsers solo está permitido en Development o Testing.");
-        }
-
-        await SeedDefaultUsersAsync(dbContext);
-    }
+    // se recupera sola.
 }
 
 // Configure the HTTP request pipeline.
@@ -319,11 +199,6 @@ app.UseHttpsRedirection();
 
 app.UseCors();
 
-if (!app.Environment.IsEnvironment("Testing"))
-{
-    app.UseRateLimiter();
-}
-
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -348,54 +223,6 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
 });
 // /health — mantiene compatibilidad hacia atrás (mismo comportamiento que antes)
 app.MapHealthChecks("/health", new HealthCheckOptions { ResponseWriter = WriteHealthJson });
-app.MapPost("/bootstrap/first-admin", async (
-    BootstrapAdminRequest request,
-    ImpresorasDbContext db,
-    IWebHostEnvironment env,
-    IConfiguration configuration,
-    CancellationToken cancellationToken) =>
-{
-    if (!env.IsDevelopment())
-        return Results.NotFound();
-
-    var enabled = configuration.GetValue<bool>("Bootstrap:EnableFirstAdminEndpoint");
-    if (!enabled)
-        return Results.NotFound();
-
-    if (string.IsNullOrWhiteSpace(request.Login) || string.IsNullOrWhiteSpace(request.Password))
-        return Results.BadRequest(new { error = "Login y password son obligatorios." });
-
-    var login = request.Login.Trim();
-    var password = request.Password.Trim();
-    if (login.Length < 3)
-        return Results.BadRequest(new { error = "El login debe tener al menos 3 caracteres." });
-    if (password.Length < 6)
-        return Results.BadRequest(new { error = "La password debe tener al menos 6 caracteres." });
-    var anyUsers = await db.Users
-        .AnyAsync(cancellationToken);
-    if (anyUsers)
-        return Results.Conflict(new { error = "Ya existen usuarios. Este endpoint solo sirve para bootstrap inicial." });
-
-    var user = new ImpresorasService.Domain.Entities.User
-    {
-        Login = login,
-        DisplayName = string.IsNullOrWhiteSpace(request.DisplayName) ? "Administrador" : request.DisplayName.Trim(),
-        Role = RoleCatalog.Admin,
-        StoreId = null,
-        PasswordHash = BCrypt.Net.BCrypt.HashPassword(password, BCrypt.Net.BCrypt.GenerateSalt(10))
-    };
-
-    db.Users.Add(user);
-    await db.SaveChangesAsync(cancellationToken);
-
-    return Results.Ok(new
-    {
-        ok = true,
-        message = "Usuario administrador inicial creado. Ya puedes pedir token en /api/auth/token.",
-        user = new { user.UserId, user.Login, user.DisplayName, user.Role }
-    });
-});
-
 app.MapGet("/diagnostics", async (ImpresorasDbContext db) =>
 {
     var conn = db.Database.GetDbConnection();
@@ -490,7 +317,5 @@ else
     app.MapGet("/", () => Results.Redirect("/health"));
 
 app.Run();
-
-public record BootstrapAdminRequest(string Login, string Password, string? DisplayName = null);
 
 public partial class Program { }

@@ -226,7 +226,7 @@ public sealed class ReimpresionTests
         var now = DateTimeOffset.UtcNow;
         if (!await db.Stores.AnyAsync(s => s.StoreId == tienda))
         {
-            db.Stores.Add(new Store { StoreId = tienda, Name = $"Tienda {tienda}", IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now });
+            db.Stores.Add(new Store { StoreId = tienda, Name = $"Tienda {tienda}", IsActive = true });
             db.Printers.Add(new Printer
             {
                 PrinterId = tienda * 10, PrinterName = $"P{tienda}", SpoolQueue = $"COLA{tienda}", StoreId = tienda,

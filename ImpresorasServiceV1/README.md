@@ -2,17 +2,20 @@
 
 Plataforma de cola de impresión sobre **PostgreSQL**: ingesta por polling con claim/ack de los trabajos que deja el ERP, cola interna, enrutado y ejecución con reintentos.
 
-## Arquitectura (4 bloques + tests)
+## Arquitectura
 
 | Componente | Ruta | Rol |
 |------------|------|-----|
-| Frontend oficial | `src/ImpresorasService.Web.PHP` | UI Laravel (consume la API) |
-| API | `src/ImpresorasService.Api` | REST + JWT |
+| API | `src/ImpresorasService.Api` | REST; solo se entra con el pase del ERP (`Erp:Secret`) |
 | Worker | `src/ImpresorasService.Worker` | Ingesta, impresión, watchdog, monitorización |
 | Core | `src/ImpresorasService.Core` | Dominio, aplicación e infraestructura |
+| Módulo web | `src/ImpresorasService.Web` | Origen del módulo de impresión que se copia al ERP (sus pruebas); no se despliega |
 | Tests | `tests/ImpresorasService.Api.IntegrationTests` | Integración (SQLite en memoria solo en tests) |
 
-Estado Git del frontend: ver `docs/FRONTEND-WEB-PHP-GIT.md` (gitlink/submódulo no formalizado).
+**Sin frontal ni usuarios propios desde el 11/11/2026**: las pantallas están en el ERP web, que entra
+con su pase (operador y permisos del ERP), y las tiendas son los almacenes del ERP (vista
+`printer_store` sobre `gesserca.fdalmacen`). El frontal Laravel y el contenedor React con login quedan
+en la etiqueta git `archivo/frontales-propios`.
 
 ## Configuración mínima oficial (PostgreSQL)
 
@@ -25,12 +28,13 @@ En `appsettings.json` de API y Worker (secretos por entorno / variables / `.env`
     "SourceSystem": "ERP",
     "LeaseSeconds": 90
   },
-  "Jwt": { "Secret": "<mínimo 32 caracteres>" },
+  "Erp": { "Secret": "<mínimo 32 caracteres; el mismo que IMPRESION_SECRETO del ERP>" },
   "PrintExecution": { "UseRealSpooler": false }
 }
 ```
 
-Variables de entorno equivalentes: `ConnectionStrings__PrintQueue`, `Source__SourceSystem`, `Jwt__Secret`, etc.
+Variables de entorno equivalentes: `ConnectionStrings__PrintQueue`, `Source__SourceSystem`, `Erp__Secret`, etc.
+Sin `Erp:Secret` la Api no arranca: no habría forma de entrar.
 `Source` describe el **origen** de los trabajos: la tabla `printer_source_print_job` que escribe el ERP.
 
 ### Base de datos y cambio de base de datos
@@ -64,29 +68,20 @@ cd ImpresorasServiceV1
 dotnet restore
 dotnet build -c Debug
 
-# Conexión: .env en la raíz (ver .env.example)
-$env:Jwt__Secret = "REEMPLAZAR_CON_SECRETO_LARGO_MIN_32"
-$env:Bootstrap__SeedDefaultUsers = "false"
-
+# Conexión y Erp__Secret: .env en la raíz (ver .env.example)
 dotnet run --project src/ImpresorasService.Api
 dotnet run --project src/ImpresorasService.Worker
 ```
 
-UI Laravel (otra terminal; ver `docs/FRONTEND-WEB-PHP-GIT.md` si el gitlink no está inicializado):
-
-```powershell
-cd src/ImpresorasService.Web.PHP
-composer install
-npm install
-php artisan serve
-```
-
-Verificación de la BD con la Api en marcha (JWT admin): `GET /diagnostics` y `GET /diagnostics/db`.
+Las pantallas se prueban desde el ERP web en local (`ERP_SERCA/erp`), con el mismo secreto en su
+`IMPRESION_SECRETO`. Verificación de la BD con la Api en marcha (pase de administración):
+`GET /diagnostics` y `GET /diagnostics/db`.
 
 ## Pruebas
 
 ```powershell
 dotnet test tests/ImpresorasService.Api.IntegrationTests
+cd src/ImpresorasService.Web; npm ci; npm run typecheck; npm run lint; npm test
 ```
 
 Scripts operativos: `scripts/probar-impresion.ps1`, `scripts/verificar-estado.ps1`
@@ -95,5 +90,3 @@ Scripts operativos: `scripts/probar-impresion.ps1`, `scripts/verificar-estado.ps
 
 - Resumen: `docs/RESUMEN-PROYECTO.md`
 - Plan de trabajo: `docs/PLAN.md`
-- Despliegue PHP: `docs/DESPLIEGUE-PHP.md`
-- Smoke UI: `docs/SMOKE-TESTS-PHP.md`

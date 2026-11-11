@@ -1,7 +1,7 @@
 # Publica ImpresorasService.Api e ImpresorasService.Worker como ejecutables
 # self-contained e instala/actualiza ambos como servicios Windows.
 #
-# Las credenciales (PostgreSQL, Jwt secret) se guardan en el registro propio de cada
+# Las credenciales (PostgreSQL, secreto del ERP) se guardan en el registro propio de cada
 # servicio (HKLM:\SYSTEM\CurrentControlSet\Services\<Nombre>\Environment), NO como
 # variables de entorno de maquina: las de maquina solo las heredan procesos nuevos
 # tras un reinicio (el SCM cachea su entorno al arrancar Windows), las de servicio
@@ -198,18 +198,9 @@ if ($needsDbCreds) {
     Write-Host "  Conexion PostgreSQL ya configurada (usa -Reconfigure para cambiarla)." -ForegroundColor DarkGray
 }
 
-$jwtSecret = Get-ServiceEnvVar $ApiSvc "Jwt__Secret"
-if ($Reconfigure -or -not $jwtSecret) {
-    $bytes = New-Object byte[] 48
-    (New-Object System.Security.Cryptography.RNGCryptoServiceProvider).GetBytes($bytes)
-    $jwtSecret = [Convert]::ToBase64String($bytes)
-    Write-Host "  Jwt__Secret generado." -ForegroundColor Green
-} else {
-    Write-Host "  Jwt__Secret ya configurado (usa -Reconfigure para regenerarlo)." -ForegroundColor DarkGray
-}
-
 # Secreto compartido con la pasarela de impresion del ERP nuevo (su IMPRESION_SECRETO; PaseErp en la
-# Api). Se genera una vez: cambiarlo obliga a cambiarlo tambien en el ERP.
+# Api). Es la unica forma de entrar (sin usuarios propios desde el 11/11/2026): sin el la Api no arranca.
+# Se genera una vez: cambiarlo obliga a cambiarlo tambien en el ERP.
 $erpSecret = Get-ServiceEnvVar $ApiSvc "Erp__Secret"
 if ($RotateErpSecret -or -not $erpSecret) {
     $bytes = New-Object byte[] 48
@@ -236,7 +227,6 @@ if ($ConfigureTelegram) {
 
 Set-ServiceEnv $ApiSvc @{
     "ConnectionStrings__PrintQueue" = $printQueueConn
-    "Jwt__Secret"                   = $jwtSecret
     "Erp__Secret"                   = $erpSecret
     "ASPNETCORE_URLS"               = "http://+:5105"
     "Telegram__BotToken"            = $telegramToken

@@ -4,8 +4,7 @@
 # Artefactos de sesiones del navegador automatizado (Playwright MCP)
 .playwright-mcp/
 
-# Capturas de pantalla sueltas en la raíz. Las imágenes del producto viven bajo
-# src/ImpresorasService.Web.PHP/public/, no aquí.
+# Capturas de pantalla sueltas en la raíz: no forman parte del producto.
 /*.png
 /*.jpg
 /*.jpeg

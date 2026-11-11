@@ -74,7 +74,7 @@ public sealed class DashboardControllerTests : IntegrationTestBase
 
             if (!await db.Stores.AnyAsync(s => s.StoreId == storeId))
             {
-                db.Stores.Add(new Store { StoreId = storeId, Name = "Printer Breakdown Store", IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now });
+                db.Stores.Add(new Store { StoreId = storeId, Name = "Printer Breakdown Store", IsActive = true });
             }
             if (!await db.Printers.AnyAsync(p => p.PrinterId == printerId))
             {
@@ -198,7 +198,7 @@ public sealed class DashboardControllerTests : IntegrationTestBase
         {
             var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
             if (!await db.Stores.AnyAsync(s => s.StoreId == storeId))
-                db.Stores.Add(new Store { StoreId = storeId, Name = "Idle Store", IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now });
+                db.Stores.Add(new Store { StoreId = storeId, Name = "Idle Store", IsActive = true });
             foreach (var (printerId, activa) in new[] { (5976, true), (5977, true), (5978, false) })
                 if (!await db.Printers.AnyAsync(p => p.PrinterId == printerId))
                     db.Printers.Add(new Printer { PrinterId = printerId, StoreId = storeId, PrinterName = $"Idle {printerId}", Host = "host", IsActive = activa, CreatedAtUtc = now, UpdatedAtUtc = now });
@@ -239,7 +239,7 @@ public sealed class DashboardControllerTests : IntegrationTestBase
 
             if (!await db.Stores.AnyAsync(s => s.StoreId == storeId))
             {
-                db.Stores.Add(new Store { StoreId = storeId, Name = "Oldest Timestamps Store", IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now });
+                db.Stores.Add(new Store { StoreId = storeId, Name = "Oldest Timestamps Store", IsActive = true });
             }
             db.PrintJobs.RemoveRange(await db.PrintJobs.Where(j => j.StoreId == storeId).ToListAsync());
 
@@ -286,7 +286,7 @@ public sealed class DashboardControllerTests : IntegrationTestBase
 
             if (!await db.Stores.AnyAsync(s => s.StoreId == storeId))
             {
-                db.Stores.Add(new Store { StoreId = storeId, Name = "No Incident Store", IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now });
+                db.Stores.Add(new Store { StoreId = storeId, Name = "No Incident Store", IsActive = true });
             }
             db.PrintJobs.RemoveRange(await db.PrintJobs.Where(j => j.StoreId == storeId).ToListAsync());
             AddJobWithEvent(db, MakeJob(now, PrintJobStatus.PrintedConfirmed, storeId: storeId, printerId: null));
@@ -322,7 +322,7 @@ public sealed class DashboardControllerTests : IntegrationTestBase
 
             if (!await db.Stores.AnyAsync(s => s.StoreId == storeId))
             {
-                db.Stores.Add(new Store { StoreId = storeId, Name = "Sin Reenviar Store", IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now });
+                db.Stores.Add(new Store { StoreId = storeId, Name = "Sin Reenviar Store", IsActive = true });
             }
             if (!await db.Printers.AnyAsync(p => p.PrinterId == printerId))
             {
@@ -371,7 +371,7 @@ public sealed class DashboardControllerTests : IntegrationTestBase
 
             if (!await db.Stores.AnyAsync(s => s.StoreId == storeId))
             {
-                db.Stores.Add(new Store { StoreId = storeId, Name = "Unassigned Store", IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now });
+                db.Stores.Add(new Store { StoreId = storeId, Name = "Unassigned Store", IsActive = true });
             }
             if (!await db.Printers.AnyAsync(p => p.PrinterId == printerId))
             {
@@ -416,7 +416,7 @@ public sealed class DashboardControllerTests : IntegrationTestBase
 
             if (!await db.Stores.AnyAsync(s => s.StoreId == storeId))
             {
-                db.Stores.Add(new Store { StoreId = storeId, Name = "Timeseries Store", IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now });
+                db.Stores.Add(new Store { StoreId = storeId, Name = "Timeseries Store", IsActive = true });
             }
             if (!await db.Printers.AnyAsync(p => p.PrinterId == printerId))
             {
@@ -466,7 +466,7 @@ public sealed class DashboardControllerTests : IntegrationTestBase
         {
             var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
             if (!await db.Stores.AnyAsync(s => s.StoreId == storeId))
-                db.Stores.Add(new Store { StoreId = storeId, Name = "Peak Store", IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now });
+                db.Stores.Add(new Store { StoreId = storeId, Name = "Peak Store", IsActive = true });
             db.PrintJobs.RemoveRange(await db.PrintJobs.Where(j => j.StoreId == storeId).ToListAsync());
 
             for (var i = 0; i < 6; i++)
@@ -514,7 +514,7 @@ public sealed class DashboardControllerTests : IntegrationTestBase
         {
             var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
             if (!await db.Stores.AnyAsync(s => s.StoreId == storeId))
-                db.Stores.Add(new Store { StoreId = storeId, Name = "Outcome Store", IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now });
+                db.Stores.Add(new Store { StoreId = storeId, Name = "Outcome Store", IsActive = true });
             db.PrintJobs.RemoveRange(await db.PrintJobs.Where(j => j.StoreId == storeId).ToListAsync());
 
             AddJobWithEvent(db, MakeJob(now, PrintJobStatus.PrintedConfirmed, storeId: storeId, printerId: null));
@@ -604,8 +604,6 @@ public sealed class DashboardControllerTests : IntegrationTestBase
                 StoreId = DashboardTestStoreId,
                 Name = "Dashboard Test Store",
                 IsActive = true,
-                CreatedAtUtc = now,
-                UpdatedAtUtc = now
             });
         }
 
@@ -647,8 +645,6 @@ public sealed class DashboardControllerTests : IntegrationTestBase
                 StoreId = otherStoreId,
                 Name = "Other Dashboard Store",
                 IsActive = true,
-                CreatedAtUtc = now,
-                UpdatedAtUtc = now
             });
         }
 

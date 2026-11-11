@@ -15,16 +15,7 @@ export default defineConfig({
       "@serca/contratos": path.resolve(__dirname, "./src/contratos/index.ts"),
     },
   },
-  // El módulo pide /api/impresion/…, como lo pedirá a la pasarela del ERP. En
-  // desarrollo va a la API .NET quitando «/impresion» (en producción, nginx).
-  server: {
-    proxy: {
-      "/api/impresion": {
-        target: process.env.API_URL ?? "http://localhost:5105",
-        rewrite: (p) => p.replace(/^\/api\/impresion/, "/api"),
-      },
-    },
-  },
+  // Solo para las pruebas: la pantalla se ve en el ERP, no aquí (11/11/2026).
   test: {
     environment: "jsdom",
     // Como en el ERP: las pruebas viven en test/, con la estructura de src/.

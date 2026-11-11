@@ -6,7 +6,7 @@
 #   sudo ./scripts/install-linux.sh
 #
 # La primera vez crea /etc/impresoras/impresoras.env desde deploy/linux/impresoras.env.example, con
-# Jwt__Secret y Erp__Secret generados, y se para: hay que rellenar la conexión y volver a lanzarlo.
+# Erp__Secret generado, y se para: hay que rellenar la conexión y volver a lanzarlo.
 # Después lo respeta (no regenera claves ni pisa lo que se haya cambiado a mano).
 # Necesita el SDK de .NET 8 para compilar; los servicios no necesitan el runtime (self-contained).
 # ponytail: compila como root en este checkout, así que bin/ y obj/ quedan de root (git pull no se
@@ -26,9 +26,9 @@ id impresoras >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/
 if [ ! -f "$conf" ]; then
     install -d -m 0750 -o root -g impresoras /etc/impresoras
     install -m 0640 -o root -g impresoras "$repo/deploy/linux/impresoras.env.example" "$conf"
-    # 64 caracteres cada una. Erp__Secret va también en IMPRESION_SECRETO del ERP.
-    sed -i "s/^Jwt__Secret=GENERAR$/Jwt__Secret=$(openssl rand -hex 32)/; s/^Erp__Secret=GENERAR$/Erp__Secret=$(openssl rand -hex 32)/" "$conf"
-    echo "Creado $conf con las claves generadas. Rellena ConnectionStrings__PrintQueue y vuelve a lanzar el script."
+    # 64 caracteres. Erp__Secret va también en IMPRESION_SECRETO del ERP.
+    sed -i "s/^Erp__Secret=GENERAR$/Erp__Secret=$(openssl rand -hex 32)/" "$conf"
+    echo "Creado $conf con la clave generada. Rellena ConnectionStrings__PrintQueue y vuelve a lanzar el script."
     exit 1
 fi
 if grep -q RELLENAR "$conf"; then

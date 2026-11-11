@@ -92,5 +92,5 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $created = Invoke-Psql -w -tA -c "SELECT count(*) FROM information_schema.tables WHERE table_schema = $schemaLiteral AND table_name LIKE 'printer\_%'"
-Write-Host "[OK] $created tablas printer_* creadas en $schema." -ForegroundColor Green
-Write-Host "Siguiente: primer admin con POST /bootstrap/first-admin (Api en Development, Bootstrap__EnableFirstAdminEndpoint=true)." -ForegroundColor Cyan
+Write-Host "[OK] $created tablas y vistas printer_* creadas en $schema." -ForegroundColor Green
+Write-Host "Siguiente: GRANT al usuario del servicio y el mismo Erp__Secret en la Api y en el IMPRESION_SECRETO del ERP (se entra solo desde el ERP)." -ForegroundColor Cyan

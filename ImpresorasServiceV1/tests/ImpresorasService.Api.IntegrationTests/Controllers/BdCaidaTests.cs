@@ -1,8 +1,9 @@
 using System.Data.Common;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text;
 using ImpresorasService.Api.Security;
-using ImpresorasService.Domain.Entities;
 using ImpresorasService.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -10,6 +11,8 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Tokens;
 using Npgsql;
 using Xunit;
 
@@ -57,12 +60,11 @@ public sealed class BdCaidaApiFactory : JwtApiWebApplicationFactory
 }
 
 /// <summary>
-/// Con la base caída la Api responde 503 con el motivo —no 500, ni 401 que mandaría al login— y
-/// vuelve sola en cuanto responde, sin reiniciar nada.
+/// Con la base caída la Api responde 503 con el motivo —no 500 ni 401— y vuelve sola en cuanto
+/// responde, sin reiniciar nada.
 /// </summary>
 public sealed class BdCaidaTests : IClassFixture<BdCaidaApiFactory>
 {
-    private const string Password = "secret123";
     private readonly BdCaidaApiFactory _factory;
 
     public BdCaidaTests(BdCaidaApiFactory factory) => _factory = factory;
@@ -70,27 +72,38 @@ public sealed class BdCaidaTests : IClassFixture<BdCaidaApiFactory>
     [Fact]
     public async Task ConLaBaseCaida_Responde503ConElMotivoYSeRecuperaSola()
     {
-        await SeedUserAsync("bd-caida");
         var client = _factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost") });
-        (await client.PostAsJsonAsync("/api/auth/login", new { login = "bd-caida", password = Password })).EnsureSuccessStatusCode();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", PaseDeAdministrador());
 
         _factory.Base.Caida = true;
         try
         {
-            // Con sesión: la comprobación del usuario falla en JwtBearer; antes daba 401.
-            await AssertBdNoDisponible(await client.GetAsync("/api/auth/me"));
             await AssertBdNoDisponible(await client.GetAsync("/api/printjobs"));
-            // Sin sesión: el controlador falla al consultar.
-            await AssertBdNoDisponible(await client.PostAsJsonAsync("/api/auth/login", new { login = "bd-caida", password = Password }));
+            await AssertBdNoDisponible(await client.GetAsync("/api/stores"));
         }
         finally
         {
             _factory.Base.Caida = false;
         }
 
-        // La base vuelve: la misma sesión funciona sin reiniciar nada.
-        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/auth/me")).StatusCode);
+        // La base vuelve: el mismo pase funciona sin reiniciar nada.
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/printjobs")).StatusCode);
     }
+
+    private static string PaseDeAdministrador() => new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
+    {
+        Issuer = PaseErp.Emisor,
+        Audience = PaseErp.Audiencia,
+        Expires = DateTime.UtcNow.AddMinutes(2),
+        SigningCredentials = new SigningCredentials(
+            new SymmetricSecurityKey(Encoding.UTF8.GetBytes(ApiWebApplicationFactory.SecretoErp)), SecurityAlgorithms.HmacSha256),
+        Claims = new Dictionary<string, object>
+        {
+            ["sub"] = "1",
+            ["alm"] = 1,
+            ["perm"] = new[] { "impresion.leer", "impresion.administrar", "impresion.tiendas.todas" }
+        }
+    });
 
     private static async Task AssertBdNoDisponible(HttpResponseMessage response)
     {
@@ -98,22 +111,6 @@ public sealed class BdCaidaTests : IClassFixture<BdCaidaApiFactory>
         Assert.Equal("10", response.Headers.RetryAfter?.Delta?.TotalSeconds.ToString());
         var cuerpo = await response.Content.ReadFromJsonAsync<RespuestaError>();
         Assert.StartsWith("La base de datos no responde", cuerpo!.Error);
-    }
-
-    private async Task SeedUserAsync(string login)
-    {
-        using var scope = _factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
-        if (await db.Users.AnyAsync(u => u.Login == login))
-            return;
-        db.Users.Add(new User
-        {
-            Login = login,
-            DisplayName = login,
-            Role = RoleCatalog.Admin,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword(Password),
-        });
-        await db.SaveChangesAsync();
     }
 
     private sealed record RespuestaError(string Error);

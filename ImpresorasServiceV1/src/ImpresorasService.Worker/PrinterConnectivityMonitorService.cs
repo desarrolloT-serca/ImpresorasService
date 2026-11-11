@@ -91,8 +91,7 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
                 p.IppSupported,
                 p.IppState,
                 p.IppStateReasons,
-                p.IppStateSinceUtc,
-                p.IppMarkersJson))
+                p.IppStateSinceUtc))
             .ToListAsync(ct);
 
         if (printers.Count == 0)
@@ -105,19 +104,8 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
         foreach (var update in updates)
             ApplyConnectivityUpdate(db, update);
 
-        // Historial del tóner: lo de más de un año largo, una vez al día (docs/72, mejora 7).
-        var ahora = DateTimeOffset.UtcNow;
-        if (ahora - _ultimaPurgaToner > TimeSpan.FromDays(1))
-        {
-            var limite = ahora - TonerReadings.Retencion;
-            await db.TonerReadings.Where(r => r.ReadAtUtc < limite).ExecuteDeleteAsync(ct);
-            _ultimaPurgaToner = ahora;
-        }
-
         await db.SaveChangesAsync(ct);
     }
-
-    private DateTimeOffset _ultimaPurgaToner = DateTimeOffset.MinValue;
 
     private async Task<List<ConnectivityUpdate>> BuildUpdatesSequentiallyAsync(
         IReadOnlyCollection<PrinterConnectivityCandidate> printers,
@@ -207,13 +195,11 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
             result.Error,
             DateTimeOffset.UtcNow);
 
-        // Desde cuándo dura este estado y qué niveles de tóner han cambiado (docs/72, mejoras 3 y 7).
-        var ahora = DateTimeOffset.UtcNow;
+        // Desde cuándo dura este estado (docs/72, mejora 3).
         return ToUpdate(printer, ippSupported) with
         {
             Ipp = ipp,
-            IppDesde = ipp?.Desde(candidate.IppState, candidate.IppStateReasons, candidate.IppStateSinceUtc, ahora),
-            Lecturas = ipp is null ? [] : TonerReadings.Nuevas(candidate.PrinterId, candidate.IppMarkersJson, ipp, ahora)
+            IppDesde = ipp?.Desde(candidate.IppState, candidate.IppStateReasons, candidate.IppStateSinceUtc, DateTimeOffset.UtcNow)
         };
     }
 
@@ -249,7 +235,6 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
             IppEstadoImpresora.AplicarA(entity, update.Ipp, update.CheckedAtUtc, update.IppDesde);
             foreach (var propiedad in IppEstadoImpresora.Propiedades)
                 db.Entry(entity).Property(propiedad).IsModified = true;
-            db.TonerReadings.AddRange(update.Lecturas);
         }
     }
 
@@ -336,8 +321,7 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
         bool? IppSupported,
         int? IppState,
         string? IppStateReasons,
-        DateTimeOffset? IppStateSinceUtc,
-        string? IppMarkersJson);
+        DateTimeOffset? IppStateSinceUtc);
 
     private sealed record ConnectivityUpdate(
         int PrinterId,
@@ -351,7 +335,6 @@ public sealed class PrinterConnectivityMonitorService : BackgroundService
     {
         public IppEstadoImpresora? Ipp { get; init; }
         public DateTimeOffset? IppDesde { get; init; }
-        public IReadOnlyList<TonerReading> Lecturas { get; init; } = [];
     }
 
     private sealed class PrinterConnectivityOptions

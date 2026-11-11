@@ -8,8 +8,8 @@ namespace ImpresorasService.Api.Security;
 /// Pase del ERP nuevo. Su pasarela <c>/api/impresion</c> firma en cada petición un JWT de vida corta
 /// (HS256, secreto <c>Erp:Secret</c>) con el operador que ha entrado y sus claves de impresión, que el
 /// ERP da por departamento (<c>ACCESO_IMPRESION</c> en sus contratos). Aquí se traducen al rol y la
-/// tienda que ya entienden los controladores. No hay usuario de <c>printer_user</c> detrás: nada que
-/// revocar en la base; el ERP comprueba al operador en cada petición.
+/// tienda que ya entienden los controladores. Es la única forma de entrar (desde el 11/11/2026 no hay
+/// usuarios propios): nada que revocar en la base; el ERP comprueba al operador en cada petición.
 /// </summary>
 public static class PaseErp
 {
@@ -46,7 +46,6 @@ public static class PaseErp
         pase.TryGetPayloadValue<string>("name", out var nombre);
         // Autor en el historial de cada trabajo (actor_id, 120 caracteres).
         var autor = $"ERP {operador} {nombre}".Trim();
-        // Sin NameIdentifier a propósito: no es un usuario de printer_user (auth/me, usuarios).
         var claims = new List<Claim>
         {
             new(ClaimTypes.Name, autor.Length > 120 ? autor[..120] : autor),

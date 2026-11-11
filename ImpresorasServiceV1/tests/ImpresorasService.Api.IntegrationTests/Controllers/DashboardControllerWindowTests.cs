@@ -379,8 +379,6 @@ public sealed class DashboardControllerWindowTests : IClassFixture<WindowClockAp
                 StoreId = storeId,
                 Name = $"Window Test Store {storeId}",
                 IsActive = isActive,
-                CreatedAtUtc = seedNow,
-                UpdatedAtUtc = seedNow
             });
             await db.SaveChangesAsync();
         }

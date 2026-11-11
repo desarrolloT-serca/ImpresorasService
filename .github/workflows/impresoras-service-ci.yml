@@ -1,4 +1,4 @@
-# CI ImpresorasServiceV1 (.NET + Laravel).
+# CI ImpresorasServiceV1 (.NET + módulo React).
 # Ampliar con E2E y con pruebas contra PostgreSQL real cuando crezca la batería de pruebas.
 name: ImpresorasService CI
 
@@ -46,45 +46,31 @@ jobs:
       - name: Test
         run: dotnet test tests/ImpresorasService.Api.IntegrationTests/ImpresorasService.Api.IntegrationTests.csproj --no-build --configuration Release --verbosity normal
 
-  php:
-    name: Test (Laravel / PHP 8.5)
+  # Origen del módulo de impresión que se copia al ERP (sin frontal propio desde el 11/11/2026).
+  web:
+    name: Módulo de impresión (React)
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ImpresorasServiceV1/src/ImpresorasService.Web.PHP
+        working-directory: ImpresorasServiceV1/src/ImpresorasService.Web
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: "8.5"
-          extensions: mbstring, xml, curl, sqlite3
-          coverage: none
-
-      - name: Install Composer dependencies
-        run: composer install --no-interaction --prefer-dist --no-progress
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
 
       - name: Install npm dependencies
         run: npm ci
 
-      # A-UI-05: antes del fix, el CI nunca ejecutaba
-      # `vite build` — un error en dbx.css/system.css/app.js solo se descubría en producción,
-      # degradando silenciosamente al fallback inline documentado en layouts/app.blade.php.
-      - name: Build frontend assets (Vite)
-        run: npm run build
+      - name: Typecheck
+        run: npm run typecheck
 
-      - name: Prepare environment
-        run: |
-          cp .env.example .env
-          php artisan key:generate
+      - name: Lint
+        run: npm run lint
 
       - name: Test
-        run: php artisan test
+        run: npm test

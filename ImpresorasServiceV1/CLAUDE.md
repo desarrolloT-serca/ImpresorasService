@@ -9,14 +9,13 @@ Sistema de cola de impresión para tiendas de retail. Ingesta trabajos (albarane
 | Componente | Tecnología | Puerto | Rol |
 |---|---|---|---|
 | `ImpresorasService.Core` | .NET 8, EF Core 8 | — | Dominio, aplicación, infraestructura compartida |
-| `ImpresorasService.Api` | ASP.NET Core 8 | 5105 | REST API con JWT; consume Core |
+| `ImpresorasService.Api` | ASP.NET Core 8 | 5105 | REST API; solo se entra con el pase del ERP (`Erp:Secret`, `Security/PaseErp.cs`) |
 | `ImpresorasService.Worker` | .NET 8 Host Service | — | Servicios de fondo (ingesta, ejecución, watchdog, alertas) |
-| `ImpresorasService.Web.PHP` | Laravel 12, PHP 8.5 | 8000 | Frontend web (Blade + CSS glass-effect) |
-| `ImpresorasService.Web` | React 19, Vite (stack del ERP nuevo) | 5173 (dev) | Frontend que sustituirá al PHP; en construcción (`docs/PLAN.md` B7) |
+| `ImpresorasService.Web` | React 19 (stack del ERP nuevo) | — | Origen del módulo de impresión que se copia al ERP; sin login ni despliegue (ver su README) |
 | PostgreSQL | Npgsql EF provider | 5433 | Base de datos única (`10.110.46.121`, BD `serca`, usuario `pb8_xp57`, esquema **`admon` provisional**, ver `docs/PLAN.md` B0.5). Servidor 19beta4 |
 | Telegram Bot API | HTTP | — | Notificaciones de alertas de tienda |
 
-> **No hay Docker**. En producción: Nginx hace reverse proxy al frontend PHP, la API .NET corre en Kestrel, el Worker como servicio de sistema.
+> **No hay Docker**. En producción: la API .NET corre en Kestrel y el Worker como servicio de sistema. **Sin frontal ni usuarios propios desde el 11/11/2026**: las pantallas están en el ERP web, que llama a la API desde su pasarela con un pase firmado (operador y claves de impresión del ERP). El frontal Laravel y el contenedor React con login quedan en la etiqueta git `archivo/frontales-propios`.
 
 ---
 
@@ -46,12 +45,11 @@ es el registro de reimpresiones (`docs/PLAN.md` B10).
 
 ### Otras entidades
 - **RoutingRule**: prioridad + filtros (storeId, documentType, channel) → PrinterId
-- **Store**: agrupación de impresoras; tiene salud calculada
+- **Store**: un almacén del ERP; agrupa impresoras y tiene salud calculada. Solo lectura: `printer_store` es una vista sobre `gesserca.fdalmacen` (activa = sin fecha de baja); en las pruebas, una tabla que se siembra
 - **DashboardThreshold**: umbrales de salud (singleton, fila id=1)
 - **TelegramConfig**: config singleton (Enabled, BotToken, MinSeverity, CheckIntervalMinutes)
 - **TelegramChat**: ChatId (long) + IsActive; uno por destinatario
 - **StoreAlertState**: último estado notificado por tienda (evita spam)
-- **User**: autenticación JWT; roles Admin/Supervisor/Operator
 - **PrintJobEvent**: log inmutable de transiciones de estado. Guarda además, sin trabajo detrás, el historial de avisos de Telegram (`TELEGRAM_ALERT`, con `job_id` fijo por tienda = `TelegramMensajes.JobIdHistorial(storeId)`; decisión del 27/10/2026 para no crear tabla). Una consulta que recorra eventos sin cruzar con `printer_print_job` debe filtrar por `event_type`; al purgar una tienda se borran también los suyos
 
 ---
@@ -105,10 +103,10 @@ es el registro de reimpresiones (`docs/PLAN.md` B10).
 | Backend | .NET 8, ASP.NET Core, EF Core 8 |
 | Base de datos | PostgreSQL (Npgsql.EntityFrameworkCore.PostgreSQL 8.0.11) |
 | Tests | xUnit + SQLite en memoria (EF, no mocks) |
-| Auth | JWT Bearer, BCrypt |
+| Auth | JWT Bearer: solo el pase del ERP (HS256, `Erp:Secret`), traducido a rol y tienda en `PaseErp` |
 | Printer protocol | IPP (RFC 8010/8011) vía HttpClient raw |
 | Notifications | Telegram Bot API (REST) |
-| Frontend | Laravel 12 (Blade, PHP 8.5), CSS custom glass-effect |
+| Frontend | Ninguno propio: módulo del ERP nuevo (origen en `ImpresorasService.Web`) |
 | CI/CD | GitHub Actions |
 
 > **DDL externo**: no hay migraciones EF. El esquema vive en `scripts/sql/crear-esquema.sql` y se aplica con `scripts/crear-esquema.ps1`; la aplicación nunca lo crea ni lo altera (solo los tests, con `EnsureCreated` sobre SQLite).
@@ -145,7 +143,7 @@ es el registro de reimpresiones (`docs/PLAN.md` B10).
 ```
 
 Variables de entorno que sobreescriben appsettings (patrón `Section__Key`):
-- `Telegram__BotToken`, `Jwt__Secret`, `ConnectionStrings__PrintQueue`
+- `Telegram__BotToken`, `Erp__Secret` (obligatorio: sin él la Api no arranca), `ConnectionStrings__PrintQueue`
 
 **Token del bot de Telegram**: el que se pone desde la pantalla de Telegram (`PUT /api/telegram/token`,
 Admin; se comprueba con `getMe` antes de guardarlo) va a `printer_telegram_config.bot_token` y **manda
@@ -156,7 +154,8 @@ En la BD se guarda en claro (27/10/2026): lo protege el acceso a la base.
 `ConnectionStrings:PrintQueue` es la **única** configuración de BD (host, puerto, BD, usuario y esquema
 vía `Search Path`); Api, Worker y `scripts/crear-esquema.ps1` la leen de ahí. En local va en el `.env` de la
 raíz (fuera de git, lo carga `Infrastructure/DotEnv.cs`; contraseña en `PGPASSWORD`). No poner nombres de
-esquema en código, config ni DDL. La sección `Source` (`SourceSystem=ERP`, `LeaseSeconds`) describe el origen.
+esquema en código, config ni DDL. **Única excepción**: la vista `printer_store` lee `gesserca.fdalmacen`,
+que es del ERP y vive siempre ahí (11/11/2026). La sección `Source` (`SourceSystem=ERP`, `LeaseSeconds`) describe el origen.
 
 **Fechas**: en PostgreSQL son `timestamptz` y siempre UTC (`ImpresorasDbContext` normaliza cualquier
 `DateTimeOffset` con otro offset; Npgsql rechaza offsets distintos de 0). Solo en los tests (SQLite) se
@@ -173,15 +172,14 @@ contra un PostgreSQL real.
 - Enrutado por reglas configurables
 - Ejecución con reintentos exponenciales
 - Monitoreo de conectividad de impresoras
-- API REST con JWT, rate limiting, security headers
-- Frontend Laravel cola + dashboard con salud de tiendas
+- API REST con el pase del ERP y security headers
 - Dashboard con umbrales configurables en BD, KPIs por periodo (contrato en `docs/contrato-kpi-dashboard.md`) y timezone de negocio configurable (`Dashboard:BusinessTimeZone`)
-- **IPP**: `IIppConfirmationService`/`IppConfirmationService`, `IppSupported` en `Printer`, sondeo desde `PrinterConnectivityMonitorService`, filtro en el watchdog, badge en UI PHP (`resources/views/impresoras/index.blade.php`)
-- **Telegram**: `TelegramNotifierService`, `StoreHealthAlertBackgroundService`, `TelegramController` (API). `Telegram:Enabled=false` por defecto en `Worker/appsettings.json`; activar en producción con `BotToken` real. **La página PHP de alertas se retiró** (commit `fcd05d7`): la configuración se toca por API.
+- **IPP**: `IIppConfirmationService`/`IppConfirmationService`, `IppSupported` en `Printer`, sondeo desde `PrinterConnectivityMonitorService`, filtro en el watchdog
+- **Telegram**: `TelegramNotifierService`, `StoreHealthAlertBackgroundService`, `TelegramController` (API). `Telegram:Enabled=false` por defecto en `Worker/appsettings.json`; activar en producción con `BotToken` real. La configuración se toca por API (pantalla «Reglas y avisos» del ERP).
 - **Lock de instancia única** (`WorkerLockCoordinator` + `WorkerLockBackgroundService`): relevo verificado con dos procesos Worker reales; la hora del lease la da la BD (`now()`)
 - **Health check `worker`** en la Api (`WorkerActivityHealthCheck`): delata un Worker inerte usando la huella del monitor de conectividad. Reporta `Degraded`, sin tag `ready`.
 - **Retención de PDF** (`PdfRetentionBackgroundService`): **activa, 90 días** (decisión del 19/08/2026). Libera el blob de los trabajos en estado terminal y de las filas de origen ya procesadas, conservando fila, `pdf_sha256` y metadatos.
-- **Revocación de acceso**: `User.IsActive` y `User.TokenVersion` comprobados en cada petición (`UserRevocationValidator`, enganchado a `OnTokenValidated`). Desactivar, borrar o cambiar la contraseña corta el acceso en la siguiente petición; el frontend ya redirige al login ante un 401.
+- **Acceso**: solo el pase del ERP (`PaseErp`, enganchado a `OnTokenValidated`): vida de 2 minutos, lo firma la pasarela del ERP en cada petición con el operador y sus claves de impresión. Revocar es cosa del ERP (quitarle la clave al operador). Sin `Erp:Secret` la Api no arranca.
 - **Errores para la gente** (`Domain/ErroresTrabajo.cs`): texto y qué hacer de cada `last_error_code`, que la API manda en la cola. Un código nuevo necesita su entrada: `ErroresTrabajoTests` lo exige.
 - **Caídas de la BD** (`Infrastructure/Persistence/EstadoBd.cs`): un fallo de conexión se anota una vez con su motivo y su vuelta con lo que duró; la Api arranca sin base y responde 503 (no 500 ni 401); el Worker se reconecta al renovar el lock. Para detectar «la base no responde» usar `FallosBd.EsFalloDeConexion`, no comparar mensajes. Servicios de Windows con reinicio automático (`docs/PLAN.md` B8).
 
@@ -209,11 +207,7 @@ La base es la del ERP: todo cambio de esquema se apunta también en `ERP_SERCA/d
 ### Frontend React (`ImpresorasService.Web`, módulo copiado en el ERP)
 - **Gráficas: siempre con shadcn/ui chart** (`src/components/ui/chart.tsx`, Recharts 3), instalado en los dos proyectos. Colores solo con tokens (`var(--chart-1…5)`, `--destructive`, `--success`, `--warning`) para que el estilo y el modo oscuro sigan los del ERP; no añadir otra librería de gráficas. Mapa de calor y diagramas de nodos (reglas de enrutado), a mano con CSS o SVG. Regla también en `ERP_SERCA/erp/README.md` («Reglas de la base»), 27/10/2026.
 - Un cambio en `src/modules/impresion` se copia igual a `ERP_SERCA/erp/apps/web/src/modules/impresion` (mismo código; allí las líneas acaban en CRLF).
-
-### Frontend PHP
-- Cliente API en `app/Http/Controllers/` → llama a `ApiClient` que envuelve todas las peticiones al backend .NET
-- Blade templates en `resources/views/`; estilos en `resources/css/dbx.css`
-- Diseño glass-effect con variables CSS propias; no añadir frameworks JS externos
+- No es una aplicación: sin login, menú ni despliegue. Solo `npm run typecheck`, `lint` y `test`.
 
 ### Git
 - Rama principal: `main`
@@ -245,18 +239,13 @@ src/ImpresorasService.Worker/
 
 src/ImpresorasService.Api/
   Controllers/                        → endpoints REST
-  Security/                           → JWT middleware, roles
+  Security/                           → pase del ERP (PaseErp), roles
 
-src/ImpresorasService.Web.PHP/
-  app/Http/Controllers/               → controladores Laravel
-  resources/views/                    → Blade templates
-  resources/css/dbx.css               → estilos del sistema
-
-src/ImpresorasService.Web/            → frontend React nuevo; modules/impresion es un módulo del ERP (ver su README)
+src/ImpresorasService.Web/            → origen del módulo de impresión del ERP y sus pruebas (ver su README)
 
 tests/ImpresorasService.Api.IntegrationTests/  → xUnit + SQLite en memoria
 
 scripts/sql/crear-esquema.sql         → DDL PostgreSQL (único; se aplica con scripts/crear-esquema.ps1)
 docs/PLAN.md                          → QUÉ HACER: plan único de trabajo pendiente
-docs/                                 → guías de despliegue, estilo, smoke tests
+docs/                                 → guías de despliegue y auditorías
 ```
