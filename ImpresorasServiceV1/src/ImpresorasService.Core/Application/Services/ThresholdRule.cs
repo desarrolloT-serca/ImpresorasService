@@ -64,6 +64,9 @@ public sealed record ThresholdRuleSet(
     /// </summary>
     public UmbralToner Toner { get; init; } = UmbralToner.Default;
 
+    /// <summary>Desvío a la impresora de reserva (ERP_SERCA docs/75): modo y espera.</summary>
+    public ReglaDesvio Desvio { get; init; } = ReglaDesvio.Default;
+
     public IReadOnlyList<ThresholdRule> ForMetric(string metric) => metric switch
     {
         "queue" => Queue,
@@ -74,6 +77,23 @@ public sealed record ThresholdRuleSet(
         "reprints" => Reprints,
         _ => Array.Empty<ThresholdRule>()
     };
+}
+
+/// <summary>
+/// Desvío a la impresora de reserva (ERP_SERCA docs/75). Modo: «desactivado» (IS como antes de R6),
+/// «manual» (solo el botón de la cola) y, desde F3, «automatico». EsperaMinutos: lo que un trabajo
+/// parado espera antes de que el automático lo desvíe (F4); menos de 10, el «sin confirmar».
+/// </summary>
+public sealed record ReglaDesvio(string Modo, int EsperaMinutos)
+{
+    public const string Desactivado = "desactivado";
+    public const string Manual = "manual";
+
+    // Manual por defecto: sin reservas puestas no hace nada, y con ellas solo ofrece el botón.
+    public static ReglaDesvio Default { get; } = new(Manual, 2);
+
+    // ponytail: «automatico» se añade en F3, con su comportamiento.
+    public static readonly string[] Modos = [Desactivado, Manual];
 }
 
 /// <summary>

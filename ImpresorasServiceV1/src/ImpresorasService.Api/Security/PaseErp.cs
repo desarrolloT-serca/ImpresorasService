@@ -16,16 +16,28 @@ public static class PaseErp
     public const string Emisor = "erp-serca";
     public const string Audiencia = "impresoras";
     public const string TiendasClaim = "Tiendas";
+    // Perfil de tienda, que comparten todos sus operadores (reimprime identificándose).
+    public const string CompartidoClaim = "Compartido";
 
     // PERMISOS_IMPRESION de los contratos del ERP.
     private const string Leer = "impresion.leer";
     private const string Reimprimir = "impresion.reimprimir";
     private const string Administrar = "impresion.administrar";
     private const string Todas = "impresion.tiendas.todas";
+    private const string Identificarse = "impresion.reimprimir.identificarse";
 
     /// <summary>Administrador o pase con todas las tiendas: decide qué tiendas ve, no qué puede hacer.</summary>
     public static bool VeTodasLasTiendas(this ClaimsPrincipal user)
         => user.IsInRole(RoleCatalog.Admin) || user.HasClaim(TiendasClaim, "todas");
+
+    /// <summary>
+    /// Quién hizo cada cosa y el motivo y la nota de las reimpresiones: administración y quien puede reimprimir con
+    /// su perfil personal (jefe de tienda). El perfil de tienda, que comparten todos sus operadores, no: reimprime
+    /// identificándose, pero no ve quién fue (ERP_SERCA, usuario, 11/11/2026).
+    /// </summary>
+    public static bool VeQuien(this ClaimsPrincipal user)
+        => (user.IsInRole(RoleCatalog.Admin) || user.IsInRole(RoleCatalog.StoreManager))
+            && !user.HasClaim(CompartidoClaim, "si");
 
     public static Task ValidarAsync(TokenValidatedContext context)
     {
@@ -54,6 +66,8 @@ public static class PaseErp
         claims.Add(claves.Contains(Todas)
             ? new Claim(TiendasClaim, "todas")
             : new Claim("StoreId", almacen.ToString()));
+        if (claves.Contains(Identificarse))
+            claims.Add(new Claim(CompartidoClaim, "si"));
 
         context.Principal = new ClaimsPrincipal(new ClaimsIdentity(claims, Emisor, ClaimTypes.Name, ClaimTypes.Role));
         return Task.CompletedTask;

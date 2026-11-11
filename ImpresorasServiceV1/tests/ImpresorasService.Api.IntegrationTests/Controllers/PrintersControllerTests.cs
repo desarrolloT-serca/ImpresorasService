@@ -699,6 +699,90 @@ public sealed class PrintersControllerTests : IntegrationTestBase
 
     #endregion
 
+    #region PUT /api/printers/{id}/backup (ERP_SERCA docs/75, F1)
+
+    private static string Cola() => $"\\\\srv\\q{Guid.NewGuid():N}"[..30];
+
+    private Task<HttpResponseMessage> PonerReservaAsync(int id, int? reserva) =>
+        Client.PutAsJsonAsync($"/api/printers/{id}/backup", new { backupPrinterId = reserva });
+
+    [Fact]
+    public async Task Reserva_DeLaMismaTienda_SeGuardaYSeQuitaConNull()
+    {
+        var a = await CreatePrinterAsync(N("A"), Cola(), 1);
+        var b = await CreatePrinterAsync(N("B"), Cola(), 1);
+
+        var puesta = await PonerReservaAsync(a.PrinterId, b.PrinterId);
+        puesta.EnsureSuccessStatusCode();
+        Assert.Equal(b.PrinterId, (await puesta.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("backupPrinterId").GetInt32());
+        Assert.Equal(b.PrinterId, (await FindPrinterAsync(a.PrinterId))!.BackupPrinterId);
+
+        (await PonerReservaAsync(a.PrinterId, null)).EnsureSuccessStatusCode();
+        Assert.Null((await FindPrinterAsync(a.PrinterId))!.BackupPrinterId);
+    }
+
+    [Fact]
+    public async Task Reserva_DeOtraTiendaElla_MismaDesactivadaOInexistente_400()
+    {
+        var a = await CreatePrinterAsync(N("A"), Cola(), 1);
+        var otraTienda = await CreatePrinterAsync(N("C"), Cola(), 2);
+        var desactivada = await CreatePrinterAsync(N("D"), Cola(), 1, isActive: false);
+
+        foreach (var reserva in new[] { otraTienda.PrinterId, a.PrinterId, desactivada.PrinterId, 99999 })
+            Assert.Equal(HttpStatusCode.BadRequest, (await PonerReservaAsync(a.PrinterId, reserva)).StatusCode);
+        Assert.Null((await FindPrinterAsync(a.PrinterId))!.BackupPrinterId);
+        Assert.Equal(HttpStatusCode.NotFound, (await PonerReservaAsync(99999, null)).StatusCode);
+
+        // La base es de todas las pruebas: GetAll_WithIsActiveFilter cuenta las desactivadas.
+        (await Client.DeleteAsync($"/api/printers/{desactivada.PrinterId}")).EnsureSuccessStatusCode();
+    }
+
+    [Fact]
+    public async Task Reserva_AlCambiarDeTienda_SeQuitanLaSuyaYLasQueApuntanAElla()
+    {
+        var a = await CreatePrinterAsync(N("A"), Cola(), 1);
+        var b = await CreatePrinterAsync(N("B"), Cola(), 1);
+        var c = await CreatePrinterAsync(N("C"), Cola(), 1);
+        (await PonerReservaAsync(a.PrinterId, b.PrinterId)).EnsureSuccessStatusCode();
+        (await PonerReservaAsync(c.PrinterId, a.PrinterId)).EnsureSuccessStatusCode();
+
+        var movida = await Client.PutAsJsonAsync($"/api/printers/{a.PrinterId}",
+            new { printerName = a.PrinterName, spoolQueue = a.SpoolQueue, host = a.Host, storeId = 2, isActive = true });
+        movida.EnsureSuccessStatusCode();
+
+        Assert.Null((await FindPrinterAsync(a.PrinterId))!.BackupPrinterId);
+        Assert.Null((await FindPrinterAsync(c.PrinterId))!.BackupPrinterId);
+    }
+
+    [Fact]
+    public async Task Reserva_EditarSinCambiarDeTienda_LaConserva()
+    {
+        // La web de IS edita sin conocer la reserva: no la puede borrar.
+        var a = await CreatePrinterAsync(N("A"), Cola(), 1);
+        var b = await CreatePrinterAsync(N("B"), Cola(), 1);
+        (await PonerReservaAsync(a.PrinterId, b.PrinterId)).EnsureSuccessStatusCode();
+
+        (await Client.PutAsJsonAsync($"/api/printers/{a.PrinterId}",
+            new { printerName = N("A2"), spoolQueue = a.SpoolQueue, host = a.Host, storeId = 1, isActive = true }))
+            .EnsureSuccessStatusCode();
+
+        Assert.Equal(b.PrinterId, (await FindPrinterAsync(a.PrinterId))!.BackupPrinterId);
+    }
+
+    [Fact]
+    public async Task Reserva_AlBorrarLaReserva_QuedaSin()
+    {
+        var a = await CreatePrinterAsync(N("A"), Cola(), 1);
+        var b = await CreatePrinterAsync(N("B"), Cola(), 1);
+        (await PonerReservaAsync(a.PrinterId, b.PrinterId)).EnsureSuccessStatusCode();
+
+        Assert.Equal(HttpStatusCode.NoContent, (await Client.DeleteAsync($"/api/printers/{b.PrinterId}")).StatusCode);
+
+        Assert.Null((await FindPrinterAsync(a.PrinterId))!.BackupPrinterId);
+    }
+
+    #endregion
+
     #region Helpers
 
     // xUnit crea la clase en cada prueba: nombres propios de cada una, que comparten base de datos.

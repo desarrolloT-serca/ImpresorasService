@@ -26,4 +26,7 @@ public class PrintJob
     // Última vez que se volvió a mandar (reintento o reimpresión); null si nunca. La cola ordena
     // por ella o, si no hay, por la llegada: lo reimpreso sube arriba aunque aún no haya salido.
     public DateTimeOffset? LastRequeuedAtUtc { get; set; }
+    // Si se desvió a la reserva (ERP_SERCA docs/75), la impresora de la que vino; el detalle, en el
+    // evento DIVERTED. Null si nunca se desvió.
+    public int? DivertedFromPrinterId { get; set; }
 }

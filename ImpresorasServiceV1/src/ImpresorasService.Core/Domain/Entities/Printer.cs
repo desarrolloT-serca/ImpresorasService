@@ -41,6 +41,12 @@ public class Printer
     public string? IppFirmware { get; set; }
     public DateTimeOffset? IppUpSinceUtc { get; set; }
     public string? IppTraysJson { get; set; }
+
+    /// <summary>
+    /// Impresora de reserva (ERP_SERCA docs/75, F1): a la que se mandan sus trabajos cuando ella no puede
+    /// imprimir. De la misma tienda y distinta de ella (lo comprueba la API). Null, sin reserva.
+    /// </summary>
+    public int? BackupPrinterId { get; set; }
 }
 
 /// <summary>

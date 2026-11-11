@@ -51,6 +51,7 @@ public class PrintJobsController : ControllerBase
         [FromQuery] DateOnly? toDate,
         [FromQuery] string? printerIds,
         [FromQuery] string? documentTypes,
+        [FromQuery] string? marks,
         CancellationToken cancellationToken)
     {
         // Búsqueda avanzada (27/10/2026). Listas separadas por comas, como las manda la web.
@@ -67,10 +68,18 @@ public class PrintJobsController : ControllerBase
             : documentTypes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (tipos?.Length > 20)
             return BadRequest(new { error = "documentTypes: 20 tipos como mucho." });
+        // Marcas de la cola (ERP_SERCA, 11/11/2026; sustituye al registro de reimpresiones): cualquiera de ellas.
+        var marcas = string.IsNullOrWhiteSpace(marks)
+            ? null
+            : marks.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToHashSet();
+        if (marcas?.Except(Marcas).Any() == true)
+            return BadRequest(new { error = $"marks: una o varias de {string.Join(", ", Marcas)}." });
         if (fromDate > toDate)
             return BadRequest(new { error = "La fecha desde no puede ser posterior a la fecha hasta." });
 
         IQueryable<PrintJob> query = _dbContext.PrintJobs.AsNoTracking();
+        // Quién desvió, como en el detalle: solo quien puede verlo.
+        var verQuien = User.VeQuien();
 
         var effectiveStoreId = User.VeTodasLasTiendas() ? storeId : GetCurrentUserStoreId();
         if (!User.VeTodasLasTiendas() && !effectiveStoreId.HasValue)
@@ -107,6 +116,19 @@ public class PrintJobsController : ControllerBase
             query = query.Where(x => x.PrinterId.HasValue && impresoras.Contains(x.PrinterId.Value));
         if (tipos is not null)
             query = query.Where(x => tipos.Contains(x.DocumentType));
+        if (marcas is not null)
+        {
+            bool Con(string m) => marcas.Contains(m);
+            var (reserva, copia, reimpreso, reintento) = (Con("reserva"), Con("copia"), Con("reimpreso"), Con("reintento"));
+            query = query.Where(x =>
+                (reserva && x.DivertedFromPrinterId != null)
+                || (copia && _dbContext.PrintJobEvents.Any(e => e.JobId == x.JobId
+                    && e.EventType == RoutingService.ReprintEvent && e.OldStatus == PrintJobStatus.PrintedUnknown))
+                || (reimpreso && _dbContext.PrintJobEvents.Any(e => e.JobId == x.JobId
+                    && e.EventType == RoutingService.ReprintEvent && e.OldStatus != PrintJobStatus.PrintedUnknown))
+                || (reintento && _dbContext.PrintJobEvents.Any(e => e.JobId == x.JobId
+                    && e.EventType == RoutingService.RetryRouteEvent)));
+        }
         // Días enteros de la zona de negocio, sobre la misma hora por la que se ordena (la última
         // vez que se mandó imprimir): lo que se ve en «Hora» es lo que se filtra.
         if (fromDate is DateOnly desde)
@@ -168,7 +190,41 @@ public class PrintJobsController : ControllerBase
                 Retries = _dbContext.PrintJobEvents.Count(e => e.JobId == job.JobId
                     && e.EventType == RoutingService.RetryRouteEvent),
                 Reprints = _dbContext.PrintJobEvents.Count(e => e.JobId == job.JobId
-                    && e.EventType == RoutingService.ReprintEvent)
+                    && e.EventType == RoutingService.ReprintEvent),
+                // De ellas, las que se hicieron sin saber si la anterior había salido (desde «sin
+                // confirmar»): pueden ser una copia de más (la marca «Posible copia» de la cola).
+                ReprintsUnconfirmed = _dbContext.PrintJobEvents.Count(e => e.JobId == job.JobId
+                    && e.EventType == RoutingService.ReprintEvent && e.OldStatus == PrintJobStatus.PrintedUnknown),
+                // Desvío a la reserva (ERP_SERCA docs/75): de cuál vino y la reserva de la suya (el
+                // botón; si se puede de verdad lo dice GET divert).
+                job.DivertedFromPrinterId,
+                DivertedFromName = _dbContext.Printers
+                    .Where(p => p.PrinterId == job.DivertedFromPrinterId)
+                    .Select(p => p.PrinterName)
+                    .FirstOrDefault(),
+                // El último desvío: qué pasó, cuándo y quién (la píldora «reserva» de la cola).
+                DivertedMessage = job.DivertedFromPrinterId == null ? null : _dbContext.PrintJobEvents
+                    .Where(e => e.JobId == job.JobId && e.EventType == DesvioService.DivertedEvent)
+                    .OrderByDescending(e => e.EventId)
+                    .Select(e => e.Message)
+                    .FirstOrDefault(),
+                DivertedAtUtc = job.DivertedFromPrinterId == null ? null : _dbContext.PrintJobEvents
+                    .Where(e => e.JobId == job.JobId && e.EventType == DesvioService.DivertedEvent)
+                    .OrderByDescending(e => e.EventId)
+                    .Select(e => (DateTimeOffset?)e.OccurredAtUtc)
+                    .FirstOrDefault(),
+                DivertedBy = !verQuien || job.DivertedFromPrinterId == null ? null : _dbContext.PrintJobEvents
+                    .Where(e => e.JobId == job.JobId && e.EventType == DesvioService.DivertedEvent)
+                    .OrderByDescending(e => e.EventId)
+                    .Select(e => e.ActorId)
+                    .FirstOrDefault(),
+                BackupPrinterId = printer == null ? null : printer.BackupPrinterId,
+                BackupPrinterName = printer == null
+                    ? null
+                    : _dbContext.Printers
+                        .Where(p => p.PrinterId == printer.BackupPrinterId)
+                        .Select(p => p.PrinterName)
+                        .FirstOrDefault()
             };
 
         if (includeTotal == true)
@@ -195,6 +251,86 @@ public class PrintJobsController : ControllerBase
             .ToList();
 
         return Ok(results);
+    }
+
+    // Las marcas de la cola: desviado a la reserva, reimpreso desde «sin confirmar» (posible copia), reimpreso
+    // algo que sí había salido y reenviado a mano tras un error.
+    private static readonly string[] Marcas = ["reserva", "copia", "reimpreso", "reintento"];
+
+    /// <summary>
+    /// Detalle de un trabajo (ERP_SERCA, 11/11/2026): sus datos y su historia entera, evento a evento. Quién
+    /// hizo cada cosa, y el motivo y la nota de las reimpresiones, solo para quien puede reimprimir (como el
+    /// registro de reimpresiones al que sustituye); los demás ven qué pasó y cuándo.
+    /// </summary>
+    [HttpGet("{id:guid}")]
+    public async Task<IActionResult> GetDetail(Guid id, CancellationToken cancellationToken)
+    {
+        if (await ForbidOutsideStoreAsync(id, cancellationToken) is { } denied)
+            return denied;
+        var job = await _dbContext.PrintJobs.AsNoTracking()
+            .Where(j => j.JobId == id)
+            .Select(j => new
+            {
+                j.JobId, j.ExternalJobId, j.StoreId, j.DocumentType, j.Channel, j.Status, j.PrinterId,
+                j.DivertedFromPrinterId, j.IppJobId, j.AttemptCount, j.NextRetryAtUtc, j.LastErrorCode,
+                j.LastErrorMessage, j.CreatedAtUtc, j.UpdatedAtUtc, j.LastRequeuedAtUtc,
+                HasPdf = j.PdfBlob != null
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (job is null)
+            return NotFound();
+        var eventos = await _dbContext.PrintJobEvents.AsNoTracking()
+            .Where(e => e.JobId == id)
+            .OrderBy(e => e.EventId)
+            .ToListAsync(cancellationToken);
+        // La reserva de su impresora: la ficha ofrece «A reserva» como la cola.
+        var reservaId = job.PrinterId is null
+            ? null
+            : await _dbContext.Printers.AsNoTracking()
+                .Where(p => p.PrinterId == job.PrinterId)
+                .Select(p => p.BackupPrinterId)
+                .FirstOrDefaultAsync(cancellationToken);
+        var nombres = await _dbContext.Printers.AsNoTracking()
+            .Where(p => p.PrinterId == job.PrinterId || p.PrinterId == job.DivertedFromPrinterId || p.PrinterId == reservaId)
+            .ToDictionaryAsync(p => p.PrinterId, p => p.PrinterName, cancellationToken);
+        var verQuien = User.VeQuien();
+
+        return Ok(new
+        {
+            job.JobId, job.ExternalJobId, job.StoreId, job.DocumentType, job.Channel, job.Status,
+            job.PrinterId,
+            PrinterName = job.PrinterId is int p && nombres.TryGetValue(p, out var n) ? n : null,
+            job.DivertedFromPrinterId,
+            DivertedFromName = job.DivertedFromPrinterId is int d && nombres.TryGetValue(d, out var dn) ? dn : null,
+            BackupPrinterId = reservaId,
+            BackupPrinterName = reservaId is int r && nombres.TryGetValue(r, out var rn) ? rn : null,
+            job.IppJobId, job.AttemptCount, job.NextRetryAtUtc, job.LastErrorCode, job.LastErrorMessage,
+            LastErrorText = ErroresTrabajo.Texto(job.LastErrorCode),
+            LastErrorHint = ErroresTrabajo.QueHacer(job.LastErrorCode),
+            job.CreatedAtUtc, job.UpdatedAtUtc, job.LastRequeuedAtUtc, job.HasPdf,
+            Events = eventos.Select(e =>
+            {
+                var reimpresion = e.EventType == RoutingService.ReprintEvent;
+                var (motivo, nota, _) = reimpresion ? ReadReprintMetadata(e.MetadataJson) : (null, null, null);
+                return new
+                {
+                    e.OccurredAtUtc,
+                    e.EventType,
+                    e.OldStatus,
+                    e.NewStatus,
+                    e.ErrorCode,
+                    ErrorText = ErroresTrabajo.Texto(e.ErrorCode),
+                    // La reimpresión lleva el motivo y la nota en el texto: sin permiso, solo que la hubo.
+                    Message = reimpresion && !verQuien ? "Reimpresión de algo que ya había salido." : e.Message,
+                    e.ActorType,
+                    ActorId = verQuien || e.ActorType == "system" ? e.ActorId : null,
+                    Reason = verQuien && motivo is not null
+                        ? RoutingService.ReprintReasons.GetValueOrDefault(motivo, motivo)
+                        : null,
+                    Note = verQuien ? nota : null
+                };
+            }).ToList()
+        });
     }
 
     /// <summary>
@@ -298,6 +434,9 @@ public class PrintJobsController : ControllerBase
         [FromQuery] string? reason,
         CancellationToken cancellationToken)
     {
+        // Es quién reimprimió y por qué: el perfil compartido de tienda no lo ve (VeQuien).
+        if (!User.VeQuien())
+            return Forbid();
         if (reason is not null && !RoutingService.ReprintReasons.ContainsKey(reason))
             return BadRequest(new { error = "Motivo de reimpresión no válido." });
         var effectiveStoreId = User.VeTodasLasTiendas() ? storeId : GetCurrentUserStoreId();
@@ -417,6 +556,64 @@ public class PrintJobsController : ControllerBase
             // El Worker lo reclamo mientras se preparaba el reenvío. No es una peticion mal
             // formada: releyendo el estado puede volver a intentarse, y por eso es 409 y no 400.
             return Conflict(new { error = ex.Message });
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Si el trabajo se puede mandar a la reserva de su impresora y, si no, por qué (ERP_SERCA docs/75,
+    /// tabla de §5). No cambia nada: lo pregunta el botón antes de desviar.
+    /// </summary>
+    [HttpGet("{id:guid}/divert")]
+    public async Task<IActionResult> DivertCheck(Guid id, [FromServices] DesvioService desvio, CancellationToken cancellationToken)
+    {
+        if (await ForbidOutsideStoreAsync(id, cancellationToken) is { } denied)
+            return denied;
+        try
+        {
+            var e = await desvio.EvaluarAsync(id, cancellationToken);
+            return Ok(new
+            {
+                e.Posible, e.Motivo, e.ReservaId, e.ReservaNombre, e.YaEnviado,
+                e.OriginalNombre, e.OriginalEstado, e.OriginalDesde, e.ReservaEstado
+            });
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+    }
+
+    /// <summary>
+    /// Manda el trabajo a la impresora de reserva (docs/75, F2). Si ya estaba en la original, primero se
+    /// cancela allí; si no se puede confirmar que no saldrá, responde «Incierta» y no desvía, salvo que se
+    /// acepte el duplicado. 409 solo si el estado cambió entre medias.
+    /// </summary>
+    [HttpPost("{id:guid}/divert")]
+    [Authorize(Policy = "StoreManagerOrAdmin")]
+    public async Task<IActionResult> Divert(Guid id, [FromBody] DivertRequest? request,
+        [FromServices] DesvioService desvio, CancellationToken cancellationToken)
+    {
+        if (await ForbidOutsideStoreAsync(id, cancellationToken) is { } denied)
+            return denied;
+        try
+        {
+            // Sin el token: si el navegador corta tras cancelar en la original, el trabajo tiene que
+            // quedar desviado (y con su evento), no cancelado allí y sin ir a ninguna parte.
+            // «Incierta» no es un error: pide aceptar el duplicado y volver a pedirlo.
+            var r = await desvio.DesviarAsync(id, CurrentActor(), request?.AceptaDuplicado == true, CancellationToken.None);
+            return Ok(new { codigo = r.Codigo, mensaje = r.Mensaje, printerId = r.ReservaId });
+        }
+        catch (PrintJobStateConflictException ex)
+        {
+            return Conflict(new { codigo = "Conflicto", error = ex.Message });
         }
         catch (KeyNotFoundException)
         {
@@ -588,6 +785,9 @@ public class PrintJobsController : ControllerBase
         return int.TryParse(claimValue, out var storeId) ? storeId : null;
     }
 }
+
+/// <summary>Desvío a la reserva (docs/75): AceptaDuplicado, si no se pudo confirmar que la original no lo imprimirá.</summary>
+public record DivertRequest(bool AceptaDuplicado = false);
 
 /// <summary>Motivo: una clave de RoutingService.ReprintReasons; con «OTRO», la nota es obligatoria.</summary>
 public record ReprintRequest(string? Reason, string? Note);
