@@ -337,26 +337,16 @@ export function pasaFiltroEstado(
   return true
 }
 
-// Cuándo se acaba el tóner, por la previsión de la API (docs/72, mejora 7). En
-// las Canon, lo que estima la impresora hasta agotarlo (366: más de un año); en
-// el resto, cuándo llega al umbral crítico por las lecturas. Sin dato, nada.
-export const textoPrevision = (
-  dias: number | null | undefined,
-  origen?: "impresora" | "calculo" | null
-) =>
+// Cuándo se acaba el tóner (docs/72, mejora 7): lo que estima la Canon hasta
+// agotarlo (366: más de un año). El resto no da estimación: nada.
+export const textoPrevision = (dias: number | null | undefined) =>
   dias === null || dias === undefined
     ? null
-    : origen === "impresora"
-      ? dias >= 366
-        ? "Se agota en más de un año (según la impresora)"
-        : dias === 0
-          ? "Agotado o a punto (según la impresora)"
-          : `Se agota en ${dias === 1 ? "1 día" : `unos ${dias} días`} (según la impresora)`
+    : dias >= 366
+      ? "Se agota en más de un año (según la impresora)"
       : dias === 0
-        ? "En el umbral crítico"
-        : dias === 1
-          ? "Llega al crítico en 1 día"
-          : `Llega al crítico en unos ${dias} días`
+        ? "Agotado o a punto (según la impresora)"
+        : `Se agota en ${dias === 1 ? "1 día" : `unos ${dias} días`} (según la impresora)`
 
 // Bandeja (printer-input-tray): -3 «hay algo», -2 o sin dato, desconocido.
 export function textoBandeja(b: BandejaImpresora) {

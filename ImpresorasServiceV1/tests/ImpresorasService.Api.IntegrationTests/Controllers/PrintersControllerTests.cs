@@ -99,9 +99,10 @@ public sealed class PrintersControllerTests : IntegrationTestBase
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
-    // ERP_SERCA docs/72, mejoras 3, 6 y 7: la API da desde cuándo, la ficha y los días que le quedan al tóner.
+    // ERP_SERCA docs/72, mejoras 3 y 6: la API da desde cuándo y la ficha. Los días de tóner solo los da la Canon
+    // (PaginasImpresasTests).
     [Fact]
-    public async Task GetById_DaLaFichaYLaPrevisionDelToner()
+    public async Task GetById_DaLaFicha()
     {
         var created = await CreatePrinterAsync(N("P-Toner"), $"\\\\srv\\q{Guid.NewGuid():N}"[..30], 1,
             host: $"10.3.{Random.Shared.Next(1, 250)}.{Random.Shared.Next(1, 250)}");
@@ -117,20 +118,10 @@ public sealed class PrintersControllerTests : IntegrationTestBase
             };
             IppEstadoImpresora.AplicarA(p, e, ahora, ahora.AddHours(-3));
         });
-        using (var scope = Factory.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
-            // 1 % al día durante 10 días: de 30 % a 10 % (crítico por defecto) quedan 20.
-            db.TonerReadings.AddRange(Enumerable.Range(0, 11).Select(d => new TonerReading
-            {
-                PrinterId = created.PrinterId, Marker = 0, Level = 40 - d, ReadAtUtc = ahora.AddDays(d - 10)
-            }));
-            await db.SaveChangesAsync();
-        }
-
         var dto = await Client.GetFromJsonAsync<JsonElement>($"/api/printers/{created.PrinterId}");
 
-        Assert.Equal(20, dto.GetProperty("tonerDaysLeft").GetInt32());
+        // Sin estimación de la Canon no hay previsión: el cálculo propio se quitó con su historial.
+        Assert.Equal(JsonValueKind.Null, dto.GetProperty("tonerDaysLeft").ValueKind);
         Assert.Equal("1.05", dto.GetProperty("ippFirmware").GetString());
         Assert.Equal("TRAY1", dto.GetProperty("ippTrays")[0].GetProperty("nombre").GetString());
         Assert.True(dto.GetProperty("ippStateSinceUtc").GetDateTimeOffset() < ahora.AddHours(-2));
@@ -758,14 +749,11 @@ public sealed class PrintersControllerTests : IntegrationTestBase
                 StoreId = storeId,
                 Name = $"Store {storeId}",
                 IsActive = isActive,
-                CreatedAtUtc = DateTimeOffset.UtcNow,
-                UpdatedAtUtc = DateTimeOffset.UtcNow
             });
         }
         else
         {
             store.IsActive = isActive;
-            store.UpdatedAtUtc = DateTimeOffset.UtcNow;
         }
 
         await db.SaveChangesAsync();

@@ -44,20 +44,6 @@ public class Printer
 }
 
 /// <summary>
-/// Nivel de un consumible cuando cambia (docs/72, mejora 7): para prever cuándo se acaba. Solo se guarda al
-/// cambiar, así son pocas filas; las de más de <c>TonerReadings.Retencion</c> se borran.
-/// </summary>
-public class TonerReading
-{
-    public long Id { get; set; }
-    public int PrinterId { get; set; }
-    /// <summary>Posición del consumible en marker-* (0 = el primero; en las B/N, el único).</summary>
-    public int Marker { get; set; }
-    public int Level { get; set; }
-    public DateTimeOffset ReadAtUtc { get; set; }
-}
-
-/// <summary>
 /// Contador de páginas acumulado que da la impresora a las 00:00 de <see cref="BusinessDay"/> (zona de
 /// negocio), o en cuanto responde si a esa hora no lo hace. Las páginas de un día son la lectura del día
 /// siguiente menos la suya (ERP_SERCA docs/73, opción E). Una por impresora y día; no se borran.

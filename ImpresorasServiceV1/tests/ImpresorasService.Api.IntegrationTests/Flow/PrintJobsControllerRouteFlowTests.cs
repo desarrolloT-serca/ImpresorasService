@@ -31,8 +31,6 @@ public sealed class PrintJobsControllerRouteFlowTests
             StoreId = 1,
             Name = "Store 1",
             IsActive = true,
-            CreatedAtUtc = now,
-            UpdatedAtUtc = now
         });
 
         var printer = new Printer
@@ -126,8 +124,6 @@ public sealed class PrintJobsControllerRouteFlowTests
             StoreId = 1,
             Name = "Store 1",
             IsActive = true,
-            CreatedAtUtc = now,
-            UpdatedAtUtc = now
         });
 
         db.Printers.Add(new Printer
@@ -205,8 +201,6 @@ public sealed class PrintJobsControllerRouteFlowTests
             StoreId = 1,
             Name = "Store 1",
             IsActive = true,
-            CreatedAtUtc = now,
-            UpdatedAtUtc = now
         });
 
         db.Printers.Add(new Printer

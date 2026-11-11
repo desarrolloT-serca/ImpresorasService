@@ -6,6 +6,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ImpresorasService.Api.Controllers;
 
+/// <summary>
+/// Tiendas: los almacenes del ERP (vista printer_store sobre gesserca.fdalmacen). Solo lectura: el alta,
+/// los cambios y la baja se hacen en el ERP (11/11/2026, ERP_SERCA docs/72).
+/// </summary>
 [ApiController]
 [Authorize(Policy = "EmployeeOrAbove")]
 [Route("api/[controller]")]
@@ -39,13 +43,6 @@ public class StoresController : ControllerBase
             })
             .ToListAsync(cancellationToken);
 
-        var userCounts = await _dbContext.Users
-            .AsNoTracking()
-            .Where(x => x.StoreId.HasValue)
-            .GroupBy(x => x.StoreId!.Value)
-            .Select(x => new { StoreId = x.Key, Count = x.Count() })
-            .ToDictionaryAsync(x => x.StoreId, x => x.Count, cancellationToken);
-
         var printerCounts = await _dbContext.Printers
             .AsNoTracking()
             .GroupBy(x => x.StoreId)
@@ -57,7 +54,6 @@ public class StoresController : ControllerBase
             x.StoreId,
             x.Name,
             x.IsActive,
-            UsersCount = userCounts.TryGetValue(x.StoreId, out var usersCount) ? usersCount : 0,
             PrintersCount = printerCounts.TryGetValue(x.StoreId, out var printersCount) ? printersCount : 0
         });
 
@@ -81,173 +77,6 @@ public class StoresController : ControllerBase
         return store is null ? NotFound() : Ok(store);
     }
 
-    [HttpPost]
-    [Authorize(Policy = "AdminOnly")]
-    public async Task<IActionResult> Create([FromBody] CreateStoreRequest request, CancellationToken cancellationToken)
-    {
-        if (request.StoreId < 0)
-            return BadRequest(new { error = "El numero de tienda no puede ser negativo." });
-        if (string.IsNullOrWhiteSpace(request.Name))
-            return BadRequest(new { error = "El nombre de tienda es obligatorio." });
-
-        var exists = await _dbContext.Stores
-            .Where(x => x.StoreId == request.StoreId)
-            .AnyAsync(cancellationToken);
-        if (exists)
-            return Conflict(new { error = "Ya existe una tienda con ese numero." });
-
-        var store = new Store
-        {
-            StoreId = request.StoreId,
-            Name = request.Name.Trim(),
-            IsActive = request.IsActive,
-            CreatedAtUtc = DateTimeOffset.UtcNow,
-            UpdatedAtUtc = DateTimeOffset.UtcNow
-        };
-
-        _dbContext.Stores.Add(store);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
-        return CreatedAtAction(nameof(GetById), new { storeId = store.StoreId }, store);
-    }
-
-    [HttpPut("{storeId:int}")]
-    [Authorize(Policy = "AdminOnly")]
-    public async Task<IActionResult> Update(int storeId, [FromBody] UpdateStoreRequest request, CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(request.Name))
-            return BadRequest(new { error = "El nombre de tienda es obligatorio." });
-
-        var store = await _dbContext.Stores.FindAsync(new object[] { storeId }, cancellationToken);
-        if (store is null)
-            return NotFound();
-
-        store.Name = request.Name.Trim();
-        store.IsActive = request.IsActive;
-        store.UpdatedAtUtc = DateTimeOffset.UtcNow;
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(store);
-    }
-
-    [HttpDelete("{storeId:int}")]
-    [Authorize(Policy = "AdminOnly")]
-    public async Task<IActionResult> Delete(
-        int storeId,
-        [FromQuery] bool hardDelete = false,
-        [FromQuery] bool purgeHistory = false,
-        CancellationToken cancellationToken = default)
-    {
-        var storeState = await _dbContext.Stores
-            .AsNoTracking()
-            .Where(x => x.StoreId == storeId)
-            .Select(x => new { x.StoreId, x.IsActive })
-            .FirstOrDefaultAsync(cancellationToken);
-        if (storeState is null)
-            return NotFound();
-
-        if (hardDelete)
-        {
-            var usersAssigned = await _dbContext.Users
-                .Where(x => x.StoreId == storeId)
-                .AnyAsync(cancellationToken);
-            if (usersAssigned)
-            {
-                return Conflict(new
-                {
-                    error = "No se puede eliminar definitivamente: hay usuarios asignados a esta tienda. Reasignalos o eliminalos primero."
-                });
-            }
-
-            await using var tx = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
-
-            var printerIds = await _dbContext.Printers
-                .Where(x => x.StoreId == storeId)
-                .Select(x => x.PrinterId)
-                .ToListAsync(cancellationToken);
-
-            if (printerIds.Count > 0)
-            {
-                await _dbContext.RoutingRules
-                    .Where(x => printerIds.Contains(x.PrinterId))
-                    .ExecuteDeleteAsync(cancellationToken);
-            }
-
-            await _dbContext.RoutingRules
-                .Where(x => x.StoreId == storeId)
-                .ExecuteDeleteAsync(cancellationToken);
-
-            if (purgeHistory)
-            {
-                // Borrado de historico: eventos -> trabajos -> staging de origen.
-                var jobIds = await _dbContext.PrintJobs
-                    .Where(x => x.StoreId == storeId)
-                    .Select(x => x.JobId)
-                    .ToListAsync(cancellationToken);
-
-                // También su historial de avisos de Telegram (eventos con un job_id fijo por tienda):
-                // si no, al dar de alta otra vez el mismo storeId reaparecería el de la tienda vieja.
-                var historialTelegram = Application.Services.TelegramMensajes.JobIdHistorial(storeId);
-                await _dbContext.PrintJobEvents
-                    .Where(x => jobIds.Contains(x.JobId) || x.JobId == historialTelegram)
-                    .ExecuteDeleteAsync(cancellationToken);
-
-                await _dbContext.PrintJobs
-                    .Where(x => x.StoreId == storeId)
-                    .ExecuteDeleteAsync(cancellationToken);
-
-                await _dbContext.SourcePrintJobs
-                    .Where(x => x.StoreId == storeId)
-                    .ExecuteDeleteAsync(cancellationToken);
-            }
-
-            await _dbContext.Printers
-                .Where(x => x.StoreId == storeId)
-                .ExecuteDeleteAsync(cancellationToken);
-
-            await _dbContext.StoreAlertStates
-                .Where(x => x.StoreId == storeId)
-                .ExecuteDeleteAsync(cancellationToken);
-
-            await _dbContext.Stores
-                .Where(x => x.StoreId == storeId)
-                .ExecuteDeleteAsync(cancellationToken);
-            await tx.CommitAsync(cancellationToken);
-
-            return Ok(new
-            {
-                message = purgeHistory
-                    ? "Tienda eliminada definitivamente junto con su historico."
-                    : "Tienda eliminada definitivamente."
-            });
-        }
-
-        if (!storeState.IsActive)
-        {
-            return Ok(new
-            {
-                message = "La tienda ya estaba desactivada.",
-                affectedPrinters = 0
-            });
-        }
-
-        await using var softDeleteTx = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
-        var now = DateTimeOffset.UtcNow;
-        var affectedPrinters = await _dbContext.Printers
-            .Where(x => x.StoreId == storeId && x.IsActive)
-            .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsActive, false).SetProperty(x => x.UpdatedAtUtc, now), cancellationToken);
-        await _dbContext.Stores
-            .Where(x => x.StoreId == storeId)
-            .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsActive, false).SetProperty(x => x.UpdatedAtUtc, now), cancellationToken);
-        await softDeleteTx.CommitAsync(cancellationToken);
-
-        return Ok(new
-        {
-            message = "Tienda desactivada correctamente.",
-            affectedPrinters
-        });
-    }
-
     private static bool? ParseNullableBoolean(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -261,6 +90,3 @@ public class StoresController : ControllerBase
         return null;
     }
 }
-
-public record CreateStoreRequest(int StoreId, string Name, bool IsActive = true);
-public record UpdateStoreRequest(string Name, bool IsActive);

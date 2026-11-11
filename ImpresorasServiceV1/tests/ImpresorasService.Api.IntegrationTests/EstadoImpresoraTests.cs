@@ -69,37 +69,6 @@ public sealed class EstadoImpresoraTests
     }
 
     [Fact]
-    public void Solo_se_guarda_lectura_del_toner_cuando_cambia_su_nivel()
-    {
-        var antes = """[{"nombre":"BK","color":null,"tipo":"toner","nivel":83,"bajo":7}]""";
-        Assert.Empty(TonerReadings.Nuevas(6, antes, Con(83), Ahora));
-
-        var l = Assert.Single(TonerReadings.Nuevas(6, antes, Con(82), Ahora));
-        Assert.Equal((6, 0, 82, Ahora), (l.PrinterId, l.Marker, l.Level, l.ReadAtUtc));
-
-        Assert.Single(TonerReadings.Nuevas(6, null, Con(82), Ahora));     // primera lectura
-        Assert.Empty(TonerReadings.Nuevas(6, null, Con(-3), Ahora));      // «queda algo»: no es un %
-    }
-
-    [Fact]
-    public void Previsión_del_toner_desde_el_ultimo_cartucho()
-    {
-        // 1 % al día: de 30 % a 10 % (crítico) quedan 20 días.
-        var lecturas = Enumerable.Range(0, 11).Select(d => (Ahora.AddDays(d - 10), 40 - d)).ToList();
-        Assert.Equal(20, TonerReadings.DiasHasta(lecturas, 10, Ahora));
-
-        // Cartucho nuevo: lo de antes del cambio no cuenta.
-        var conCambio = new List<(DateTimeOffset, int)> { (Ahora.AddDays(-30), 5), (Ahora.AddDays(-20), 3) };
-        conCambio.AddRange(Enumerable.Range(0, 11).Select(d => (Ahora.AddDays(d - 10), 100 - 2 * d)));
-        Assert.Equal(35, TonerReadings.DiasHasta(conCambio, 10, Ahora));
-
-        Assert.Equal(0, TonerReadings.DiasHasta([(Ahora, 9)], 10, Ahora));                                  // ya está
-        Assert.Null(TonerReadings.DiasHasta([(Ahora.AddHours(-2), 50), (Ahora, 49)], 10, Ahora));            // menos de un día
-        Assert.Null(TonerReadings.DiasHasta([(Ahora.AddDays(-5), 50), (Ahora, 50)], 10, Ahora));             // no baja
-        Assert.Null(TonerReadings.DiasHasta([], 10, Ahora));
-    }
-
-    [Fact]
     public void La_impresora_parada_o_con_toner_critico_pone_la_tienda_en_critica_y_avisa()
     {
         var rules = ThresholdRuleSet.Default;

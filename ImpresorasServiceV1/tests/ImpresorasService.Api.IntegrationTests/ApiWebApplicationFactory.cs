@@ -20,6 +20,9 @@ namespace ImpresorasService.Api.IntegrationTests;
 /// </summary>
 public class ApiWebApplicationFactory : WebApplicationFactory<Program>
 {
+    /// <summary>Secreto con el que firma los pases el ERP en las pruebas (Erp:Secret).</summary>
+    public const string SecretoErp = "secreto-del-erp-para-las-pruebas-32+";
+
     private static int _instanceId;
     private SqliteConnection? _connection;
 
@@ -27,7 +30,7 @@ public class ApiWebApplicationFactory : WebApplicationFactory<Program>
     {
         builder.UseEnvironment("Testing");
         builder.UseSetting("TestInstanceId", Interlocked.Increment(ref _instanceId).ToString());
-        builder.UseSetting("Jwt:Secret", "integration-tests-secret-32-chars-minimum!!");
+        builder.UseSetting("Erp:Secret", SecretoErp);
         builder.UseSetting("ConnectionStrings:PrintQueue", "ServerNode=localhost;UID=test;PWD=test;Current Schema=TEST");
         // Fichero de reglas propio de cada instancia de pruebas. Sin esto se usaba el de appsettings.json,
         // que es el de los servicios instalados (C:\ImpresorasService\...): cada dotnet test en ese equipo
@@ -74,33 +77,14 @@ public class ApiWebApplicationFactory : WebApplicationFactory<Program>
         return host;
     }
 
+    // En PostgreSQL las tiendas salen de fdalmacen (vista printer_store); aquí es una tabla que se siembra.
     private static async Task SeedStoresAsync(ImpresorasDbContext db)
     {
-        var now = DateTimeOffset.UtcNow;
-
         if (!await db.Stores.AnyAsync(s => s.StoreId == 1))
-        {
-            db.Stores.Add(new Store
-            {
-                StoreId = 1,
-                Name = "Store 1",
-                IsActive = true,
-                CreatedAtUtc = now,
-                UpdatedAtUtc = now
-            });
-        }
+            db.Stores.Add(new Store { StoreId = 1, Name = "Store 1", IsActive = true });
 
         if (!await db.Stores.AnyAsync(s => s.StoreId == 2))
-        {
-            db.Stores.Add(new Store
-            {
-                StoreId = 2,
-                Name = "Store 2",
-                IsActive = true,
-                CreatedAtUtc = now,
-                UpdatedAtUtc = now
-            });
-        }
+            db.Stores.Add(new Store { StoreId = 2, Name = "Store 2", IsActive = true });
 
         await db.SaveChangesAsync();
     }

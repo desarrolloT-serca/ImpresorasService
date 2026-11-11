@@ -548,9 +548,8 @@ export const Impresora = z.object({
   ippUpSinceUtc: z.string().nullable().optional(),
   ippTrays: z.array(BandejaImpresora).nullable().optional(),
   tonerDaysLeft: z.number().int().nullable().optional(),
-  // «impresora»: lo que estima la Canon hasta agotarse (366 = más de un año);
-  // «calculo»: la recta de las lecturas, hasta el umbral crítico (docs/72).
-  tonerDaysSource: z.enum(["impresora", "calculo"]).nullable().optional(),
+  // «impresora»: lo que estima la Canon hasta agotarse (366 = más de un año).
+  tonerDaysSource: z.enum(["impresora"]).nullable().optional(),
 })
 export type Impresora = z.infer<typeof Impresora>
 

@@ -33,10 +33,6 @@ public class PrintersController : ControllerBase
         _ipp = ipp;
     }
 
-    // ponytail: medio año de lecturas basta para el cartucho que está puesto; si se quiere ver la
-    // duración de cartuchos anteriores, otra consulta.
-    private static readonly TimeSpan VentanaPrevision = TimeSpan.FromDays(180);
-
     /// <summary>
     /// Cómo se convierte cada impresora en su DTO: con los umbrales de tóner de la pantalla Umbrales
     /// (fichero de reglas, como el dashboard) y los días que le quedan al tóner (docs/72, mejora 7).
@@ -45,22 +41,8 @@ public class PrintersController : ControllerBase
     {
         var toner = (await _ruleStore.LoadAsync(ct)).Toner;
         var ahora = DateTimeOffset.UtcNow;
-        var desde = ahora - VentanaPrevision;
-        var lecturas = await _dbContext.TonerReadings.AsNoTracking()
-            .Where(r => ids.Contains(r.PrinterId) && r.ReadAtUtc >= desde)
-            .Select(r => new { r.PrinterId, r.Marker, r.ReadAtUtc, r.Level })
-            .ToListAsync(ct);
-        var dias = lecturas
-            .GroupBy(r => r.PrinterId)
-            .ToDictionary(g => g.Key, g => g
-                .GroupBy(r => r.Marker)
-                .Select(m => TonerReadings.DiasHasta(
-                    m.OrderBy(r => r.ReadAtUtc).Select(r => (r.ReadAtUtc, r.Level)).ToList(), toner.Critico, ahora))
-                .Where(d => d is not null)
-                .Min());
-        // Lo que estima la propia Canon (hasta agotarse, su web; docs/72) manda sobre la recta: lo da desde el
-        // primer día y con el uso que ella mide. Se lee con el contador de las 00:00; se le restan los días
-        // que han pasado desde entonces.
+        // ponytail: solo lo que estima la propia Canon (su web, leída con el contador de las 00:00), menos
+        // los días pasados desde entonces. Sin previsión propia: el historial de tóner se quitó el 11/11/2026.
         var desdeCanon = ahora.AddDays(-3);
         var canon = (await _dbContext.PageCounterReadings.AsNoTracking()
                 .Where(r => ids.Contains(r.PrinterId) && r.TonerDaysLeft != null && r.ReadAtUtc >= desdeCanon)
@@ -73,8 +55,7 @@ public class PrintersController : ControllerBase
                 : Math.Max(0, x.Value.TonerDaysLeft!.Value - (int)(ahora - x.Value.ReadAtUtc).TotalDays));
         return p => canon.TryGetValue(p.PrinterId, out var deCanon)
             ? ToPrinterDto(p, toner, deCanon, "impresora")
-            : ToPrinterDto(p, toner, dias.GetValueOrDefault(p.PrinterId),
-                dias.GetValueOrDefault(p.PrinterId) is null ? null : "calculo");
+            : ToPrinterDto(p, toner, null, null);
     }
 
     /// <summary>
@@ -430,7 +411,6 @@ public class PrintersController : ControllerBase
         if (r.Estado is not { } estado)
             return;
         var ahora = DateTimeOffset.UtcNow;
-        _dbContext.TonerReadings.AddRange(TonerReadings.Nuevas(printer.PrinterId, printer.IppMarkersJson, estado, ahora));
         IppEstadoImpresora.AplicarA(printer, estado, ahora,
             estado.Desde(printer.IppState, printer.IppStateReasons, printer.IppStateSinceUtc, ahora));
         printer.IppSupported = true;
@@ -791,8 +771,8 @@ public class PrintersController : ControllerBase
         DateTimeOffset? IppUpSinceUtc,
         IReadOnlyList<IppBandeja>? IppTrays,
         int? TonerDaysLeft,
-        // De dónde salen: «impresora» (lo que estima la Canon, hasta agotarse; 366 = más de un año) o
-        // «calculo» (la recta de printer_toner_reading, hasta el crítico).
+        // De dónde salen: «impresora» (lo que estima la Canon, hasta agotarse; 366 = más de un año).
+        // Sin estimación, null.
         string? TonerDaysSource);
 
     private sealed record ConnectivityProbeResult(

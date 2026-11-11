@@ -155,7 +155,7 @@ public sealed class TelegramControllerTests : IntegrationTestBase
         {
             var db = scope.ServiceProvider.GetRequiredService<ImpresorasDbContext>();
             if (!await db.Stores.AnyAsync(s => s.StoreId == storeId))
-                db.Stores.Add(new Store { StoreId = storeId, Name = "Tienda Historial", IsActive = true, CreatedAtUtc = ahora, UpdatedAtUtc = ahora });
+                db.Stores.Add(new Store { StoreId = storeId, Name = "Tienda Historial", IsActive = true });
             var jobId = TelegramMensajes.JobIdHistorial(storeId);
             db.PrintJobEvents.RemoveRange(await db.PrintJobEvents.Where(e => e.JobId == jobId).ToListAsync());
             db.PrintJobEvents.Add(new PrintJobEvent

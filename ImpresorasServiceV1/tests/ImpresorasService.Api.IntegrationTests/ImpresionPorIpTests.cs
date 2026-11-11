@@ -452,7 +452,7 @@ public sealed class ImpresionPorIpTests
         using var setup = SqliteTestDbHelper.CreateOpenSqliteInMemory();
         var db = setup.Db;
         var now = DateTimeOffset.UtcNow;
-        db.Stores.Add(new Store { StoreId = 1, Name = "T1", IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now });
+        db.Stores.Add(new Store { StoreId = 1, Name = "T1", IsActive = true });
         db.Printers.Add(new Printer
         {
             PrinterId = 10, PrinterName = "P", SpoolQueue = queue, Host = host, StoreId = 1,

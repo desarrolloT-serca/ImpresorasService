@@ -116,7 +116,7 @@ export function BarraToner({
             key={n}
             className="flex items-center gap-1.5"
             title={
-              [c.nombre, textoPrevision(i.tonerDaysLeft, i.tonerDaysSource)]
+              [c.nombre, textoPrevision(i.tonerDaysLeft)]
                 .filter(Boolean)
                 .join("\n") || undefined
             }
